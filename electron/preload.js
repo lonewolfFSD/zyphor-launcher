@@ -1,32 +1,37 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('api', {
-  // --- Settings -----------------------------------------------------
-  getSettings: () => ipcRenderer.invoke('settings:get'),
-  saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
-
-  // --- Game launch --------------------------------------------------
-  launchGame: () => ipcRenderer.invoke('game:launch'),
-  onGameExit: (callback) => {
-    const listener = (_event, payload) => callback(payload);
-    ipcRenderer.on('game:exit', listener);
-    return () => ipcRenderer.removeListener('game:exit', listener);
+contextBridge.exposeInMainWorld('launcherAPI', {  // was 'api'
+  getSettings:      () => ipcRenderer.invoke('settings:get'),
+  saveSettings:     (s) => ipcRenderer.invoke('settings:save', s),
+  launchGame:       () => ipcRenderer.invoke('game:launch'),
+  onGameExit:       (cb) => {
+    const l = (_e, p) => cb(p);
+    ipcRenderer.on('game:exit', l);
+    return () => ipcRenderer.removeListener('game:exit', l);
   },
+  minimizeWindow:   () => ipcRenderer.send('window:minimize'),
+  maximizeWindow:   () => ipcRenderer.send('window:maximize'),
+  closeWindow:      () => ipcRenderer.send('window:close'),
+  showWindow:       () => ipcRenderer.send('window:show'),
+  checkForUpdates:  () => ipcRenderer.invoke('updater:check'),
+  downloadUpdate:   () => ipcRenderer.invoke('updater:download'),
+  installUpdate:    () => ipcRenderer.invoke('updater:install'),
+  onUpdateAvailable:  (cb) => ipcRenderer.on('updater:update-available',  (_e, info) => cb(info)),
+  onUpToDate:         (cb) => ipcRenderer.on('updater:up-to-date',         ()         => cb()),
+  onDownloadProgress: (cb) => ipcRenderer.on('updater:download-progress', (_e, p)    => cb(p)),
+  onUpdateDownloaded: (cb) => ipcRenderer.on('updater:update-downloaded', (_e, info) => cb(info)),
+  onUpdaterError:     (cb) => ipcRenderer.on('updater:error',             (_e, msg)  => cb(msg)),
+  settingsChanged:  (s) => ipcRenderer.send('settings-changed', s),
+  quitApp:          () => ipcRenderer.send('app:quit'),
+  getAppVersion:    () => ipcRenderer.invoke('app:getVersion'),
+  openExternal:     (url) => ipcRenderer.send('shell:openExternal', url),
 
-  // --- Window chrome ------------------------------------------------
-  minimizeWindow: () => ipcRenderer.send('window:minimize'),
-  maximizeWindow: () => ipcRenderer.send('window:maximize'),
-  closeWindow: () => ipcRenderer.send('window:close'),
-  showWindow: () => ipcRenderer.send('window:show'),
-  // Updater
-  checkForUpdates:  ()  => ipcRenderer.invoke('updater:check'),
-  downloadUpdate:   ()  => ipcRenderer.invoke('updater:download'),
-  installUpdate:    ()  => ipcRenderer.invoke('updater:install'),
-  onUpdateAvailable:   (cb) => ipcRenderer.on('updater:update-available',   (_e, info)     => cb(info)),
-  onUpToDate:          (cb) => ipcRenderer.on('updater:up-to-date',          ()             => cb()),
-  onDownloadProgress:  (cb) => ipcRenderer.on('updater:download-progress',  (_e, progress) => cb(progress)),
-  onUpdateDownloaded:  (cb) => ipcRenderer.on('updater:update-downloaded',  (_e, info)     => cb(info)),
-  onUpdaterError:      (cb) => ipcRenderer.on('updater:error',              (_e, msg)      => cb(msg)),
+  // ── New: Storage ──────────────────────────────────────────────────
+  getDiskItems:         () => ipcRenderer.invoke('storage:getDiskItems'),
+  getDiskSpace:         () => ipcRenderer.invoke('storage:getDiskSpace'),
+  pickInstallLocation:  () => ipcRenderer.invoke('dialog:pickInstallLocation'),
+  pickVideoFile:        () => ipcRenderer.invoke('dialog:pickVideoFile'),
+  openLogsFolder:       () => ipcRenderer.invoke('shell:openLogsFolder'),
 
   // Settings sync
   settingsChanged: (s) => ipcRenderer.send('settings-changed', s),

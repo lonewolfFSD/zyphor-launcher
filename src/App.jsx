@@ -101,7 +101,7 @@ export default function App() {
         <NavRail
           activePage={activePage}
           onNavigate={setActivePage}
-          onExit={() => window.api.quitApp()}
+          onExit={() => window.launcherAPI.quitApp()}
           profile={profile}
           onLogout={() => {
             clearSession();

@@ -95,7 +95,7 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
 
   async function handleQuickLaunch() {
     setLaunchState('launching');
-    const result = await window.api.launchGame();
+    const result = await window.launcherAPI.launchGame();
     if (!result?.success) {
       setLaunchState('error');
       setTimeout(() => setLaunchState('idle'), 2000);

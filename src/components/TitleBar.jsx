@@ -19,7 +19,7 @@ export default function TitleBar({ profile }) {
   const accentColor = isVip ? vipGold : accent.hex;
 
   function openExternal(url) {
-    if (window.api?.openExternal) window.api.openExternal(url);
+    if (window.launcherAPI?.openExternal) window.launcherAPI.openExternal(url);
     else window.open(url, '_blank', 'noopener,noreferrer');
   }
 
@@ -47,13 +47,13 @@ export default function TitleBar({ profile }) {
       icon: faRotate,
       label: 'Check for updates',
       sub: `Current: v${import.meta.env.VITE_APP_VERSION ?? '2.0.0'}`,
-      action: () => window.api?.checkForUpdates?.(),
+      action: () => window.launcherAPI?.checkForUpdates?.(),
     },
     {
       icon: faCircleInfo,
       label: 'About Zyphor Launcher',
       sub: 'Version info',
-      action: () => window.api?.openAbout?.(),
+      action: () => window.launcherAPI?.openAbout?.(),
     },
   ];
 
@@ -220,19 +220,19 @@ export default function TitleBar({ profile }) {
         className="flex items-center gap-0.5 pr-2"
         style={{ WebkitAppRegion: 'no-drag' }}
       >
-        <TitleBarButton label="Minimize" onClick={() => window.api.minimizeWindow()} accentColor={accentColor} theme={theme}>
+        <TitleBarButton label="Minimize" onClick={() => window.launcherAPI.minimizeWindow()} accentColor={accentColor} theme={theme}>
           <svg viewBox="0 0 10 10" className="h-2.5 w-2.5">
             <rect x="0" y="4.5" width="10" height="1" fill="currentColor" />
           </svg>
         </TitleBarButton>
 
-        <TitleBarButton label="Maximize" onClick={() => window.api.maximizeWindow()} accentColor={accentColor} theme={theme}>
+        <TitleBarButton label="Maximize" onClick={() => window.launcherAPI.maximizeWindow()} accentColor={accentColor} theme={theme}>
           <svg viewBox="0 0 10 10" className="h-2.5 w-2.5">
             <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" />
           </svg>
         </TitleBarButton>
 
-        <TitleBarButton label="Close" onClick={() => window.api.closeWindow()} accentColor={accentColor} theme={theme} danger>
+        <TitleBarButton label="Close" onClick={() => window.launcherAPI.closeWindow()} accentColor={accentColor} theme={theme} danger>
           <svg viewBox="0 0 10 10" className="h-2.5 w-2.5">
             <line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
             <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />

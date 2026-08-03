@@ -37,7 +37,7 @@ const PRESET_VIDEO_MAP = {
 
 // ── Status check endpoints ─────────────────────────────────────────────────────
 // Set these in your .env (VITE_SERVER_STATUS_URL, VITE_VERSION_MANIFEST_URL,
-// VITE_APP_VERSION). The component tries window.api IPC first; if it isn't
+// VITE_APP_VERSION). The component tries window.launcherAPI IPC first; if it isn't
 // wired up yet, falls back to a direct HTTP fetch against these URLs.
 const SERVER_STATUS_URL   = import.meta.env.VITE_SERVER_STATUS_URL   ?? null;
 const VERSION_MANIFEST_URL = import.meta.env.VITE_VERSION_MANIFEST_URL ?? null;
@@ -105,7 +105,7 @@ export default function HomePage({ profile }) {
   }
 
   // Playtime
-  window.api?.getPlaytime?.().then((p) => setPlaytime(p ?? null)).catch(() => {});
+  window.launcherAPI?.getPlaytime?.().then((p) => setPlaytime(p ?? null)).catch(() => {});
 
   // Server status
   try {
@@ -135,8 +135,8 @@ try {
   const banner = banners[bannerIndex];
 
   function handlePurchase() {
-    if (window.api?.openExternal) {
-      window.api.openExternal(STAY_STEAM_STORE_URL);
+    if (window.launcherAPI?.openExternal) {
+      window.launcherAPI.openExternal(STAY_STEAM_STORE_URL);
     } else {
       window.open(STAY_STEAM_STORE_URL, '_blank', 'noopener,noreferrer');
     }
@@ -152,9 +152,9 @@ try {
     clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
-        // window.api.isGameRunning() should return true/false
+        // window.launcherAPI.isGameRunning() should return true/false
         // Falls back to checking via steam://  — if not available, poll stops after 30s
-        const running = await window.api?.isGameRunning?.();
+        const running = await window.launcherAPI?.isGameRunning?.();
         if (running === false) {
           clearInterval(pollRef.current);
           setLaunchState('idle');
@@ -170,8 +170,8 @@ try {
     setShowLaunchModal(true);
 
     try {
-      if (window.api?.openExternal) {
-        await window.api.openExternal(`steam://run/${STAY_STEAM_APP_ID}`);
+      if (window.launcherAPI?.openExternal) {
+        await window.launcherAPI.openExternal(`steam://run/${STAY_STEAM_APP_ID}`);
       } else {
         window.location.href = `steam://run/${STAY_STEAM_APP_ID}`;
       }
@@ -186,8 +186,8 @@ try {
         // minimize        → also calls window.minimize() so the taskbar entry stays present
         // Both are called together so the launcher disappears from screen but remains
         // accessible from both the system tray and the taskbar.
-        if (window.api?.minimizeToTray) window.api.minimizeToTray();
-        if (window.api?.minimize) window.api.minimize();
+        if (window.launcherAPI?.minimizeToTray) window.launcherAPI.minimizeToTray();
+        if (window.launcherAPI?.minimize) window.launcherAPI.minimize();
       }, 3000);
     } catch {
       setLaunchState('idle');
@@ -199,10 +199,10 @@ try {
     clearInterval(pollRef.current);
     try {
       // Try IPC kill first, then fallback to steam://exit
-      if (window.api?.stopGame) {
-        await window.api.stopGame();
+      if (window.launcherAPI?.stopGame) {
+        await window.launcherAPI.stopGame();
       } else {
-        await window.api?.openExternal?.(`steam://exit/${STAY_STEAM_APP_ID}`);
+        await window.launcherAPI?.openExternal?.(`steam://exit/${STAY_STEAM_APP_ID}`);
       }
     } catch {}
     setLaunchState('idle');
