@@ -61,7 +61,7 @@ export default function App() {
           timezone:     d.timezone     ?? 'UTC',
           gender:       d.gender       ?? '',
           isVip:        Boolean(d.isVip),
-          hasGame:      Boolean(d.hasGame),
+          hasGame: Boolean(d.hasGame || d.steamOwnsGame),
           steamOwnsGame: Boolean(d.steamOwnsGame),
           steamId:      d.steamId      ?? '',   // ← add this
           rememberMe:   Boolean(d.rememberMe),

@@ -486,7 +486,7 @@ export default function AchievementsPage({ profile }) {
 
             {/* Game banner + progress */}
             <div
-              className="relative overflow-hidden rounded-2xl border"
+              className="relative overflow-hidden rounded-[2rem] border"
               style={{ borderColor: `${accent.hex}28`, backgroundColor: theme.surface }}
             >
               <div className="relative h-24 overflow-hidden">
@@ -514,9 +514,9 @@ export default function AchievementsPage({ profile }) {
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-end justify-between mt-2 mb-3 font-[Manrope]">
+                    <div className="flex items-end justify-between mt-2 mb-3 px-2.5 font-[Manrope]">
                       <div>
-                        <span className="text-5xl font-bold" style={{ color: accent.hex }}>{unlocked}</span>
+                        <span className="text-6xl font-bold" style={{ color: accent.hex }}>{unlocked}</span>
                         <span className="text-3xl opacity-30 ml-1">/ {total}</span>
                         <span className="text-[14px] opacity-40 ml-2">achievements</span>
                       </div>
@@ -525,12 +525,12 @@ export default function AchievementsPage({ profile }) {
                         {progress}%
                       </span>
                     </div>
-                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
+                    <div className="w-full h-3 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${progress}%` }}
                         transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-                        className="h-full rounded-full"
+                        className="h-full rounded-full px-4"
                         style={{ backgroundColor: accent.hex }}
                       />
                     </div>
@@ -566,7 +566,7 @@ export default function AchievementsPage({ profile }) {
             {/* Achievement list */}
             {loading ? (
               <div className="space-y-2">
-                {Array.from({ length: 5 }).map((_, i) => <AchievementSkeleton key={i} theme={theme} />)}
+                {Array.from({ length: 5 }).map((a, i) => <AchievementSkeleton key={i} theme={theme} />)}
               </div>
             ) : achievements.length === 0 && !error ? (
               <div
