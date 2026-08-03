@@ -1,0 +1,8 @@
+node_modules/
+dist/
+release/
+build-resources/*.ico
+build-resources/*.icns
+*.log
+.DS_Store
+game/

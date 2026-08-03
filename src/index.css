@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:wght@500;600;700&display=swap');
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  body {
+    @apply bg-void text-bone font-body antialiased;
+    overflow: hidden;
+    font-family: 'Manrope';
+  }
+
+  ::selection {
+    background-color: rgba(227, 168, 87, 0.35);
+    color: #fff;
+  }
+
+  :focus-visible {
+    outline: 2px solid theme('colors.bulb');
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.18);
+  }
+}
+
+@layer components {
+  .settings-input {
+    @apply rounded-md border border-edge bg-panel px-3 py-1.5 text-sm text-bone outline-none transition-colors focus:border-bulb/60;
+  }
+
+  .stay-slider {
+    @apply h-1 cursor-pointer appearance-none rounded-full bg-white/10 accent-bulb;
+  }
+  .stay-slider::-webkit-slider-thumb {
+    @apply appearance-none h-3.5 w-3.5 rounded-full bg-bulb;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
