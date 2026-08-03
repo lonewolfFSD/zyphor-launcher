@@ -1,9 +1,9 @@
 {
   "name": "stay-launcher",
   "productName": "Zyphor Launcher",
-  "version": "1.0.0",
-  "description": "Official desktop launcher for STAY: Chapter One - The Jar Theory",
-  "author": "LonewolfFSD",
+  "version": "1.0.1",
+  "description": "Official desktop launcher for all Zyphor Studios titles.",
+  "author": "Zyphor Studios",
   "license": "UNLICENSED",
   "private": true,
   "main": "electron/main.js",
@@ -15,7 +15,7 @@
     "start": "npm run build && electron .",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
-    "publish": "dotenv -e .env -- electron-builder --publish always"
+    "release": "dotenv -e .env -- electron-builder --publish always"
   },
   "dependencies": {
     "@fortawesome/free-brands-svg-icons": "^7.3.1",
@@ -35,6 +35,7 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
+    "dotenv-cli": "^11.0.0",
     "electron": "^33.4.11",
     "electron-builder": "^25.1.8",
     "postcss": "^8.4.49",
@@ -43,7 +44,7 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.lonewolffsd.zyphorlauncher",
+    "appId": "com.zyphorstudios.zyphorlauncher",
     "productName": "Zyphor Launcher",
     "directories": {
       "output": "release",
