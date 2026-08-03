@@ -80,8 +80,6 @@ function loadFromDisk() {
 }
 
 function persistToDisk(settings) {
-  // Simulates the latency of a real settings write (e.g. an IPC call
-  // to the main process / a file write) so the status pill means something.
   return new Promise((resolve, reject) => {
     setTimeout(() => {
       try {
@@ -93,6 +91,24 @@ function persistToDisk(settings) {
     }, 300);
   });
 }
+
+// ── Singleton store ────────────────────────────────────────────────────────────
+// All useSettings() callers share ONE settings object. When update() is called
+// anywhere (e.g. SettingsPage), every subscriber (HomePage, NavRail, etc.)
+// re-renders immediately — no restart needed.
+const listeners = new Set();
+let globalSettings = loadFromDisk();
+
+function notifyAll(next) {
+  globalSettings = next;
+  listeners.forEach((fn) => fn(next));
+}
+
+function subscribeToStore(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+// ──────────────────────────────────────────────────────────────────────────────
 
 /**
  * Real settings store: reads/writes localStorage for user preferences, and
@@ -107,8 +123,9 @@ function persistToDisk(settings) {
  * itself as unavailable instead of showing made-up numbers.
  */
 export function useSettings() {
-  const [settings, setSettings] = useState(null);
-  const [status, setStatus] = useState('loading');
+  // Subscribe to the singleton — initialise from the already-loaded global
+  const [settings, setSettings] = useState(globalSettings);
+  const [status, setStatus] = useState('idle');
 
   const [diskItems, setDiskItems] = useState(null);
   const [diskTotalMB, setDiskTotalMB] = useState(null);
@@ -119,9 +136,11 @@ export function useSettings() {
   const savedTimer = useRef(null);
   const pending = useRef(null);
 
+  // Subscribe so any update() call — from any component — re-renders this one
   useEffect(() => {
-    setSettings(loadFromDisk());
-    setStatus('idle');
+    // Sync in case global changed between render and effect
+    setSettings(globalSettings);
+    return subscribeToStore(setSettings);
   }, []);
 
   const refreshDiskUsage = useCallback(async () => {
@@ -202,11 +221,9 @@ export function useSettings() {
 
   const update = useCallback(
     (partial) => {
-      setSettings((prev) => {
-        const next = { ...prev, ...partial };
-        pending.current = next;
-        return next;
-      });
+      const next = { ...globalSettings, ...partial };
+      pending.current = next;
+      notifyAll(next); // instantly updates every component using useSettings()
 
       clearTimeout(saveTimer.current);
       clearTimeout(savedTimer.current);
@@ -218,9 +235,10 @@ export function useSettings() {
   );
 
   const resetAll = useCallback(() => {
-    setSettings({ ...DEFAULTS });
-    pending.current = { ...DEFAULTS };
-    flush({ ...DEFAULTS });
+    const next = { ...DEFAULTS };
+    pending.current = next;
+    notifyAll(next);
+    flush(next);
   }, [flush]);
 
   useEffect(() => {

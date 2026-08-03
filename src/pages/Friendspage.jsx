@@ -11,8 +11,7 @@ import {
   addDoc, updateDoc, deleteDoc, onSnapshot,
   serverTimestamp, arrayUnion, arrayRemove, limit,
 } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth, db } from '../firebase.js';
+import { db } from '../firebase.js';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import { ExternalLink } from 'lucide-react';
 
@@ -29,11 +28,9 @@ export default function FriendsPage({ profile }) {
   const accent      = ACCENTS[settings?.accent] || ACCENTS.bulb;
   const accentColor = profile?.isVip ? '#FDB515' : accent.hex;
 
-  // ── reactive uid — auth.currentUser is null on first render in Electron ──
+  // ── uid from profile prop — the launcher authenticates via Firestore
+  // handshake, not Firebase Auth, so we use profile.uid directly.
   const uid = profile?.uid ?? null;
-  useEffect(() => {
-    return onAuthStateChanged(auth, user => setUid(user?.uid ?? null));
-  }, []);
 
   const [tab,             setTab]             = useState('friends');
   const [friendsList,     setFriendsList]     = useState([]);
@@ -173,37 +170,38 @@ export default function FriendsPage({ profile }) {
     setFriendsList(prev => prev.filter(f => f.id !== friendId));
   };
 
-const handleSendRequest = async (targetId) => {
-  if (!uid || sentTo.has(targetId) || friendIds.has(targetId)) return;
-
-  // Optimistic UI update
-  setSentTo(prev => new Set([...prev, targetId]));
-
-  try {
-    await addDoc(collection(db, 'notifications'), {
-      senderId: uid,
-      receiverId: targetId,
-      type: 'friend_request',
-      status: 'pending',
-      createdAt: serverTimestamp(),
-    });
-  } catch (err) {
-    console.error('Failed to send friend request:', err);
-    // roll back
-    setSentTo(prev => {
-      const next = new Set(prev);
-      next.delete(targetId);
-      return next;
-    });
-  }
-};
+  const friendIds = useMemo(() => new Set(friendsList.map(f => f.id)), [friendsList]);
 
   const displayFriends = friendsList.filter(f =>
     friendFilter === 'all' ? true : f.status === friendFilter
   );
   const onlineCount  = friendsList.filter(f => f.status === 'online' || f.status === 'ingame').length;
   const displaySearch = searchQuery.trim().length >= 2 ? searchResults : defaultUsers;
-  const friendIds = useMemo(() => new Set(friendsList.map(f => f.id)), [friendsList]);
+
+  const handleSendRequest = async (targetId) => {
+    if (!uid || sentTo.has(targetId) || friendIds.has(targetId)) return;
+
+    // Optimistic UI update
+    setSentTo(prev => new Set([...prev, targetId]));
+
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        senderId: uid,
+        receiverId: targetId,
+        type: 'friend_request',
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('Failed to send friend request:', err);
+      // roll back
+      setSentTo(prev => {
+        const next = new Set(prev);
+        next.delete(targetId);
+        return next;
+      });
+    }
+  };
 
   const TABS = [
     { id: 'friends',  label: 'Allies',      icon: faUsers },
@@ -239,7 +237,7 @@ const handleSendRequest = async (targetId) => {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className="relative flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[9px] font-black uppercase tracking-widest transition-all"
+            className="relative flex-1 flex items-center justify-center gap-1.5 py-3 text-[9px] font-black uppercase tracking-widest transition-all"
             style={{
               backgroundColor: tab === t.id ? accentColor : 'transparent',
               color: tab === t.id ? (profile?.isVip ? '#000' : accent.on) : undefined,
@@ -314,7 +312,7 @@ const handleSendRequest = async (targetId) => {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-5 gap-3">
+                <div className="grid grid-cols-4 gap-3">
                   {displayFriends.map(friend => (
                     <FriendRow
                       key={friend.id}
@@ -375,16 +373,16 @@ const handleSendRequest = async (targetId) => {
             >
               {/* Search input */}
               <div
-                className="flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 shrink-0"
+                className="flex items-center gap-2.5 rounded-xl border px-5 py-4 shrink-0"
                 style={{ borderColor: theme.border, backgroundColor: `${theme.bg}66` }}
               >
-                <FontAwesomeIcon icon={faMagnifyingGlass} style={{ color: accentColor, fontSize: 13 }} className="shrink-0" />
+                <FontAwesomeIcon icon={faMagnifyingGlass} style={{ color: accentColor, fontSize: 16 }} className="shrink-0" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="SEARCH BY DISPLAY NAME..."
-                  className="flex-1 bg-transparent text-xs font-black uppercase tracking-widest outline-none placeholder:opacity-30"
+                  placeholder="SEARCH BY DISPLAY NAME OR ZYPHOR ID..."
+                  className="flex-1 bg-transparent text-xs font-black tracking-widest outline-none placeholder:opacity-30"
                   style={{ color: theme.text }}
                 />
                 {isSearching && (
@@ -413,7 +411,7 @@ const handleSendRequest = async (targetId) => {
                   <p className="text-xs font-black uppercase tracking-widest opacity-40 mt-1">No operatives found</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 xl:grid-cols-10 gap-3">
+                <div className="grid grid-cols-2 xl:grid-cols-8 gap-3">
                   {displaySearch.map(user => (
                     <SearchCard
                       key={user.id}
@@ -462,7 +460,7 @@ function FriendRow({ friend, accentColor, theme, onUnfriend }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           {friend.isVip && <span className="text-[8px] font-black" style={{ color: '#FDB515' }}>✦</span>}
-          <p className="text-xs font-black uppercase tracking-wider truncate">{friend.displayName ?? 'UNKNOWN'}</p>
+          <p className="text-[13px] font-black uppercase tracking-wider truncate">{friend.displayName ?? 'UNKNOWN'}</p>
         </div>
         {friend.currentGame ? (
           <p className="text-[9px] truncate" style={{ color: '#3b82f6' }}>
@@ -470,21 +468,21 @@ function FriendRow({ friend, accentColor, theme, onUnfriend }) {
             {friend.currentGame}
           </p>
         ) : (
-          <p className="text-[9px] uppercase tracking-widest" style={{ color: dotColor }}>
+          <p className="text-[9px] mt-0.5 uppercase tracking-widest" style={{ color: dotColor }}>
             {friend.status ?? 'offline'}
           </p>
         )}
       </div>
 
       <div
-        className="h-2 w-2 rounded-full shrink-0"
+        className="h-2.5 w-2.5 rounded-full shrink-0"
         style={{ backgroundColor: dotColor, boxShadow: friend.status !== 'offline' ? `0 0 6px ${dotColor}88` : 'none' }}
       />
 
       {/* View profile button */}
       <button
         onClick={() => openProfile(friend.id)}
-        className="rounded-lg border p-2 text-[10px] opacity-30 hover:opacity-80 transition-all shrink-0"
+        className="rounded-lg border p-2 text-[12px] opacity-30 hover:opacity-80 transition-all shrink-0"
         style={{ borderColor: theme.border }}
         title="View profile"
       >
@@ -495,14 +493,14 @@ function FriendRow({ friend, accentColor, theme, onUnfriend }) {
         <div className="flex gap-1.5 shrink-0">
           <button
             onClick={() => { onUnfriend(); setShowConfirm(false); }}
-            className="rounded-lg border px-2 py-1 text-[8px] font-black uppercase tracking-widest transition-all hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-400"
+            className="rounded-lg border px-2 py-1 text-[12px] font-black uppercase tracking-widest transition-all hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-400"
             style={{ borderColor: theme.border }}
           >
             Confirm
           </button>
           <button
             onClick={() => setShowConfirm(false)}
-            className="rounded-lg border px-2 py-1 text-[8px] font-black opacity-40 hover:opacity-80"
+            className="rounded-lg border px-2 py-1 text-[12px] font-black opacity-40 hover:opacity-80"
             style={{ borderColor: theme.border }}
           >
             <FontAwesomeIcon icon={faXmark} />
@@ -511,7 +509,7 @@ function FriendRow({ friend, accentColor, theme, onUnfriend }) {
       ) : (
         <button
           onClick={() => setShowConfirm(true)}
-          className="rounded-lg border p-2 text-[10px] opacity-25 hover:opacity-80 hover:border-red-500/40 hover:text-red-400 transition-all shrink-0"
+          className="rounded-lg border p-2 text-[12px] text-red-400 opacity-35 hover:opacity-80 hover:border-red-500/40 hover:text-red-400 transition-all shrink-0"
           style={{ borderColor: theme.border }}
           title="Remove ally"
         >
@@ -586,12 +584,12 @@ function SearchCard({ user, accentColor, theme, alreadyFriend, alreadySent, onSe
     <motion.div
       layout
       initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}
-      className="flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-center"
+      className="flex flex-col items-center gap-2 rounded-3xl border px-4 py-4 text-center"
       style={{ borderColor: theme.border, backgroundColor: `${theme.bg}66` }}
     >
       {/* Avatar */}
       <div
-        className="h-26 w-26 rounded-xl overflow-hidden border flex items-center justify-center font-black text-lg shrink-0"
+        className="h-26 w-26 rounded-3xl overflow-hidden border flex items-center justify-center font-black text-lg shrink-0"
         style={{ borderColor: `${accentColor}33`, backgroundColor: `${accentColor}18`, color: accentColor }}
       >
         {user.photoURL
@@ -613,22 +611,20 @@ function SearchCard({ user, accentColor, theme, alreadyFriend, alreadySent, onSe
         {/* View */}
         <button
           onClick={() => openProfile(user.id)}
-          className="flex-1 flex items-center justify-center gap-1 rounded-lg border py-3 text-[9px] font-black uppercase tracking-widest transition-all hover:opacity-80"
+          className="flex-1 flex items-center justify-center gap-1 rounded-xl border py-3 text-[9.5px] font-black uppercase tracking-widest transition-all hover:opacity-80"
           style={{ borderColor: theme.border, opacity: 0.5, backgroundColor: `${accentColor}22` }}
           title="View profile"
         >
           View Profile
-          <ExternalLink size={10} className='-mt-0.5' icon={faArrowUpRightFromSquare} />
         </button>
 
        {/* Add / Ally / Sent / Sending */}
         {alreadyFriend ? (
           <span
-            className="flex-1 flex items-center justify-center gap-1 rounded-lg border py-3 text-[9px] font-black uppercase tracking-widest"
+            className="flex-1 flex hidden items-center justify-center gap-1 rounded-lg border py-3 text-[9px] font-black uppercase tracking-widest"
             style={{ borderColor: '#22c55e44', color: '#22c55e', backgroundColor: '#22c55e18' }}
           >
-            <FontAwesomeIcon icon={faUserCheck} style={{ fontSize: 8 }} />
-            Ally
+            
           </span>
         ) : alreadySent || sending ? (
           <span

@@ -6,6 +6,8 @@ import {
   faWifi, faTriangleExclamation, faNewspaper, faChevronRight,
   faArrowUpRightFromSquare,
 } from '@fortawesome/free-solid-svg-icons';
+import PlayButton from './images/play.png';
+import SquareButton from './images/square.png';
 import {
   faDiscord, faXTwitter, faYoutube, faRedditAlien, faTiktok, faInstagram,
 } from '@fortawesome/free-brands-svg-icons';
@@ -62,7 +64,7 @@ export default function HomePage({ profile }) {
   const motionOn = settings ? settings.animations && !settings.reduceMotion : true;
 
   // Same logic as NavRail — true only when Steam ownership is verified
-  const hasGame = Boolean(profile?.steamOwnsGame);
+  const hasGame = Boolean(profile?.hasGame || profile?.steamOwnsGame);
 
   const backgroundVideoType = settings?.backgroundVideoType ?? 'default';
   const backgroundVideoSrc =
@@ -76,8 +78,7 @@ export default function HomePage({ profile }) {
       ? PRESET_VIDEO_MAP[backgroundVideoType] ?? DEFAULT_BACKGROUND_VIDEO
       : DEFAULT_BACKGROUND_VIDEO;
 
-  const [launchState, setLaunchState] = useState('idle'); // 'idle' | 'launching' | 'running' | 'error'
-  const [launchError, setLaunchError] = useState(null);
+  const [launchState, setLaunchState] = useState('idle'); // 'idle' | 'launching' | 'running'
   const [showLaunchModal, setShowLaunchModal] = useState(false);
   const [news, setNews] = useState([]);
   const [bannerIndex, setBannerIndex] = useState(0);
@@ -144,37 +145,69 @@ export default function HomePage({ profile }) {
     }
   }
 
+  // Poll interval ref — cleared when game closes or component unmounts
+  const pollRef = useRef(null);
+
+  // Clean up polling on unmount
+  useEffect(() => () => clearInterval(pollRef.current), []);
+
+  function startGamePolling() {
+    clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        // window.api.isGameRunning() should return true/false
+        // Falls back to checking via steam://  — if not available, poll stops after 30s
+        const running = await window.api?.isGameRunning?.();
+        if (running === false) {
+          clearInterval(pollRef.current);
+          setLaunchState('idle');
+        }
+      } catch {
+        // If IPC isn't wired, silently ignore — button stays as Stop
+      }
+    }, 3000); // check every 3 seconds
+  }
+
   async function handlePlay() {
     setLaunchState('launching');
-    setLaunchError(null);
     setShowLaunchModal(true);
+
     try {
-      if (window.api?.launchGame) {
-        const result = await window.api.launchGame();
-        if (!result?.success) throw new Error(result?.error ?? 'Launch failed');
+      if (window.api?.openExternal) {
+        await window.api.openExternal(`steam://run/${STAY_STEAM_APP_ID}`);
       } else {
-        const opened = await window.api?.openExternal?.(`steam://run/${STAY_STEAM_APP_ID}`);
-        if (opened === false) throw new Error('Could not open Steam. Make sure Steam is installed.');
-        if (opened === undefined) window.location.href = `steam://run/${STAY_STEAM_APP_ID}`;
+        window.location.href = `steam://run/${STAY_STEAM_APP_ID}`;
       }
-      // Game is running — hide modal, flip button to Stop
-      setLaunchState('running');
-      setShowLaunchModal(false);
-    } catch (err) {
-      const msg = err?.message ?? 'Something went wrong launching STAY.';
-      setLaunchError(msg);
-      setLaunchState('error');
-      // Show error in modal briefly then dismiss
+      // Give Steam ~3s to start, then flip to running, begin polling,
+      // and minimize the launcher to tray so it gets out of the way.
       setTimeout(() => {
-        setLaunchState('idle');
-        setLaunchError(null);
+        setLaunchState('running');
         setShowLaunchModal(false);
-      }, 3500);
+        startGamePolling();
+        // Minimize to tray AND keep the taskbar button visible.
+        // minimizeToTray  → tells main process to show the tray icon (window.hide() equivalent)
+        // minimize        → also calls window.minimize() so the taskbar entry stays present
+        // Both are called together so the launcher disappears from screen but remains
+        // accessible from both the system tray and the taskbar.
+        if (window.api?.minimizeToTray) window.api.minimizeToTray();
+        if (window.api?.minimize) window.api.minimize();
+      }, 3000);
+    } catch {
+      setLaunchState('idle');
+      setShowLaunchModal(false);
     }
   }
 
   async function handleStop() {
-    try { await window.api?.stopGame?.(); } catch {}
+    clearInterval(pollRef.current);
+    try {
+      // Try IPC kill first, then fallback to steam://exit
+      if (window.api?.stopGame) {
+        await window.api.stopGame();
+      } else {
+        await window.api?.openExternal?.(`steam://exit/${STAY_STEAM_APP_ID}`);
+      }
+    } catch {}
     setLaunchState('idle');
   }
 
@@ -192,13 +225,10 @@ export default function HomePage({ profile }) {
       <LaunchModal
         visible={showLaunchModal}
         gameName={STAY_GAME_NAME}
-        posterUrl={STAY_POSTER_URL}
-        status={launchState}
-        error={launchError}
         onCancel={() => {
+          clearInterval(pollRef.current);
           setShowLaunchModal(false);
           setLaunchState('idle');
-          setLaunchError(null);
         }}
         accent={accent}
         theme={theme}
@@ -249,15 +279,11 @@ export default function HomePage({ profile }) {
               className="absolute inset-0"
             >
               {banner?.video ? (
-                <video
+                <BannerVideo
                   src={banner.video}
                   poster={banner.image}
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  className="h-full w-full object-cover"
-                  style={fadeMask}
+                  active={motionOn}
+                  fadeMask={fadeMask}
                 />
               ) : banner?.image ? (
                 <motion.img
@@ -368,9 +394,9 @@ height: 177,
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                       </svg>
                     ) : launchState === 'running' ? (
-                      <FontAwesomeIcon icon={faSquare} className="text-[32px]" style={{ color: '#fff' }} />
+                      <img src={SquareButton} className="w-8" style={{ color: '#fff' }} />
                     ) : (
-                      <FontAwesomeIcon icon={faPlay} className="text-[32px] translate-x-0.5" style={{ color: '#fff' }} />
+                      <img src={PlayButton} className="w-8 translate-x-0.5" style={{ color: '#fff' }} />
                     )}
                   </button>
                 ) : (
@@ -526,7 +552,7 @@ height: 177,
   );
 }
 
-function LaunchModal({ visible, gameName, posterUrl, status, error, onCancel, accent, theme }) {
+function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
   return (
     <AnimatePresence>
       {visible && (
@@ -539,86 +565,53 @@ function LaunchModal({ visible, gameName, posterUrl, status, error, onCancel, ac
           style={{ backdropFilter: 'blur(10px)', backgroundColor: 'rgba(0,0,0,0.72)' }}
         >
           <motion.div
-  initial={{ scale: 0.95, opacity: 0, y: 20 }}
-  animate={{ scale: 1, opacity: 1, y: 0 }}
-  exit={{ scale: 0.95, opacity: 0, y: 20 }}
-  transition={{ type: "spring", stiffness: 300, damping: 30 }}
-  className="relative flex overflow-hidden rounded-[2rem] border shadow-2xl"
-  style={{
-    width: 680,
-    backgroundColor: `${theme.surface}f0`,
-    borderColor: theme.border,
-  }}
->
-  {/* Left - Steam portrait capsule */}
-  <div
-    className="overflow-hidden"
-    style={{
-      width: 220,
-      aspectRatio: "2 / 3",
-    }}
-  >
-    <img
-      src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/4956550/cf73f970e8df35997b1dd12bcb5e0c6e9cc78255/library_capsule.jpg?t=1784562601"
-      alt={gameName}
-      className="h-full w-full object-cover"
-    />
-  </div>
+            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="relative flex overflow-hidden rounded-[2rem] border shadow-2xl"
+            style={{ width: 680, backgroundColor: `${theme.surface}f0`, borderColor: theme.border }}
+          >
+            {/* Left — portrait capsule */}
+            <div className="overflow-hidden" style={{ width: 220, aspectRatio: '2 / 3' }}>
+              <img
+                src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/4956550/cf73f970e8df35997b1dd12bcb5e0c6e9cc78255/library_capsule.jpg?t=1784562601"
+                alt={gameName}
+                className="h-full w-full object-cover"
+              />
+            </div>
 
-  {/* Right */}
-  <div className="flex flex-1 flex-col justify-between p-7">
-    <div>
-      <h2 className="text-xl font-bold text-bone">
-        {gameName}
-      </h2>
+            {/* Right */}
+            <div className="flex flex-1 flex-col justify-between p-7">
+              <div>
+                <h2 className="text-xl font-bold text-bone">{gameName}</h2>
+                <p className="mt-1 text-sm text-ash/60">Preparing to launch via Steam…</p>
 
-      <p className="mt-1 text-sm text-ash/60">
-        Preparing to launch...
-      </p>
+                {/* Clean spinner — no error state here */}
+                <div className="mt-6 flex items-center gap-3 text-sm text-ash/70">
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                    <path d="M4 12a8 8 0 018-8v8z" fill="currentColor" className="opacity-75" />
+                  </svg>
+                  <span>Handing off to Steam…</span>
+                </div>
+              </div>
 
-      {error ? (
-        <div className="mt-6 flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
-          <FontAwesomeIcon icon={faTriangleExclamation} />
-          <span>{error}</span>
-        </div>
-      ) : (
-        <div className="mt-6 flex items-center gap-3 text-sm text-ash/70">
-          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-              className="opacity-25"
+              <button
+                onClick={onCancel}
+                className="self-end rounded-xl px-5 py-2 text-sm font-semibold text-ash/60 transition hover:bg-white/5 hover:text-bone"
+              >
+                <FontAwesomeIcon icon={faXmark} className="mr-2" />
+                Cancel
+              </button>
+            </div>
+
+            <div
+              className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full blur-3xl opacity-20"
+              style={{ backgroundColor: accent.hex }}
             />
-            <path
-              d="M4 12a8 8 0 018-8v8z"
-              fill="currentColor"
-              className="opacity-75"
-            />
-          </svg>
-
-          <span>Launching game...</span>
-        </div>
-      )}
-    </div>
-
-    <button
-      onClick={onCancel}
-      className="self-end rounded-xl px-5 py-2 text-sm font-semibold text-ash/60 transition hover:bg-white/5 hover:text-bone"
-    >
-      <FontAwesomeIcon icon={faXmark} className="mr-2" />
-      Cancel
-    </button>
-  </div>
-
-  <div
-    className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full blur-3xl opacity-20"
-    style={{ backgroundColor: accent.hex }}
-  />
-</motion.div>
-</motion.div>
+          </motion.div>
+        </motion.div>
       )}
     </AnimatePresence>
   );
@@ -639,18 +632,84 @@ function Divider({ theme }) {
 
 
 /**
- * Full-page ambient video background, sitting behind the grid and all
- * content at low opacity. Logs load/error state so a bad path is obvious
- * in the console instead of just silently showing nothing.
+ * Inline video used inside the rotating news banner.
+ * Respects the Page Visibility API — pauses when the tab is hidden.
  */
-function BackgroundVideo({ src, active }) {
+function BannerVideo({ src, poster, active, fadeMask }) {
   const ref = useRef(null);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    if (active) el.play().catch(() => {});
+    else el.pause();
+  }, [active]);
+
+  useEffect(() => {
+    if (!active) return;
+    const el = ref.current;
+    if (!el) return;
+
+    function handleVisibilityChange() {
+      if (document.hidden) el.pause();
+      else el.play().catch(() => {});
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [active]);
+
+  return (
+    <video
+      ref={ref}
+      src={src}
+      poster={poster}
+      autoPlay
+      muted
+      loop
+      playsInline
+      className="h-full w-full object-cover"
+      style={fadeMask}
+    />
+  );
+}
+
+/**
+ * Full-page ambient video background, sitting behind the grid and all
+ * content at low opacity. Logs load/error state so a bad path is obvious
+ * in the console instead of just silently showing nothing.
+ *
+ * Automatically pauses when the tab/window is hidden (Page Visibility API)
+ * and resumes when it becomes visible again — saves GPU/CPU while the user
+ * is on a different tab or the launcher is in the background.
+ */
+function BackgroundVideo({ src, active }) {
+  const ref = useRef(null);
+
+  // Pause / resume based on the `active` prop (animations setting)
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
     if (active) el.play().catch((err) => console.warn('[BackgroundVideo] play() rejected:', err));
     else el.pause();
+  }, [active]);
+
+  // Pause when tab is hidden, resume when visible (only if active)
+  useEffect(() => {
+    if (!active) return;
+    const el = ref.current;
+    if (!el) return;
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        el.pause();
+      } else {
+        el.play().catch(() => {});
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [active]);
 
   if (!src) {
