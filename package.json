@@ -52,7 +52,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "lonewolffsd",
+      "owner": "lonewolfFSD",
       "repo": "zyphor-launcher"
     },
     "files": [
