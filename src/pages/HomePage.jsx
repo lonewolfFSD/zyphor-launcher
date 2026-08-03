@@ -15,6 +15,7 @@ import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
 import { doc, getDoc, collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
+import Logo from '../../build-resources/logo.png';
 
 // ── Preset background videos ──────────────────────────────────────────────────
 // Drop your video files in the same ./videos/ folder and update the paths here.
@@ -115,18 +116,14 @@ export default function HomePage({ profile }) {
   }
 
   // Update check
-  if (VERSION_MANIFEST_URL) {
-    try {
-      const r = await fetch(VERSION_MANIFEST_URL, { signal: AbortSignal.timeout(5000) });
-      const data = await r.json();
-      const latest = data?.version ?? data?.tag_name?.replace(/^v/, '') ?? CURRENT_VERSION;
-      setUpdateStatus(latest !== CURRENT_VERSION ? 'available' : 'current');
-    } catch {
-      setUpdateStatus('current');
-    }
-  } else {
-    setUpdateStatus('current');
-  }
+// Update check
+try {
+  const snap = await getDoc(doc(db, 'meta', 'version'));
+  const latest = snap.data()?.version ?? CURRENT_VERSION;
+  setUpdateStatus(latest !== CURRENT_VERSION ? 'available' : 'current');
+} catch {
+  setUpdateStatus('current');
+}
 })(); }, []);
 
   const banners = news.length ? news : placeholderNews;
@@ -517,36 +514,45 @@ height: 177,
 
   {/* Socials bar */}
   <div
-    className="flex shrink-0 items-center justify-around border-t px-3 py-3"
-    style={{ borderColor: theme.border }}
-  >
-    {[
-      { icon: faDiscord,     href: '#', color: '#5865F2', label: 'Discord' },
-      { icon: faXTwitter,    href: '#', color: '#e7e7e7', label: 'X'       },
-      { icon: faYoutube,     href: '#', color: '#FF0000', label: 'YouTube' },
-      { icon: faInstagram, href: '#', color: '#FF4500', label: 'Instagram' },
-      { icon: faRedditAlien, href: '#', color: '#FF4500', label: 'Reddit'  },
-    ].map(({ icon, href, color, label }) => (
-      <a
-        key={label}
-        href={href}
-        title={label}
-        className="group flex flex-col items-center gap-1"
-        onMouseEnter={(e) => {
-          e.currentTarget.querySelector('svg').style.color = color;
-          e.currentTarget.querySelector('span').style.color = color;
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.querySelector('svg').style.color = '';
-          e.currentTarget.querySelector('span').style.color = '';
-        }}
-      >
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl transition-colors hover:bg-white/[0.06]">
+  className="flex shrink-0 items-center justify-around border-t px-3 py-3"
+  style={{ borderColor: theme.border }}
+>
+  {[
+    { icon: faDiscord,     href: '#', color: '#5865F2', label: 'Discord'   },
+    { icon: faXTwitter,    href: '#', color: '#e7e7e7', label: 'X'         },
+    { icon: faYoutube,     href: '#', color: '#FF0000', label: 'YouTube'   },
+    { icon: faInstagram,   href: '#', color: '#FF4500', label: 'Instagram' },
+    { icon: faRedditAlien, href: '#', color: '#FF4500', label: 'Reddit'    },
+    { image: Logo, href: 'https://zyphorstudios.com', label: 'Website', type: 'image' },
+  ].map(({ icon, image, href, color, label, type }) => (
+    <a 
+      key={label}
+      href={href}
+      title={label}
+      className="group flex flex-col items-center gap-1"
+      onMouseEnter={(e) => {
+        const svg = e.currentTarget.querySelector('svg');
+        const span = e.currentTarget.querySelector('span');
+        if (svg) svg.style.color = color;
+        if (span) span.style.color = color;
+      }}
+      onMouseLeave={(e) => {
+        const svg = e.currentTarget.querySelector('svg');
+        const span = e.currentTarget.querySelector('span');
+        if (svg) svg.style.color = '';
+        if (span) span.style.color = '';
+      }}
+    >
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl transition-colors hover:bg-white/[0.06]">
+        {type === 'image' ? (
+          <img src={image} alt={label} className="h-[28px] w-[28px] object-contain opacity-20 transition-opacity group-hover:opacity-100" />
+        ) : (
           <FontAwesomeIcon icon={icon} className="text-[22px] text-ash/40 transition-colors" />
-        </div>
-      </a>
-    ))}
-  </div>
+        )}
+      </div>
+    </a>
+  ))}
+</div>
 </motion.aside>
     </div>
   );

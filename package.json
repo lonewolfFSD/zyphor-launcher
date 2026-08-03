@@ -14,12 +14,14 @@
     "build": "vite build",
     "start": "npm run build && electron .",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "publish": "dotenv -e .env -- electron-builder --publish always"
   },
   "dependencies": {
     "@fortawesome/free-brands-svg-icons": "^7.3.1",
     "@fortawesome/free-solid-svg-icons": "^7.3.1",
     "@fortawesome/react-fontawesome": "^3.5.0",
+    "electron-updater": "^6.8.9",
     "firebase": "^12.17.0",
     "framer-motion": "^12.43.0",
     "lucide-react": "^1.28.0",
@@ -46,6 +48,11 @@
     "directories": {
       "output": "release",
       "buildResources": "build-resources"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "lonewolffsd",
+      "repo": "zyphor-launcher"
     },
     "files": [
       "dist/**/*",
