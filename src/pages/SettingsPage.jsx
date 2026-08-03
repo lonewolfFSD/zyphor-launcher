@@ -142,8 +142,22 @@ export default function SettingsPage() {
 
 async function handleCheckUpdate() {
   setUpdateState('checking');
-  await window.launcherAPI?.checkForUpdates?.();
-  // result comes back via the event listeners above
+  try {
+    const result = await window.launcherAPI?.checkForUpdates?.();
+    if (result?.error) {
+      setUpdateState('error');
+      setToast(result.error);
+      return;
+    }
+    // If events arrive they will overwrite this; otherwise fall back after a few seconds
+  } catch {
+    setUpdateState('error');
+    setToast('Update check failed');
+    return;
+  }
+  setTimeout(() => {
+    setUpdateState((s) => (s === 'checking' ? 'up-to-date' : s));
+  }, 8000);
 }
 
   function setDefaultBackgroundVideo() {
