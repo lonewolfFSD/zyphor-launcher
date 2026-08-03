@@ -28,6 +28,26 @@ autoUpdater.on('error', (err) => {
   mainWindow?.webContents.send('updater:error', err.message);
 });
 
+// near the other autoUpdater.on(...) blocks
+autoUpdater.on('checking-for-update', () => {
+  mainWindow?.webContents.send('updater:checking');
+});
+
+ipcMain.handle('updater:check', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    if (result == null) {
+      // Updater is disabled (unpackaged / forceDevUpdateConfig not set)
+      mainWindow?.webContents.send('updater:error', 'Updater inactive — app is not packaged');
+      return { error: 'Updater inactive (not packaged)' };
+    }
+    return result;
+  } catch (err) {
+    mainWindow?.webContents.send('updater:error', err.message);
+    return { error: err.message };
+  }
+});
+
 ipcMain.handle('updater:check', async () => {
   try {
     return await autoUpdater.checkForUpdates();
