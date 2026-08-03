@@ -18,7 +18,18 @@ contextBridge.exposeInMainWorld('api', {
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   closeWindow: () => ipcRenderer.send('window:close'),
   showWindow: () => ipcRenderer.send('window:show'),
-  
+  // Updater
+  checkForUpdates:  ()  => ipcRenderer.invoke('updater:check'),
+  downloadUpdate:   ()  => ipcRenderer.invoke('updater:download'),
+  installUpdate:    ()  => ipcRenderer.invoke('updater:install'),
+  onUpdateAvailable:   (cb) => ipcRenderer.on('updater:update-available',   (_e, info)     => cb(info)),
+  onUpToDate:          (cb) => ipcRenderer.on('updater:up-to-date',          ()             => cb()),
+  onDownloadProgress:  (cb) => ipcRenderer.on('updater:download-progress',  (_e, progress) => cb(progress)),
+  onUpdateDownloaded:  (cb) => ipcRenderer.on('updater:update-downloaded',  (_e, info)     => cb(info)),
+  onUpdaterError:      (cb) => ipcRenderer.on('updater:error',              (_e, msg)      => cb(msg)),
+
+  // Settings sync
+  settingsChanged: (s) => ipcRenderer.send('settings-changed', s),
   quitApp: () => ipcRenderer.send('app:quit'),
 
   // --- Misc ---------------------------------------------------------

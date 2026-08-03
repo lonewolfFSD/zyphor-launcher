@@ -25,6 +25,7 @@ const SECTIONS = [
   { id: 'privacy',    label: 'Privacy',     icon: IconPrivacy },
   { id: 'storage',    label: 'Storage',     icon: IconStorage },
   { id: 'advanced',   label: 'Advanced',    icon: IconAdvanced },
+  { id: 'about',      label: 'About',       icon: IconAbout },
 ];
 
 const BG_VIDEO_PRESETS = [
@@ -66,6 +67,8 @@ export default function SettingsPage() {
   const [customVideoUrl, setCustomVideoUrl] = useState(null);
   const bgVideoInputRef = useRef(null);
   const carouselRef = useRef(null);
+  const [updateState, setUpdateState] = useState('idle');
+  const [updateInfo, setUpdateInfo]   = useState(null);
   const [scanState, setScanState] = useState({}); // { [key]: 'idle'|'scanning'|'done'|'error' }
 
   useEffect(() => {
@@ -126,6 +129,22 @@ export default function SettingsPage() {
     setToast('Custom background video set (preview only until launcherAPI.pickVideoFile is wired up)');
     e.target.value = '';
   }
+
+  useEffect(() => {
+  window.launcherAPI?.onUpdateAvailable?.((info) => {
+    setUpdateState('available');
+    setUpdateInfo(info);
+  });
+  window.launcherAPI?.onUpToDate?.(() => setUpdateState('up-to-date'));
+  window.launcherAPI?.onUpdateDownloaded?.(() => setUpdateState('downloaded'));
+  window.launcherAPI?.onUpdaterError?.(() => setUpdateState('error'));
+}, []);
+
+async function handleCheckUpdate() {
+  setUpdateState('checking');
+  await window.launcherAPI?.checkForUpdates?.();
+  // result comes back via the event listeners above
+}
 
   function setDefaultBackgroundVideo() {
     setCustomVideoUrl(null);
@@ -695,35 +714,34 @@ export default function SettingsPage() {
 
         {activeSection === 'storage' && (
           <div className="max-w-3xl">
-            <div className="flex items-center justify-between">
+            {/* Header */}
+            <div className="mb-6 flex items-center justify-between">
               <div>
                 <h3 className="font-['Manrope'] text-lg font-bold tracking-tight text-bone">Storage</h3>
-                <p className="mt-1 text-[13px] text-ash/60">
-                  See where disk space is used and remove files you don't need.
-                </p>
+                <p className="mt-0.5 text-[13px] text-ash/60">See where disk space is used and remove instances</p>
               </div>
               <button
                 type="button"
                 onClick={refreshDiskUsage}
                 disabled={diskStatus === 'loading'}
-                className="rounded-md border border-edge-soft px-3 py-1.5 text-[11px] font-medium text-ash transition-colors hover:text-bone disabled:cursor-wait disabled:opacity-60"
+                className="rounded-lg border px-3 py-1.5 text-[11px] font-medium text-ash transition-colors hover:text-bone disabled:cursor-wait disabled:opacity-60"
+                style={{ borderColor: theme.border }}
               >
                 {diskStatus === 'loading' ? 'Scanning…' : 'Rescan'}
               </button>
             </div>
 
             {diskStatus === 'unavailable' && (
-              <div className="mt-6 rounded-xl border border-dashed p-5 text-center" style={{ borderColor: theme.border }}>
+              <div className="rounded-xl border border-dashed p-5 text-center" style={{ borderColor: theme.border }}>
                 <p className="text-[13px] font-medium text-bone/80">Storage info isn't available</p>
                 <p className="mt-1 text-[12px] text-ash/50">
-                  This needs the launcher's <code className="text-ash/70">getDiskItems</code> /{' '}
-                  <code className="text-ash/70">getDiskSpace</code> APIs, which aren't exposed in this build.
+                  Needs <code className="text-ash/70">getDiskItems</code> / <code className="text-ash/70">getDiskSpace</code> APIs.
                 </p>
               </div>
             )}
 
             {diskStatus === 'error' && (
-              <div className="mt-6 rounded-xl border p-5 text-center" style={{ borderColor: theme.border }}>
+              <div className="rounded-xl border p-5 text-center" style={{ borderColor: theme.border }}>
                 <p className="text-[13px] font-medium text-rust">Couldn't read disk usage</p>
                 <p className="mt-1 text-[12px] text-ash/50">Check that the install folder still exists, then rescan.</p>
               </div>
@@ -732,182 +750,195 @@ export default function SettingsPage() {
             {(diskStatus === 'ready' || diskStatus === 'loading') && (
               <>
                 {/* Location card */}
-                <div className="mt-6 rounded-xl border p-5" style={{ borderColor: theme.border }}>
-                  <div className="flex items-center justify-between">
+                <div className="rounded-xl border overflow-hidden" style={{ borderColor: theme.border }}>
+                  {/* Card header */}
+                  <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${theme.border}` }}>
                     <div className="flex items-center gap-3">
-                      <div
-                        className="flex h-9 w-9 items-center justify-center rounded-lg"
-                        style={{ backgroundColor: theme.border }}
-                      >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: theme.border }}>
                         <IconStorage className="h-4 w-4 text-bone" />
                       </div>
                       <p className="text-[13px] font-semibold text-bone">Location</p>
                     </div>
-                    <span className="text-xs text-ash/60">
+                    <span className="text-[12px] font-medium text-ash/60">
                       {hasDiskTotals
                         ? `${(diskFreeMB / 1024).toFixed(1)} GB free of ${(diskTotalMB / 1024).toFixed(1)} GB`
                         : 'Calculating…'}
                     </span>
                   </div>
 
-                  <div className="mt-4 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={settings.gamePath}
-                      placeholder="Choose an install folder"
-                      onChange={(e) => update({ gamePath: e.target.value })}
-                      className="settings-input flex-1 text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={pickInstallLocation}
-                      className="flex h-9 w-9 items-center justify-center rounded-md border text-ash hover:text-bone"
-                      style={{ borderColor: theme.border }}
-                      title="Choose folder"
+                  {/* Path row */}
+                  <div className="px-5 pt-4 pb-2">
+                    <div
+                      className="flex items-center gap-2 rounded-lg border px-3 py-2.5"
+                      style={{ borderColor: theme.border, backgroundColor: `${theme.bg}99` }}
                     >
-                      <IconFolder className="h-4 w-4" />
-                    </button>
+                      <IconFolder className="h-3.5 w-3.5 shrink-0 text-ash/50" />
+                      <span className="flex-1 truncate text-[12px] text-bone/80 font-mono">
+                        {settings.gamePath || 'No folder selected'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={pickInstallLocation}
+                        className="shrink-0 rounded-md p-1 text-ash/50 hover:text-bone transition-colors"
+                        title="Choose folder"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                          <path d="M4 20h16M13 4H6a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2v-5M18 2l4 4-8 8H10v-4l8-8z"
+                            stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[11px] text-ash/50">
+                      The folder where STAY stores all of its files. Changes take effect after you restart the launcher.
+                    </p>
                   </div>
-                  <p className="mt-2 text-[11px]" style={{ color: accent.hex }}>
-                    The folder where STAY stores all of its files. Changes take effect after you restart the launcher.
-                  </p>
 
                   {/* Usage bar */}
                   {hasDiskTotals && (
-                    <>
-                      <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-white/5">
-                        <div className="flex h-full w-full">
+                    <div className="px-5 pb-5 pt-3">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-white/5">
+                        <div className="flex h-full">
                           <div
-                            className="h-full"
+                            className="h-full transition-all duration-500"
                             style={{ width: `${(instancesMB / diskTotalMB) * 100}%`, backgroundColor: '#4f9ddb' }}
                           />
                           <div
-                            className="h-full"
+                            className="h-full transition-all duration-500"
                             style={{ width: `${(sharedMB / diskTotalMB) * 100}%`, backgroundColor: accent.hex }}
                           />
                         </div>
                       </div>
-                      <div className="mt-2.5 flex items-center gap-4 text-[11px] text-ash/70">
+                      <div className="mt-2.5 flex items-center gap-5 text-[11px]">
                         <LegendDot color="#4f9ddb" label="Instances" value={`${instancesMB.toFixed(1)} MB`} />
                         <LegendDot color={accent.hex} label="Shared" value={`${sharedMB.toFixed(1)} MB`} />
-                        <LegendDot color="rgba(255,255,255,0.25)" label="Free" value={`${(diskFreeMB / 1024).toFixed(1)} GB`} />
+                        <LegendDot color="rgba(255,255,255,0.2)" label="Free" value={`${(diskFreeMB / 1024).toFixed(1)} GB`} />
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
 
                 {/* Items list */}
-                <div className="mt-6 flex items-center justify-between">
-                  <p className="text-[13px] font-semibold text-bone">
-                    Items <span className="text-ash/50">{items.length}</span>
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Dropdown
-                      value={sortBy}
-                      onChange={setSortBy}
-                      theme={theme}
-                      accent={accent}
-                      className="w-36"
-                      options={[
-                        { value: 'size', label: 'Size on disk' },
-                        { value: 'name', label: 'Name' },
-                      ]}
-                    />
-                    <button
-                      type="button"
-                      disabled={selectedCount === 0}
-                      onClick={uninstallSelected}
-                      className={`rounded-md border px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                        selectedCount === 0
-                          ? 'cursor-not-allowed border-edge-soft text-ash/40'
-                          : 'border-rust/40 text-rust/80 hover:bg-rust/10 hover:text-rust'
-                      }`}
-                    >
-                      Uninstall{selectedCount > 0 ? ` (${selectedCount})` : ''}
-                    </button>
+                <div className="mt-6">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-[13px] font-semibold text-bone">
+                      Items <span className="ml-1 text-ash/50">{items.length}</span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Dropdown
+                        value={sortBy}
+                        onChange={setSortBy}
+                        theme={theme}
+                        accent={accent}
+                        className="w-36"
+                        options={[
+                          { value: 'size', label: 'Size on disk' },
+                          { value: 'name', label: 'Name' },
+                        ]}
+                      />
+                      <button
+                        type="button"
+                        disabled={selectedCount === 0}
+                        onClick={uninstallSelected}
+                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                          selectedCount === 0
+                            ? 'cursor-not-allowed border-white/5 text-ash/30'
+                            : 'border-rust/40 text-rust/80 hover:bg-rust/10 hover:text-rust'
+                        }`}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Uninstall{selectedCount > 0 ? ` (${selectedCount})` : ''}
+                      </button>
+                    </div>
                   </div>
-                </div>
 
-                {items.length === 0 && diskStatus === 'ready' && (
-                  <p className="mt-3 text-[12px] text-ash/50">
-                    Nothing found under this install folder yet — try Rescan after the game finishes installing.
-                  </p>
-                )}
+                  {items.length === 0 && diskStatus === 'ready' && (
+                    <p className="mt-3 text-[12px] text-ash/50">
+                      Nothing found — try Rescan after the game finishes installing.
+                    </p>
+                  )}
 
-                <div className="mt-3 flex flex-col gap-2">
-                  {sortedItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between rounded-xl border px-4 py-3"
-                      style={{ borderColor: theme.border }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="flex h-9 w-9 items-center justify-center rounded-lg"
-                          style={{ backgroundColor: theme.border }}
-                        >
-                          <IconBox className="h-4 w-4 text-ash" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-[13px] font-medium text-bone/90">{item.name}</p>
-                            {item.required && (
-                              <span className="flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ash/60">
-                                <IconLock className="h-2.5 w-2.5" /> Required
-                              </span>
+                  <div className="flex flex-col gap-2">
+                    {sortedItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between rounded-xl border px-4 py-3 transition-colors hover:border-white/10"
+                        style={{ borderColor: theme.border, backgroundColor: `${theme.bg}55` }}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* Icon — use game thumbnail if available, else box icon */}
+                          <div
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg overflow-hidden"
+                            style={{ backgroundColor: theme.border }}
+                          >
+                            {item.thumbnail ? (
+                              <img src={item.thumbnail} alt={item.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <IconBox className="h-4 w-4 text-ash" />
                             )}
                           </div>
-                          <p className="mt-0.5 text-[11px] text-ash/50">
-                            {item.path}
-                            {item.lastPlayed && <span className="ml-2 text-ash/40">Last played {item.lastPlayed}</span>}
-                          </p>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-[13px] font-medium text-bone/90 truncate">{item.name}</p>
+                              {item.required && (
+                                <span className="flex shrink-0 items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ash/50">
+                                  <IconLock className="h-2.5 w-2.5" /> Required
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-0.5 text-[11px] text-ash/40 truncate">
+                              {item.path}
+                              {item.lastPlayed && (
+                                <span className="ml-2">Last played {item.lastPlayed}</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-4 ml-4">
+                          <span className="text-[13px] font-medium text-bone/70 tabular-nums">
+                            {item.sizeMB >= 1000
+                              ? `${(item.sizeMB / 1024).toFixed(1)} GB`
+                              : item.sizeMB === 0
+                              ? '0 KB'
+                              : `${item.sizeMB.toFixed(1)} MB`}
+                          </span>
+                          {!item.required ? (
+                            <input
+                              type="checkbox"
+                              checked={!!item.selected}
+                              onChange={() => toggleItemSelected(item.id)}
+                              className="h-4 w-4 rounded"
+                              style={{ accentColor: accent.hex }}
+                            />
+                          ) : (
+                            <div className="w-4" />
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-[13px] text-bone/80">
-                          {item.sizeMB >= 1000 ? `${(item.sizeMB / 1024).toFixed(1)} GB` : item.sizeMB === 0 ? '0 KB' : `${item.sizeMB.toFixed(1)} MB`}
-                        </span>
-                        {!item.required && (
-                          <input
-                            type="checkbox"
-                            checked={!!item.selected}
-                            onChange={() => toggleItemSelected(item.id)}
-                            className="h-4 w-4 rounded accent-current"
-                            style={{ accentColor: accent.hex }}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </>
             )}
 
-            <div className="mt-6 flex max-w-xl flex-col gap-3">
+            {/* Bottom utilities */}
+            <div className="mt-6 flex flex-col gap-3">
               <SettingRow label="Download cache" hint="Temporary files used while updating.">
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-ash">{cacheSize} MB</span>
-                  <ActionButton onClick={clearCache} variant="danger">
-                    Clear cache
-                  </ActionButton>
+                  <ActionButton onClick={clearCache} variant="danger">Clear cache</ActionButton>
                 </div>
               </SettingRow>
-
               <SettingRow label="Logs" hint="Crash and debug logs.">
-                <ActionButton onClick={openLogsFolder}>
-                  Open logs folder
-                </ActionButton>
+                <ActionButton onClick={openLogsFolder}>Open logs folder</ActionButton>
               </SettingRow>
-
               <SettingRow label="Backup settings" hint="Save or load your launcher configuration as a file.">
                 <div className="flex items-center gap-2">
-                  <ActionButton onClick={exportSettings}>
-                    Export
-                  </ActionButton>
+                  <ActionButton onClick={exportSettings}>Export</ActionButton>
                   <label>
-                    <ActionButton as="span">
-                      Import
-                    </ActionButton>
+                    <ActionButton as="span">Import</ActionButton>
                     <input type="file" accept="application/json" onChange={importSettings} className="hidden" />
                   </label>
                 </div>
@@ -946,6 +977,132 @@ export default function SettingsPage() {
             </SettingRow>
           </Section>
         )}
+
+        {activeSection === 'about' && (
+        <Section title="About" description="App version, build, and update settings.">
+
+          {/* Application */}
+          <div className="col-span-full">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">Application</p>
+            <div className="rounded-xl border p-5" style={{ borderColor: theme.border }}>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                <div>
+                  <p className="text-[11px] text-ash/50">Version</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-bone">STAY Launcher 1.0.0</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-ash/50">Build channel</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-bone">Stable</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-ash/50">Operating system</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-bone">
+                    {window.launcherAPI?.platform?.() ?? 'Windows'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-ash/50">Architecture</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-bone">
+                    {window.launcherAPI?.arch?.() ?? 'x64'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Updates */}
+          <div className="col-span-full mt-2">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">Updates</p>
+            <div className="rounded-xl border p-5" style={{ borderColor: theme.border }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[13px] font-semibold text-bone">Check for updates</p>
+                  <p className="mt-0.5 text-[12px] text-ash/50">You're up to date</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {updateState === 'downloaded' && (
+                    <button
+                      type="button"
+                      onClick={() => window.launcherAPI?.installUpdate?.()}
+                      className="rounded-lg px-3 py-1.5 text-[12px] font-semibold"
+                      style={{ backgroundColor: accent.hex, color: accent.on }}
+                    >
+                      Restart & install
+                    </button>
+                  )}
+                  {updateState === 'available' && (
+                    <button
+                      type="button"
+                      onClick={() => window.launcherAPI?.downloadUpdate?.()}
+                      className="rounded-lg px-3 py-1.5 text-[12px] font-semibold"
+                      style={{ backgroundColor: accent.hex, color: accent.on }}
+                    >
+                      Download v{updateInfo?.version}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCheckUpdate}
+                    disabled={updateState === 'checking' || updateState === 'downloaded'}
+                    className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] font-medium text-bone/80 transition-all hover:bg-white/10 hover:text-bone disabled:opacity-40"
+                  >
+                    {updateState === 'checking' ? 'Checking…' : 'Check now'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Found a bug */}
+          <div className="col-span-full mt-2">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">Found a bug?</p>
+            <div className="rounded-xl border p-5" style={{ borderColor: theme.border }}>
+              <div className="flex items-center justify-between gap-6">
+                <p className="text-[12px] leading-relaxed text-ash/60">
+                  If something looks broken or behaves unexpectedly, let us know on our Discord.
+                  Describe what you did, what you expected, and include your launcher version so
+                  we can reproduce and fix it faster.
+                </p>
+                <a
+                  href="https://discord.gg/your-invite"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 flex items-center gap-2 rounded-lg px-4 py-2 text-[12px] font-semibold transition-all hover:opacity-90 active:scale-95"
+                  style={{ backgroundColor: accent.hex, color: accent.on }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z"/>
+                  </svg>
+                  Report on Discord
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Launcher logs */}
+          <div className="col-span-full mt-2">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">Launcher logs</p>
+            <div className="rounded-xl border p-5" style={{ borderColor: theme.border }}>
+              <div className="flex items-center justify-between">
+                <p className="text-[12px] text-ash/60">Share your log on mclo.gs to get help</p>
+                <button
+                  type="button"
+                  onClick={openLogsFolder}
+                  className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] font-medium text-bone/80 transition-all hover:bg-white/10 hover:text-bone"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Share launcher logs
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </Section>
+      )}
+
+        
           </motion.div>
         </AnimatePresence>
 
@@ -1291,6 +1448,16 @@ function IconAdvanced({ className }) {
         strokeLinecap="round"
       />
       <circle cx="12" cy="12" r="3.4" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function IconAbout({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 11v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="12" cy="8" r="0.8" fill="currentColor" />
     </svg>
   );
 }

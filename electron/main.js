@@ -2,6 +2,48 @@ const { app, BrowserWindow, shell, ipcMain, Tray, Menu, nativeImage } = require(
 const path = require('path');
 const fs = require('fs');
 
+const { autoUpdater } = require('electron-updater');
+
+// Don't auto-download — let the user decide
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
+
+autoUpdater.on('update-available', (info) => {
+  mainWindow?.webContents.send('updater:update-available', info);
+});
+
+autoUpdater.on('update-not-available', () => {
+  mainWindow?.webContents.send('updater:up-to-date');
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  mainWindow?.webContents.send('updater:download-progress', progress);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  mainWindow?.webContents.send('updater:update-downloaded', info);
+});
+
+autoUpdater.on('error', (err) => {
+  mainWindow?.webContents.send('updater:error', err.message);
+});
+
+ipcMain.handle('updater:check', async () => {
+  try {
+    return await autoUpdater.checkForUpdates();
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('updater:download', () => {
+  autoUpdater.downloadUpdate();
+});
+
+ipcMain.handle('updater:install', () => {
+  autoUpdater.quitAndInstall();
+});
+
 const { registerSettingsHandlers, readSettings } = require('./ipc/settingsHandlers');
 const { registerGameHandlers } = require('./ipc/gameHandlers');
 const { registerWindowHandlers } = require('./ipc/windowHandlers');
@@ -71,6 +113,24 @@ function createWindow() {
   });
 
   mainWindow.once('ready-to-show', () => {
+    // Apply remaining settings whenever renderer signals a change
+    ipcMain.on('settings-changed', (_e, s) => {
+      // devMode
+      if (s.devMode) {
+        mainWindow?.webContents.openDevTools({ mode: 'detach' });
+      } else {
+        mainWindow?.webContents.closeDevTools();
+      }
+
+      // autoUpdate — kick off a check when user enables it
+      if (s.autoUpdate) {
+        autoUpdater.checkForUpdates().catch(() => {});
+      }
+
+      // launchOnStartup stays in sync live too (not just on boot)
+      app.setLoginItemSettings({ openAtLogin: !!s.launchOnStartup, openAsHidden: true });
+    });
+
     mainWindow.show();
     // Apply launchOnStartup on every boot so it stays in sync with the setting.
     const s = readSettings();

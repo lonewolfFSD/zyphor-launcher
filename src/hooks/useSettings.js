@@ -225,6 +225,8 @@ export function useSettings() {
       pending.current = next;
       notifyAll(next); // instantly updates every component using useSettings()
 
+      window.launcherAPI?.settingsChanged?.(next); // add this line
+
       clearTimeout(saveTimer.current);
       clearTimeout(savedTimer.current);
       saveTimer.current = setTimeout(() => {
