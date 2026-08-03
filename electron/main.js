@@ -48,13 +48,13 @@ ipcMain.handle('updater:check', async () => {
   }
 });
 
-ipcMain.handle('updater:check', async () => {
-  try {
-    return await autoUpdater.checkForUpdates();
-  } catch (err) {
-    return { error: err.message };
-  }
-});
+// ipcMain.handle('updater:check', async () => {
+//   try {
+//     return await autoUpdater.checkForUpdates();
+//   } catch (err) {
+//     return { error: err.message };
+//   }
+// });
 
 ipcMain.handle('updater:download', () => {
   autoUpdater.downloadUpdate();
