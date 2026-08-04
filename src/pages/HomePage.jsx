@@ -86,6 +86,10 @@ export default function HomePage({ profile }) {
   const [serverStatus, setServerStatus] = useState('checking');
   const [updateStatus, setUpdateStatus] = useState('checking');
   const [playtime, setPlaytime] = useState(null);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [updateDlState, setUpdateDlState] = useState('idle');
 
   const fadeMask = {
   WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 100%)',
@@ -116,15 +120,33 @@ export default function HomePage({ profile }) {
   }
 
   // Update check
-// Update check
-try {
-  const snap = await getDoc(doc(db, 'meta', 'version'));
-  const latest = snap.data()?.version ?? CURRENT_VERSION;
-  setUpdateStatus(latest !== CURRENT_VERSION ? 'available' : 'current');
-} catch {
-  setUpdateStatus('current');
-}
+  try {
+    if (window.launcherAPI?.checkForUpdates) {
+      await window.launcherAPI.checkForUpdates();
+    } else {
+      const snap = await getDoc(doc(db, 'meta', 'version'));
+      const latest = snap.data()?.version ?? CURRENT_VERSION;
+      setUpdateStatus(latest !== CURRENT_VERSION ? 'available' : 'current');
+    }
+  } catch {
+    setUpdateStatus('current');
+  }
 })(); }, []);
+
+  // Wire electron-updater events
+  useEffect(() => {
+    window.launcherAPI?.onUpdateAvailable?.((info) => {
+      setUpdateInfo(info);
+      setUpdateStatus('available');
+      if (settings?.autoUpdate) setShowUpdateModal(true);
+    });
+    window.launcherAPI?.onUpToDate?.(() => setUpdateStatus('current'));
+    window.launcherAPI?.onDownloadProgress?.((p) => {
+      setDownloadProgress(Math.round(p.percent ?? 0));
+      setUpdateDlState('downloading');
+    });
+    window.launcherAPI?.onUpdateDownloaded?.(() => setUpdateDlState('downloaded'));
+  }, []); // eslint-disable-line
 
   const banners = news.length ? news : placeholderNews;
   useEffect(() => {
@@ -218,6 +240,23 @@ try {
       <BackgroundVideo key={backgroundVideoSrc} src={backgroundVideoSrc} active={motionOn} style={{ color: 'inherit', width: '100vw', height: '100%' }} />
       <AnimatedGrid accent={accent} theme={theme} active={motionOn} />
 
+      {/* ── Update modal ── */}
+      <UpdateModal
+        visible={showUpdateModal}
+        info={updateInfo}
+        dlState={updateDlState}
+        progress={downloadProgress}
+        accent={accent}
+        theme={theme}
+        onClose={() => setShowUpdateModal(false)}
+        onDownload={() => {
+          setUpdateDlState('downloading');
+          setDownloadProgress(0);
+          window.launcherAPI?.downloadUpdate?.();
+        }}
+        onInstall={() => window.launcherAPI?.installUpdate?.()}
+      />
+
       {/* ── Launch modal ── */}
       <LaunchModal
         visible={showLaunchModal}
@@ -242,8 +281,9 @@ try {
         >
           <StatusChip
             icon={updateStatus === 'available' ? faCircleArrowUp : faCircleCheck}
-            label={updateStatus === 'available' ? 'Update available' : updateStatus === 'checking' ? 'Checking for updates…' : 'Up to date'}
+            label={updateStatus === 'available' ? `Update available — v${updateInfo?.version ?? ''}` : updateStatus === 'checking' ? 'Checking for updates…' : 'Up to date'}
             tone={updateStatus === 'available' ? accent.hex : undefined}
+            onClick={updateStatus === 'available' ? () => setShowUpdateModal(true) : undefined}
           />
           <Divider theme={theme} />
           <StatusChip
@@ -623,9 +663,156 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
   );
 }
 
-function StatusChip({ icon, label, tone }) {
+function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose, onDownload, onInstall }) {
   return (
-    <div className="flex items-center gap-1.5 px-1.5 text-[12px] font-medium" style={{ color: tone }}>
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="absolute inset-0 z-50 flex items-center justify-center"
+          style={{ backdropFilter: 'blur(12px)', backgroundColor: 'rgba(0,0,0,0.75)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        >
+          <motion.div
+            initial={{ scale: 0.94, opacity: 0, y: 24 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.94, opacity: 0, y: 24 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+            className="relative overflow-hidden rounded-[2rem] border shadow-2xl"
+            style={{ width: 480, backgroundColor: `${theme.surface}f2`, borderColor: theme.border }}
+          >
+            {/* Glow blob */}
+            <div
+              className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full blur-3xl opacity-20"
+              style={{ backgroundColor: accent.hex }}
+            />
+
+            <div className="relative p-8">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: `${accent.hex}22` }}
+                  >
+                    <FontAwesomeIcon icon={faCircleArrowUp} style={{ color: accent.hex }} className="text-lg" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: accent.hex }}>
+                      Update Available
+                    </p>
+                    <h2 className="text-xl font-bold text-bone mt-0.5">
+                      Zyphor Launcher {info?.version ? `v${info.version}` : ''}
+                    </h2>
+                  </div>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="rounded-lg p-1.5 text-ash/40 transition hover:bg-white/10 hover:text-bone"
+                >
+                  <FontAwesomeIcon icon={faXmark} />
+                </button>
+              </div>
+
+              {/* Release notes */}
+              {info?.releaseNotes && (
+                <div
+                  className="mb-6 rounded-xl border p-4 text-[12px] text-ash/70 leading-relaxed max-h-32 overflow-y-auto"
+                  style={{ borderColor: theme.border, backgroundColor: `${theme.bg}88` }}
+                >
+                  {typeof info.releaseNotes === 'string'
+                    ? info.releaseNotes
+                    : info.releaseNotes?.map?.((n) => n.note).join(' ') ?? ''}
+                </div>
+              )}
+
+              {/* Progress bar */}
+              {dlState === 'downloading' && (
+                <div className="mb-6">
+                  <div className="flex justify-between text-[11px] text-ash/50 mb-1.5">
+                    <span>Downloading update...</span>
+                    <span>{progress}%</span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: theme.border }}>
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ backgroundColor: accent.hex }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${progress}%` }}
+                      transition={{ ease: 'linear', duration: 0.3 }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Downloaded badge */}
+              {dlState === 'downloaded' && (
+                <div
+                  className="mb-6 flex items-center gap-2 rounded-xl border px-4 py-3 text-[12px]"
+                  style={{ borderColor: `${accent.hex}44`, backgroundColor: `${accent.hex}11` }}
+                >
+                  <FontAwesomeIcon icon={faCircleCheck} style={{ color: accent.hex }} />
+                  <span style={{ color: accent.hex }}>Download complete &mdash; ready to install</span>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={onClose}
+                  className="rounded-xl px-4 py-2 text-[13px] font-medium text-ash/60 transition hover:bg-white/5 hover:text-bone"
+                >
+                  {dlState === 'idle' ? 'Remind me later' : 'Close'}
+                </button>
+
+                {dlState === 'idle' && (
+                  <button
+                    onClick={onDownload}
+                    className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]"
+                    style={{ backgroundColor: accent.hex, color: accent.on }}
+                  >
+                    Download update
+                  </button>
+                )}
+
+                {dlState === 'downloading' && (
+                  <button
+                    disabled
+                    className="rounded-xl px-5 py-2 text-[13px] font-semibold opacity-50 cursor-not-allowed"
+                    style={{ backgroundColor: accent.hex, color: accent.on }}
+                  >
+                    Downloading... {progress}%
+                  </button>
+                )}
+
+                {dlState === 'downloaded' && (
+                  <button
+                    onClick={onInstall}
+                    className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]"
+                    style={{ backgroundColor: accent.hex, color: accent.on }}
+                  >
+                    Restart &amp; install
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function StatusChip({ icon, label, tone, onClick }) {
+  return (
+    <div
+      className={`flex items-center gap-1.5 px-1.5 text-[12px] font-medium ${onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+      style={{ color: tone }}
+      onClick={onClick}
+    >
       <FontAwesomeIcon icon={icon} className={`text-[12px] ${tone ? '' : 'text-ash/70'}`} />
       <span className={tone ? '' : 'text-ash/70'}>{label}</span>
     </div>

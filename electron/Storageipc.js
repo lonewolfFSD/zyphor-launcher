@@ -5,9 +5,9 @@
 //   registerStorageHandlers(); // no args needed — uses Electron app paths
 //
 // In preload.js, add to the existing contextBridge.exposeInMainWorld('launcherAPI', { ... }):
-//   getDiskItems: () => ipcRenderer.invoke('storage:get-items'),
-//   getDiskSpace: () => ipcRenderer.invoke('storage:get-disk-space'),
-//   deleteItems: (paths) => ipcRenderer.invoke('storage:delete-items', paths),
+//   getDiskItems: () => ipcRenderer.invoke('storage:getDiskItems'),
+//   getDiskSpace: () => ipcRenderer.invoke('storage:getDiskSpace'),
+//   deleteItems: (paths) => ipcRenderer.invoke('storage:deleteItems', paths),
 //   pickVideoFile: () => ipcRenderer.invoke('appearance:pick-video'),
 
 const { ipcMain, dialog, app } = require('electron');
@@ -94,7 +94,7 @@ async function getFolderSizeBytes(dir) {
 }
 
 function registerStorageHandlers() {
-  ipcMain.handle('storage:get-items', async () => {
+  ipcMain.handle('storage:getDiskItems', async () => {
     const manifest = getItemManifest();
     const items = [];
 
@@ -122,7 +122,7 @@ function registerStorageHandlers() {
     return items;
   });
 
-  ipcMain.handle('storage:get-disk-space', async () => {
+  ipcMain.handle('storage:getDiskSpace', async () => {
     // Use the userData drive — that's where all launcher files live
     const userData = app.getPath('userData');
     try {
@@ -137,7 +137,7 @@ function registerStorageHandlers() {
     }
   });
 
-  ipcMain.handle('storage:delete-items', async (_event, itemPaths) => {
+  ipcMain.handle('storage:deleteItems', async (_event, itemPaths) => {
     for (const p of itemPaths) {
       await fs.rm(p, { recursive: true, force: true });
     }
