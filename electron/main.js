@@ -67,7 +67,7 @@ ipcMain.handle('updater:install', () => {
 const { registerSettingsHandlers, readSettings } = require('./ipc/settingsHandlers');
 const { registerGameHandlers } = require('./ipc/gameHandlers');
 const { registerWindowHandlers } = require('./ipc/windowHandlers');
-const { registerStorageHandlers } = require('./ipc/storageIPC');
+const { registerStorageHandlers } = require('./storageIPC');
 
 // Detect dev mode: either explicitly set, OR dist/index.html doesn't exist yet.
 const distIndex = path.join(__dirname, '..', 'dist', 'index.html');
