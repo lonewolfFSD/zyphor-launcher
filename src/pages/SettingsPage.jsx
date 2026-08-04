@@ -68,6 +68,7 @@ export default function SettingsPage() {
   const bgVideoInputRef = useRef(null);
   const carouselRef = useRef(null);
   const [updateState, setUpdateState] = useState('idle');
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateInfo, setUpdateInfo]   = useState(null);
   const [scanState, setScanState] = useState({}); // { [key]: 'idle'|'scanning'|'done'|'error' }
 
@@ -138,6 +139,10 @@ export default function SettingsPage() {
   window.launcherAPI?.onUpToDate?.(() => setUpdateState('up-to-date'));
   window.launcherAPI?.onUpdateDownloaded?.(() => setUpdateState('downloaded'));
   window.launcherAPI?.onUpdaterError?.(() => setUpdateState('error'));
+  window.launcherAPI?.onDownloadProgress?.((p) => {
+    setUpdateState('downloading');
+    setDownloadProgress(Math.round(p.percent ?? 0));
+  });
 }, []);
 
 async function handleCheckUpdate() {
@@ -1031,7 +1036,15 @@ async function handleCheckUpdate() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[13px] font-semibold text-bone">Check for updates</p>
-                  <p className="mt-0.5 text-[12px] text-ash/50">You're up to date</p>
+                  <p className="mt-0.5 text-[12px] text-ash/50">
+                    {updateState === 'idle'        && 'Check for the latest version'}
+                    {updateState === 'checking'    && 'Checking for updates…'}
+                    {updateState === 'up-to-date'  && "You're up to date"}
+                    {updateState === 'available'   && `v${updateInfo?.version} is available`}
+                    {updateState === 'downloading' && `Downloading… ${downloadProgress}%`}
+                    {updateState === 'downloaded'  && 'Update ready — restart to install'}
+                    {updateState === 'error'       && 'Update check failed'}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
                   {updateState === 'downloaded' && (
@@ -1047,17 +1060,32 @@ async function handleCheckUpdate() {
                   {updateState === 'available' && (
                     <button
                       type="button"
-                      onClick={() => window.launcherAPI?.downloadUpdate?.()}
+                      onClick={() => {
+                        setUpdateState('downloading');
+                        setDownloadProgress(0);
+                        window.launcherAPI?.downloadUpdate?.();
+                      }}
                       className="rounded-lg px-3 py-1.5 text-[12px] font-semibold"
                       style={{ backgroundColor: accent.hex, color: accent.on }}
                     >
                       Download v{updateInfo?.version}
                     </button>
                   )}
+                  {updateState === 'downloading' && (
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{ width: `${downloadProgress}%`, backgroundColor: accent.hex }}
+                        />
+                      </div>
+                      <span className="text-[11px] text-ash/50">{downloadProgress}%</span>
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={handleCheckUpdate}
-                    disabled={updateState === 'checking' || updateState === 'downloaded'}
+                    disabled={['checking', 'downloading', 'downloaded'].includes(updateState)}
                     className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] font-medium text-bone/80 transition-all hover:bg-white/10 hover:text-bone disabled:opacity-40"
                   >
                     {updateState === 'checking' ? 'Checking…' : 'Check now'}
@@ -1121,17 +1149,25 @@ async function handleCheckUpdate() {
         </AnimatePresence>
 
         {toast && (
-          <div className="pointer-events-none fixed bottom-6 right-6 z-50">
-            <div
-              className="rounded-xl border border-white/10 bg-[#1a1a1a]/95 px-4 py-3 text-[13px] font-medium text-bone shadow-2xl backdrop-blur-sm"
-              style={{ minWidth: '200px', maxWidth: '320px' }}
-            >
-              <div className="flex items-center gap-2.5">
+          <div className="pointer-events-auto fixed bottom-6 right-6 z-50" style={{ maxWidth: 'min(560px, calc(100vw - 48px))' }}>
+            <div className="rounded-xl border border-white/10 bg-[#1a1a1a]/95 px-4 py-3 text-[13px] font-medium text-bone shadow-2xl backdrop-blur-sm">
+              <div className="flex items-start gap-2.5">
                 <span
-                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
                   style={{ backgroundColor: 'var(--accent)' }}
                 />
-                {toast}
+                {/* break-all so long URLs / error strings wrap instead of overflowing */}
+                <span className="flex-1 break-all leading-relaxed">{toast}</span>
+                <button
+                  onClick={() => navigator.clipboard.writeText(toast)}
+                  className="ml-1 mt-0.5 shrink-0 rounded-md p-1 text-ash/50 transition-colors hover:bg-white/10 hover:text-bone"
+                  title="Copy message"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
