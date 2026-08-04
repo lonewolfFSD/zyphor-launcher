@@ -11,6 +11,7 @@ import AchievementsPage from './pages/AchievementsPage.jsx';
 import FriendsPage from './pages/FriendsPage.jsx';
 import { useSettings } from './hooks/useSettings.js';
 import { loadUid, clearSession } from './lib/authSession.js';
+import ScreenshotsPage from './pages/ScreenshotsPage.jsx';
 
 const PAGES = {
   home:     HomePage,
@@ -18,6 +19,7 @@ const PAGES = {
   friends:  FriendsPage,
   settings: SettingsPage,
   achievements:  AchievementsPage,
+  screenshots:   ScreenshotsPage
 };
 
 export default function App() {

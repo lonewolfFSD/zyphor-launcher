@@ -43,6 +43,9 @@
     "vite": "^5.4.11",
     "wait-on": "^8.0.1"
   },
+  "nsis": {
+    "include": "build/installer.nsh"
+  },
   "build": {
     "appId": "com.zyphorstudios.zyphorlauncher",
     "productName": "Zyphor Launcher",

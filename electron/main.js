@@ -212,6 +212,10 @@ ipcMain.on('shell:openExternal', (_event, url) => {
 });
 
 app.whenReady().then(() => {
+  // Create screenshots folder
+  const screenshotsDir = path.join(app.getPath('userData'), 'screenshots', 'stay');
+  fs.mkdirSync(screenshotsDir, { recursive: true });
+
   registerSettingsHandlers();
   registerStorageHandlers();
   registerGameHandlers();
