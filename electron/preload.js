@@ -9,6 +9,12 @@ contextBridge.exposeInMainWorld('launcherAPI', {  // was 'api'
     ipcRenderer.on('game:exit', l);
     return () => ipcRenderer.removeListener('game:exit', l);
   },
+  // Screenshots — runtime captures from userData/screenshots/<gameId>/
+  screenshots: {
+    getAll: (gameId) => ipcRenderer.invoke('screenshots:getAll', gameId),
+    openFolder: (gameId) => ipcRenderer.invoke('screenshots:openFolder', gameId),
+  },
+  
   minimizeWindow:   () => ipcRenderer.send('window:minimize'),
   maximizeWindow:   () => ipcRenderer.send('window:maximize'),
   closeWindow:      () => ipcRenderer.send('window:close'),

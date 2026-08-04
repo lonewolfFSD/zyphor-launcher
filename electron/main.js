@@ -129,7 +129,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false, // must be false — sandbox blocks require() in preload
+      sandbox: false, 
+      webSecurity: false, 
     },
   });
 
@@ -206,6 +207,54 @@ function createWindow() {
 }
 
 ipcMain.handle('app:getLauncherPath', () => path.dirname(app.getPath('exe')));
+
+// ── Screenshots ───────────────────────────────────────────────────────────────
+function screenshotsDir(gameId) {
+  const key = String(gameId || 'stay').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'stay';
+  return path.join(app.getPath('userData'), 'screenshots', key);
+}
+
+/** Windows-safe file:// URL */
+function toFileUrl(filePath) {
+  // pathToFileURL is the correct way (handles spaces, backslashes, drive letters)
+  const { pathToFileURL } = require('url');
+  return pathToFileURL(filePath).href;
+}
+
+ipcMain.handle('screenshots:getAll', async (_e, gameId) => {
+  try {
+    const dir = screenshotsDir(gameId);
+    fs.mkdirSync(dir, { recursive: true });
+
+    const files = fs.readdirSync(dir)
+      .filter((f) => /\.(png|jpe?g|webp|gif|bmp)$/i.test(f))
+      .map((f) => {
+        const full = path.join(dir, f);
+        const stat = fs.statSync(full);
+        return { f, full, mtime: stat.mtimeMs, size: stat.size };
+      })
+      .sort((a, b) => b.mtime - a.mtime); // newest first
+
+    return files.map(({ f, full, mtime, size }) => ({
+      name: path.basename(f, path.extname(f)),
+      fileName: f,
+      src: toFileUrl(full),
+      path: full,
+      mtime,
+      size,
+    }));
+  } catch (err) {
+    console.error('[screenshots:getAll]', err);
+    return [];
+  }
+});
+
+ipcMain.handle('screenshots:openFolder', async (_e, gameId) => {
+  const dir = screenshotsDir(gameId);
+  fs.mkdirSync(dir, { recursive: true });
+  await shell.openPath(dir);
+  return dir;
+});
 
 ipcMain.on('shell:openExternal', (_event, url) => {
   shell.openExternal(url);

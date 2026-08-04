@@ -1,7 +1,7 @@
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
-import { Image, AlertTriangle, ChevronDown, X, ZoomIn, Download } from 'lucide-react';
+import { Image, AlertTriangle, ChevronDown, X, ZoomIn, Download, FolderOpen, RefreshCw } from 'lucide-react';
 
 // ─── Video imports (same ambient background as other pages) ───────────────────
 import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
@@ -20,8 +20,7 @@ const PRESET_VIDEO_MAP = {
 };
 
 // ─── Game registry ────────────────────────────────────────────────────────────
-// Folder key maps to ./screenshots/<folderKey>/*  (png/jpg/webp/jpeg)
-// Drop image files into src/pages/screenshots/stay/  (or whatever folderKey you set)
+// folderKey = subfolder under userData/screenshots/<folderKey>/
 const GAMES = [
   {
     id:        'stay',
@@ -33,55 +32,9 @@ const GAMES = [
     developer: 'Zyphor Studios',
     status:    'released',
   },
-  // ── Add future games ──────────────────────────────────────────────────────
-  // {
-  //   id: 'game2',
-  //   folderKey: 'game2',
-  //   appId: '0000000',
-  //   name: 'Game 2',
-  //   fullName: 'Game 2: Subtitle',
-  //   developer: 'Zyphor Studios',
-  //   status: 'coming_soon',
-  // },
 ];
 
-// Eager-load all screenshot images under ./screenshots/<game>/*
-// Vite resolves these at build time. Place files in:
-//   src/pages/screenshots/stay/*.png|jpg|webp
-const ALL_SCREENSHOT_MODULES = import.meta.glob(
-  './screenshots/**/*.{png,jpg,jpeg,webp,PNG,JPG,JPEG,WEBP}',
-  { eager: true, import: 'default' }
-);
-
-/** Build { folderKey: [{ src, name }] } from the glob map */
-function buildScreenshotIndex() {
-  const index = {};
-  for (const [path, mod] of Object.entries(ALL_SCREENSHOT_MODULES)) {
-    // path like "./screenshots/stay/shot1.png"
-    const parts = path.replace(/^\.\//, '').split('/');
-    // ["screenshots", "stay", "shot1.png"]
-    if (parts.length < 3 || parts[0] !== 'screenshots') continue;
-    const folderKey = parts[1];
-    const fileName  = parts.slice(2).join('/');
-    const src = typeof mod === 'string' ? mod : mod?.default ?? mod;
-    if (!src) continue;
-    if (!index[folderKey]) index[folderKey] = [];
-    index[folderKey].push({
-      src,
-      name: fileName.replace(/\.[^.]+$/, ''),
-      fileName,
-    });
-  }
-  // Stable sort by filename
-  for (const key of Object.keys(index)) {
-    index[key].sort((a, b) => a.fileName.localeCompare(b.fileName));
-  }
-  return index;
-}
-
-const SCREENSHOT_INDEX = buildScreenshotIndex();
-
-// ─── Game selector (same pattern as Achievements) ─────────────────────────────
+// ─── Game selector ────────────────────────────────────────────────────────────
 function GameSelector({ games, selected, onSelect, accent, theme }) {
   const [open, setOpen] = useState(false);
   const current = games.find((g) => g.id === selected) ?? games[0];
@@ -102,8 +55,8 @@ function GameSelector({ games, selected, onSelect, accent, theme }) {
             </div>
           )}
         </div>
-        <div className="text-left">
-          <p className="text-[13px] font-semibold leading-none truncate" style={{ color: theme.text }}>
+        <div className="text-left min-w-0">
+          <p className="text-[13px] font-semibold leading-none truncate max-w-[200px]" style={{ color: theme.text }}>
             {current.name}
           </p>
           {current.status === 'coming_soon' && (
@@ -127,21 +80,21 @@ function GameSelector({ games, selected, onSelect, accent, theme }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.97 }}
             transition={{ duration: 0.14 }}
-            className="absolute top-full mt-1.5 left-0 z-50 min-w-[220px] rounded-2xl overflow-hidden shadow-2xl"
+            className="absolute top-full mt-1.5 left-0 z-50 min-w-[240px] rounded-2xl overflow-hidden shadow-2xl"
             style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}` }}
           >
-            {games.map((game) => {
-              const isActive = game.id === selected;
+            {games.map((g) => {
+              const isActive = g.id === selected;
               return (
                 <button
-                  key={game.id}
-                  onClick={() => { onSelect(game.id); setOpen(false); }}
+                  key={g.id}
+                  onClick={() => { onSelect(g.id); setOpen(false); }}
                   className="w-full flex items-center gap-3 px-4 py-3 transition-all text-left"
                   style={{ backgroundColor: isActive ? `${accent.hex}14` : 'transparent' }}
                 >
                   <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 bg-black/40">
-                    {game.status === 'released' ? (
-                      <img src={game.url} alt={game.name} className="w-full h-full object-cover" />
+                    {g.status === 'released' ? (
+                      <img src={g.url} alt={g.name} className="w-full h-full object-cover" />
                     ) : (
                       <div
                         className="w-full h-full flex items-center justify-center"
@@ -156,18 +109,10 @@ function GameSelector({ games, selected, onSelect, accent, theme }) {
                       className="text-[13px] font-semibold truncate leading-none"
                       style={{ color: isActive ? accent.hex : theme.text }}
                     >
-                      {game.name}
+                      {g.name}
                     </p>
-                    <p className="text-[10px] opacity-40 mt-0.5 truncate">{game.developer}</p>
+                    <p className="text-[10px] opacity-40 mt-0.5 truncate">{g.developer}</p>
                   </div>
-                  {game.status === 'coming_soon' && (
-                    <span
-                      className="text-[8px] font-bold uppercase tracking-widest rounded-full px-2 py-0.5 shrink-0"
-                      style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}
-                    >
-                      Soon
-                    </span>
-                  )}
                 </button>
               );
             })}
@@ -210,7 +155,7 @@ function Lightbox({ shot, onClose, onPrev, onNext, hasPrev, hasNext, accent, the
       {hasPrev && (
         <button
           onClick={(e) => { e.stopPropagation(); onPrev(); }}
-          className="absolute left-5 top-1/2 -translate-y-1/2 flex h-11 w-11 items-center justify-center rounded-xl transition hover:bg-white/10"
+          className="absolute left-5 top-1/2 -translate-y-1/2 flex h-11 w-11 items-center justify-center rounded-xl text-2xl transition hover:bg-white/10"
           style={{ color: theme.text }}
         >
           ‹
@@ -219,7 +164,7 @@ function Lightbox({ shot, onClose, onPrev, onNext, hasPrev, hasNext, accent, the
       {hasNext && (
         <button
           onClick={(e) => { e.stopPropagation(); onNext(); }}
-          className="absolute right-5 top-1/2 -translate-y-1/2 flex h-11 w-11 items-center justify-center rounded-xl transition hover:bg-white/10"
+          className="absolute right-5 top-1/2 -translate-y-1/2 flex h-11 w-11 items-center justify-center rounded-xl text-2xl transition hover:bg-white/10"
           style={{ color: theme.text }}
         >
           ›
@@ -282,17 +227,55 @@ export default function ScreenshotsPage() {
   }, [motionOn, backgroundVideoSrc]);
 
   const [selectedGameId, setSelectedGameId] = useState(GAMES[0].id);
+  const [shots, setShots] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [lightboxIndex, setLightboxIndex] = useState(null);
 
   const game = GAMES.find((g) => g.id === selectedGameId) ?? GAMES[0];
-  const shots = useMemo(
-    () => SCREENSHOT_INDEX[game.folderKey] ?? [],
-    [game.folderKey]
-  );
+
+  // Fetch screenshots from disk via Electron IPC when game changes
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLightboxIndex(null);
+
+    const api = window.launcherAPI?.screenshots;
+    if (!api?.getAll) {
+      console.warn('[Screenshots] launcherAPI.screenshots not available');
+      setShots([]);
+      setLoading(false);
+      return;
+    }
+
+    api.getAll(game.folderKey)
+      .then((list) => {
+        if (!cancelled) setShots(Array.isArray(list) ? list : []);
+      })
+      .catch((err) => {
+        console.warn('[Screenshots] getAll failed:', err);
+        if (!cancelled) setShots([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedGameId, game.folderKey]);
+
+  function refresh() {
+    setLoading(true);
+    window.launcherAPI?.screenshots?.getAll?.(game.folderKey)
+      .then((list) => setShots(Array.isArray(list) ? list : []))
+      .catch(() => setShots([]))
+      .finally(() => setLoading(false));
+  }
+
+  function openFolder() {
+    window.launcherAPI?.screenshots?.openFolder?.(game.folderKey);
+  }
 
   return (
     <div className="relative h-full overflow-y-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
-      {/* Background video */}
       {backgroundVideoSrc && (
         <video
           ref={videoRef}
@@ -309,7 +292,6 @@ export default function ScreenshotsPage() {
       />
 
       <div className="px-9 py-7">
-        {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap mb-7">
           <div>
             <h2
@@ -323,16 +305,35 @@ export default function ScreenshotsPage() {
             </p>
           </div>
 
-          <GameSelector
-            games={GAMES}
-            selected={selectedGameId}
-            onSelect={setSelectedGameId}
-            accent={accent}
-            theme={theme}
-          />
+          <div className="flex items-center gap-2">
+            <GameSelector
+              games={GAMES}
+              selected={selectedGameId}
+              onSelect={setSelectedGameId}
+              accent={accent}
+              theme={theme}
+            />
+            <button
+              type="button"
+              onClick={refresh}
+              title="Refresh"
+              className="flex h-10 w-10 items-center justify-center rounded-xl transition hover:opacity-80"
+              style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }}
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            </button>
+            <button
+              type="button"
+              onClick={openFolder}
+              title="Open folder"
+              className="flex h-10 w-10 items-center justify-center rounded-xl transition hover:opacity-80"
+              style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }}
+            >
+              <FolderOpen size={14} />
+            </button>
+          </div>
         </div>
 
-        {/* Coming soon */}
         {game.status === 'coming_soon' && (
           <div
             className="flex flex-col items-center justify-center py-24 rounded-2xl border"
@@ -344,10 +345,8 @@ export default function ScreenshotsPage() {
           </div>
         )}
 
-        {/* Released */}
         {game.status === 'released' && (
           <>
-            {/* Count bar */}
             <div
               className="flex items-center justify-between rounded-3xl px-8 py-4 mb-5 border"
               style={{ backgroundColor: theme.surface, borderColor: theme.border }}
@@ -357,19 +356,15 @@ export default function ScreenshotsPage() {
                   {game.fullName}
                 </p>
                 <p className="text-[14px] font-semibold mt-1" style={{ color: theme.text }}>
-                  {shots.length} screenshot{shots.length === 1 ? '' : 's'}
+                  {loading ? 'Loading…' : `${shots.length} screenshot${shots.length === 1 ? '' : 's'}`}
                 </p>
               </div>
-              <span
-                className="text-[11px] font-mono opacity-30"
-                title="Loaded from folder"
-              >
+              <span className="text-[11px] font-mono opacity-30" title="On-disk folder">
                 screenshots/{game.folderKey}/
               </span>
             </div>
 
-            {/* Empty */}
-            {shots.length === 0 && (
+            {!loading && shots.length === 0 && (
               <div
                 className="flex flex-col items-center justify-center py-20 rounded-[2.5rem] border opacity-80 gap-1"
                 style={{ borderColor: theme.border, backgroundColor: theme.surface }}
@@ -379,27 +374,47 @@ export default function ScreenshotsPage() {
                   No screenshots found
                 </p>
                 <p className="text-[13px] opacity-40 mt-1.5 text-center max-w-sm">
-                  Press <code
+                  Press{' '}
+                  <code
                     className="px-1.5 py-0.5 rounded text-[11px] font-mono"
                     style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}
                   >
                     F2
                   </code>{' '}
-                  while in-game to capture screenshots. They'll appear here automatically.
+                  while in-game to capture screenshots. They&apos;ll appear here automatically.
                 </p>
+                <button
+                  type="button"
+                  onClick={openFolder}
+                  className="mt-4 flex items-center gap-2 rounded-xl px-4 py-2 text-[12px] font-semibold transition hover:opacity-80"
+                  style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}
+                >
+                  <FolderOpen size={13} /> Open screenshots folder
+                </button>
               </div>
             )}
 
-            {/* Grid */}
-            {shots.length > 0 && (
+            {loading && (
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="aspect-video rounded-2xl animate-pulse"
+                    style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}` }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {!loading && shots.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
                 {shots.map((shot, i) => (
                   <motion.button
-                    key={shot.src}
+                    key={shot.src + (shot.fileName || i)}
                     type="button"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03, duration: 0.2 }}
+                    transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
                     onClick={() => setLightboxIndex(i)}
                     className="group relative aspect-video overflow-hidden rounded-2xl border text-left transition-all duration-200 hover:scale-[1.02] active:scale-[0.99]"
                     style={{
@@ -434,7 +449,6 @@ export default function ScreenshotsPage() {
         )}
       </div>
 
-      {/* Lightbox */}
       <AnimatePresence>
         {lightboxIndex != null && shots[lightboxIndex] && (
           <Lightbox
