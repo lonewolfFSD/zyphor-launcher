@@ -129,8 +129,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false, 
-      webSecurity: false, 
+      sandbox: false, // must be false — sandbox blocks require() in preload
     },
   });
 
@@ -214,9 +213,7 @@ function screenshotsDir(gameId) {
   return path.join(app.getPath('userData'), 'screenshots', key);
 }
 
-/** Windows-safe file:// URL */
 function toFileUrl(filePath) {
-  // pathToFileURL is the correct way (handles spaces, backslashes, drive letters)
   const { pathToFileURL } = require('url');
   return pathToFileURL(filePath).href;
 }
@@ -225,7 +222,6 @@ ipcMain.handle('screenshots:getAll', async (_e, gameId) => {
   try {
     const dir = screenshotsDir(gameId);
     fs.mkdirSync(dir, { recursive: true });
-
     const files = fs.readdirSync(dir)
       .filter((f) => /\.(png|jpe?g|webp|gif|bmp)$/i.test(f))
       .map((f) => {
@@ -233,8 +229,7 @@ ipcMain.handle('screenshots:getAll', async (_e, gameId) => {
         const stat = fs.statSync(full);
         return { f, full, mtime: stat.mtimeMs, size: stat.size };
       })
-      .sort((a, b) => b.mtime - a.mtime); // newest first
-
+      .sort((a, b) => b.mtime - a.mtime);
     return files.map(({ f, full, mtime, size }) => ({
       name: path.basename(f, path.extname(f)),
       fileName: f,
@@ -254,6 +249,26 @@ ipcMain.handle('screenshots:openFolder', async (_e, gameId) => {
   fs.mkdirSync(dir, { recursive: true });
   await shell.openPath(dir);
   return dir;
+});
+
+ipcMain.handle('screenshots:delete', async (_e, gameId, fileNames) => {
+  try {
+    const dir = screenshotsDir(gameId);
+    const list = Array.isArray(fileNames) ? fileNames : [fileNames];
+    const deleted = [];
+    for (const name of list) {
+      const base = path.basename(String(name));
+      const full = path.join(dir, base);
+      if (full.startsWith(dir) && fs.existsSync(full)) {
+        fs.unlinkSync(full);
+        deleted.push(base);
+      }
+    }
+    return { ok: true, deleted };
+  } catch (err) {
+    console.error('[screenshots:delete]', err);
+    return { ok: false, error: err.message };
+  }
 });
 
 ipcMain.on('shell:openExternal', (_event, url) => {

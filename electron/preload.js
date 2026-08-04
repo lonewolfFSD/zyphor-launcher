@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('launcherAPI', {  // was 'api'
   screenshots: {
     getAll: (gameId) => ipcRenderer.invoke('screenshots:getAll', gameId),
     openFolder: (gameId) => ipcRenderer.invoke('screenshots:openFolder', gameId),
+    delete: (gameId, fileNames) => ipcRenderer.invoke('screenshots:delete', gameId, fileNames),
   },
   
   minimizeWindow:   () => ipcRenderer.send('window:minimize'),
