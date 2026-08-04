@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('launcherAPI', {  // was 'api'
   quitApp:          () => ipcRenderer.send('app:quit'),
   getAppVersion:    () => ipcRenderer.invoke('app:getVersion'),
   openExternal:     (url) => ipcRenderer.send('shell:openExternal', url),
+  getLauncherPath:  () => ipcRenderer.invoke('app:getLauncherPath'),
 
   // ── New: Storage ──────────────────────────────────────────────────
   getDiskItems:         () => ipcRenderer.invoke('storage:getDiskItems'),

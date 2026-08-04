@@ -205,6 +205,8 @@ function createWindow() {
   });
 }
 
+ipcMain.handle('app:getLauncherPath', () => path.dirname(app.getPath('exe')));
+
 ipcMain.on('shell:openExternal', (_event, url) => {
   shell.openExternal(url);
 });
