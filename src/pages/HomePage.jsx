@@ -16,6 +16,13 @@ import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
 import { doc, getDoc, collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import Logo from '../../build-resources/logo.png';
+import VIDEO_ROSSI from './videos/rossi.mp4';
+
+import ROSSI_FRAME from './videos/frames/rossi frame.png';
+import KALTSIT_FRAME from './videos/frames/kaltsit frame.png';
+import XUANWU_FRAME from './videos/frames/xuanwu frame.png';
+import FIREFLY_FRAME from './videos/frames/firefly frame.png';
+import LUCY_FRAME from './videos/frames/lucy frame.png';
 
 // ── Preset background videos ──────────────────────────────────────────────────
 // Drop your video files in the same ./videos/ folder and update the paths here.
@@ -23,7 +30,6 @@ import Logo from '../../build-resources/logo.png';
 import VIDEO_GAMING    from './videos/gaming.mp4';
 import VIDEO_DRAGON_TRAVELLER from './videos/Xuanwu - Dragon Traveler.mp4';
 import VIDEO_LUCY from './videos/Lucy Cyberpunk.mp4';
-import VIDEO_FOREST from './videos/Forest Cafe.mp4';
 import VIDEO_KALTSIT from './videos/Kaltsit.mp4';
 
 const PRESET_VIDEO_MAP = {
@@ -31,8 +37,16 @@ const PRESET_VIDEO_MAP = {
   'preset-gaming':    VIDEO_GAMING,
   'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
   'preset-lucy':      VIDEO_LUCY,
-  'preset-forest':    VIDEO_FOREST,
   'preset-kaltsit':   VIDEO_KALTSIT,
+  'preset-rossi': VIDEO_ROSSI,
+};
+
+const PRESET_STATIC_MAP = {
+  'preset-gaming':           new URL(FIREFLY_FRAME,           import.meta.url).href,
+  'preset-dragon-traveller': new URL(XUANWU_FRAME, import.meta.url).href,
+  'preset-lucy':             new URL(LUCY_FRAME,   import.meta.url).href,
+  'preset-kaltsit':          new URL(KALTSIT_FRAME,          import.meta.url).href,
+  'preset-rossi':            new URL(ROSSI_FRAME,            import.meta.url).href,
 };
 
 // ── Status check endpoints ─────────────────────────────────────────────────────
@@ -68,8 +82,9 @@ export default function HomePage({ profile }) {
   const hasGame = Boolean(profile?.hasGame || profile?.steamOwnsGame);
 
   const backgroundVideoType = settings?.backgroundVideoType ?? 'default';
+  const backgroundQuality = settings?.backgroundQuality ?? 'hd';
   const backgroundVideoSrc =
-    backgroundVideoType === 'none'
+    backgroundVideoType === 'none' || backgroundQuality === 'static'
       ? null
       : backgroundVideoType === 'custom'
       ? settings?.backgroundVideoPath
@@ -78,6 +93,14 @@ export default function HomePage({ profile }) {
       : backgroundVideoType?.startsWith('preset-')
       ? PRESET_VIDEO_MAP[backgroundVideoType] ?? DEFAULT_BACKGROUND_VIDEO
       : DEFAULT_BACKGROUND_VIDEO;
+  // SD: render video at lower resolution via CSS (scale down then up)
+  const bgVideoStyle = backgroundQuality === 'sd'
+    ? { filter: 'blur(0px)', imageRendering: 'auto', transform: 'scale(1.05)', opacity: 1 }
+    : {};
+  // Static fallback poster (first frame shown as bg image when quality=static)
+  const bgStaticPoster = backgroundQuality === 'static'
+  ? (PRESET_STATIC_MAP[backgroundVideoType] ?? null)
+  : null;
 
   const [launchState, setLaunchState] = useState('idle'); // 'idle' | 'launching' | 'running'
   const [showLaunchModal, setShowLaunchModal] = useState(false);
@@ -237,7 +260,7 @@ export default function HomePage({ profile }) {
 
   return (
     <div className="relative flex h-full gap-4 font-['Manrope']" style={{ color: 'inherit' }}>
-      <BackgroundVideo key={backgroundVideoSrc} src={backgroundVideoSrc} active={motionOn} style={{ color: 'inherit', width: '100vw', height: '100%' }} />
+      <BackgroundVideo key={backgroundVideoSrc + backgroundQuality} src={backgroundVideoSrc} active={motionOn} quality={backgroundQuality} videoStyle={bgVideoStyle} staticPoster={bgStaticPoster} />
       <AnimatedGrid accent={accent} theme={theme} active={motionOn} />
 
       {/* ── Update modal ── */}
@@ -1011,61 +1034,71 @@ function BannerVideo({ src, poster, active, fadeMask }) {
  * and resumes when it becomes visible again — saves GPU/CPU while the user
  * is on a different tab or the launcher is in the background.
  */
-function BackgroundVideo({ src, active }) {
+function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticPoster = null }) {
   const ref = useRef(null);
 
-  // Pause / resume based on the `active` prop (animations setting)
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    if (active) el.play().catch((err) => console.warn('[BackgroundVideo] play() rejected:', err));
+    if (!el || quality === 'static') return;
+    if (active) el.play().catch(() => {});
     else el.pause();
-  }, [active]);
+  }, [active, quality]);
 
-  // Pause when tab is hidden, resume when visible (only if active)
   useEffect(() => {
-    if (!active) return;
+    if (!active || quality === 'static') return;
     const el = ref.current;
     if (!el) return;
-
     function handleVisibilityChange() {
-      if (document.hidden) {
-        el.pause();
-      } else {
-        el.play().catch(() => {});
-      }
+      if (document.hidden) el.pause();
+      else el.play().catch(() => {});
     }
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [active]);
+  }, [active, quality]);
 
-  if (!src) {
-    console.warn('[BackgroundVideo] no src set — BACKGROUND_VIDEO_SRC is null/empty');
-    return null;
+  if (quality === 'static') {
+    if (!staticPoster) return null;
+    return (
+      <div
+        className="pointer-events-none fixed inset-0 -z-20 h-full w-full"
+        style={{
+          backgroundImage: `url(${staticPoster})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
+    );
+  }
+
+  if (!src) return null;
+
+  if (quality === 'sd') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: -20, overflow: 'hidden', pointerEvents: 'none' }}>
+        <video
+          ref={ref}
+          src={src}
+          autoPlay muted loop playsInline
+          onError={(e) => console.error('[BackgroundVideo] failed to load:', src, e.target.error)}
+          style={{ width: '40%', height: '40%', objectFit: 'cover', transform: 'scale(2.6)', transformOrigin: 'top left', filter: 'blur(0.5px)' }}
+        />
+      </div>
+    );
   }
 
   return (
     <video
       ref={ref}
       src={src}
-      autoPlay
-      muted
-      loop
-      playsInline
+      autoPlay muted loop playsInline
       onError={(e) => console.error('[BackgroundVideo] failed to load:', src, e.target.error)}
       onLoadedData={() => console.log('[BackgroundVideo] loaded ok:', src)}
       className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover opacity-1"
+      style={videoStyle}
     />
   );
 }
 
-/**
- * Subtle animated background grid: a faint moving line pattern behind the
- * whole page, masked so it fades toward the edges instead of hard-cutting.
- * Respects the reduce-motion / animations settings — falls back to a static
- * grid when motion is off.
- */
 function AnimatedGrid({ accent, active }) {
   const size = 42;
   return (

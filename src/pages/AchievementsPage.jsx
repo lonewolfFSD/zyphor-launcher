@@ -8,15 +8,29 @@ import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
 import VIDEO_GAMING             from './videos/gaming.mp4';
 import VIDEO_DRAGON_TRAVELLER   from './videos/Xuanwu - Dragon Traveler.mp4';
 import VIDEO_LUCY               from './videos/Lucy Cyberpunk.mp4';
-import VIDEO_FOREST             from './videos/Forest Cafe.mp4';
 import VIDEO_KALTSIT            from './videos/Kaltsit.mp4';
+import VIDEO_ROSSI from './videos/rossi.mp4';
+
+import ROSSI_FRAME   from './videos/frames/rossi frame.png';
+import KALTSIT_FRAME from './videos/frames/kaltsit frame.png';
+import XUANWU_FRAME  from './videos/frames/xuanwu frame.png';
+import FIREFLY_FRAME from './videos/frames/firefly frame.png';
+import LUCY_FRAME    from './videos/frames/lucy frame.png';
 
 const PRESET_VIDEO_MAP = {
   'preset-gaming':           VIDEO_GAMING,
   'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
   'preset-lucy':             VIDEO_LUCY,
-  'preset-forest':           VIDEO_FOREST,
   'preset-kaltsit':          VIDEO_KALTSIT,
+  'preset-rossi':            VIDEO_ROSSI,
+};
+
+const PRESET_STATIC_MAP = {
+  'preset-gaming':           new URL(FIREFLY_FRAME,  import.meta.url).href,
+  'preset-dragon-traveller': new URL(XUANWU_FRAME,   import.meta.url).href,
+  'preset-lucy':             new URL(LUCY_FRAME,     import.meta.url).href,
+  'preset-kaltsit':          new URL(KALTSIT_FRAME,  import.meta.url).href,
+  'preset-rossi':            new URL(ROSSI_FRAME,    import.meta.url).href,
 };
 
 // ─── Game registry ────────────────────────────────────────────────────────────
@@ -269,6 +283,74 @@ function GameSelector({ games, selected, onSelect, accent, theme }) {
   );
 }
 
+// ─── Background video ─────────────────────────────────────────────────────────
+// Matches HomePage/ScreenshotsPage exactly — HD, SD (scale trick), and static modes.
+// Pauses automatically via the Page Visibility API when the window is hidden.
+function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticPoster = null }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || quality === 'static') return;
+    if (active) el.play().catch(() => {});
+    else el.pause();
+  }, [active, quality]);
+
+  useEffect(() => {
+    if (!active || quality === 'static') return;
+    const el = ref.current;
+    if (!el) return;
+    function handleVisibilityChange() {
+      if (document.hidden) el.pause();
+      else el.play().catch(() => {});
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [active, quality]);
+
+  if (quality === 'static') {
+    if (!staticPoster) return null;
+    return (
+      <div
+        className="pointer-events-none fixed inset-0 -z-20 h-full w-full"
+        style={{
+          backgroundImage: `url(${staticPoster})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
+    );
+  }
+
+  if (!src) return null;
+
+  if (quality === 'sd') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: -20, overflow: 'hidden', pointerEvents: 'none' }}>
+        <video
+          ref={ref}
+          src={src}
+          autoPlay muted loop playsInline
+          onError={(e) => console.error('[BackgroundVideo] failed to load:', src, e.target.error)}
+          style={{ width: '40%', height: '40%', objectFit: 'cover', transform: 'scale(2.6)', transformOrigin: 'top left', filter: 'blur(0.5px)' }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <video
+      ref={ref}
+      src={src}
+      autoPlay muted loop playsInline
+      onError={(e) => console.error('[BackgroundVideo] failed to load:', src, e.target.error)}
+      onLoadedData={() => console.log('[BackgroundVideo] loaded ok:', src)}
+      className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover opacity-[0.8]"
+      style={videoStyle}
+    />
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function AchievementsPage({ profile }) {
   const { settings } = useSettings();
@@ -278,21 +360,25 @@ export default function AchievementsPage({ profile }) {
 
   // Background video
   const backgroundVideoType = settings?.backgroundVideoType ?? 'default';
+  const backgroundQuality   = settings?.backgroundQuality   ?? 'hd';
   const backgroundVideoSrc =
-    backgroundVideoType === 'none'    ? null
-    : backgroundVideoType === 'custom'
-      ? settings?.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : null
-      : backgroundVideoType?.startsWith('preset-')
-        ? PRESET_VIDEO_MAP[backgroundVideoType] ?? DEFAULT_BACKGROUND_VIDEO
-        : DEFAULT_BACKGROUND_VIDEO;
+    backgroundVideoType === 'none' || backgroundQuality === 'static'
+      ? null
+      : backgroundVideoType === 'custom'
+        ? settings?.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : null
+        : backgroundVideoType?.startsWith('preset-')
+          ? PRESET_VIDEO_MAP[backgroundVideoType] ?? DEFAULT_BACKGROUND_VIDEO
+          : DEFAULT_BACKGROUND_VIDEO;
 
-  const videoRef = useRef(null);
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    if (motionOn) el.play().catch(() => {});
-    else el.pause();
-  }, [motionOn, backgroundVideoSrc]);
+  // SD: render video at lower resolution via CSS scale trick
+  const bgVideoStyle = backgroundQuality === 'sd'
+    ? { filter: 'blur(0px)', imageRendering: 'auto', transform: 'scale(1.05)', opacity: 1 }
+    : {};
+
+  // Static fallback: first-frame PNG shown as a background image
+  const bgStaticPoster = backgroundQuality === 'static'
+    ? (PRESET_STATIC_MAP[backgroundVideoType] ?? null)
+    : null;
 
   // Selected game
   const [selectedGameId, setSelectedGameId] = useState(GAMES[0].id);
@@ -357,14 +443,14 @@ export default function AchievementsPage({ profile }) {
     <div className="relative h-full overflow-y-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
 
       {/* Background video */}
-      {backgroundVideoSrc && (
-        <video
-          ref={videoRef}
-          src={backgroundVideoSrc}
-          autoPlay muted loop playsInline
-          className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover opacity-[0.8]"
-        />
-      )}
+      <BackgroundVideo
+        key={backgroundVideoSrc + backgroundQuality}
+        src={backgroundVideoSrc}
+        active={motionOn}
+        quality={backgroundQuality}
+        videoStyle={bgVideoStyle}
+        staticPoster={bgStaticPoster}
+      />
       <div
         className="pointer-events-none fixed inset-0 -z-10"
         style={{ background: `linear-gradient(to bottom, ${theme.bg}cc 0%, ${theme.bg}88 40%, ${theme.bg}cc 100%)` }}

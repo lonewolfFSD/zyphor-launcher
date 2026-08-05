@@ -5,8 +5,8 @@ import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
 import VIDEO_GAMING from './videos/Gaming.mp4';
 import VIDEO_DRAGON_TRAVELLER from './videos/Xuanwu - Dragon Traveler.mp4';
 import VIDEO_LUCY from './videos/Lucy Cyberpunk.mp4';
-import VIDEO_FOREST from './videos/Forest Cafe.mp4';
 import VIDEO_KALTSIT from './videos/Kaltsit.mp4';
+import VIDEO_ROSSI from './videos/rossi.mp4'
 /**
  * Add these once to your index.html <head> (or import via CSS @import) so the
  * type treatment below renders correctly:
@@ -29,19 +29,28 @@ const SECTIONS = [
 ];
 
 const BG_VIDEO_PRESETS = [
-  { id: 'preset-gaming',    label: 'Gaming' },
-  { id: 'preset-dragon-traveller', label: 'Dragon Traveller' },
-  { id: 'preset-lucy',      label: 'Lucy Cyberpunk' },
-  { id: 'preset-forest',    label: 'Forest Cafe' },
-  { id: 'preset-kaltsit',   label: 'Kaltsit' },
+  { id: 'preset-gaming',           label: 'Firefly Gaming - Honkai',                      tags: ['gaming', 'action'],              staticSrc: new URL('./images/static/gaming.jpg',            import.meta.url).href },
+  { id: 'preset-dragon-traveller', label: 'Xuanwu - Dragon Traveller',            tags: ['anime', 'fantasy', 'calm'],      staticSrc: new URL('./images/static/dragon-traveller.jpg',  import.meta.url).href },
+  { id: 'preset-lucy',             label: 'Lucy - Cyberpunk Edgerunners',              tags: ['anime', 'cyberpunk', 'action'],  staticSrc: new URL('./images/static/lucy-cyberpunk.jpg',    import.meta.url).href },
+  { id: 'preset-kaltsit',          label: 'Kaltsit - Arknights: Endfield',                     tags: ['anime', 'calm', 'arknights'],    staticSrc: new URL('./images/static/kaltsit.jpg',           import.meta.url).href },
+  { id: 'preset-rossi',            label: 'Rossi - Arknights: Endfield', tags: ['anime', 'calm', 'arknights'],    staticSrc: new URL('./images/static/rossi.jpg',             import.meta.url).href },
 ];
+
+const VIDEO_QUALITY_OPTIONS = [
+  { id: 'hd',     label: 'HD',     hint: 'Full resolution \u00b7 best quality' },
+  { id: 'sd',     label: 'SD',     hint: 'Lower resolution \u00b7 saves performance' },
+  { id: 'static', label: 'Static', hint: 'Still poster frame \u00b7 lowest GPU usage' },
+];
+
+const ALL_VIDEO_TAGS = ['all', ...Array.from(new Set(BG_VIDEO_PRESETS.flatMap(p => p.tags)))];
+
 
 const PRESET_VIDEO_MAP = {
   'preset-gaming': VIDEO_GAMING,
   'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
   'preset-lucy': VIDEO_LUCY,
-  'preset-forest': VIDEO_FOREST,
   'preset-kaltsit': VIDEO_KALTSIT,
+  'preset-rossi': VIDEO_ROSSI
 };
 
 // Shows the launcher's own installation folder -- read-only, fetched from main process.
@@ -121,6 +130,7 @@ export default function SettingsPage() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateInfo, setUpdateInfo]   = useState(null);
   const [scanState, setScanState] = useState({}); // { [key]: 'idle'|'scanning'|'done'|'error' }
+  
 
   useEffect(() => {
     if (!toast) return;
@@ -148,6 +158,9 @@ export default function SettingsPage() {
   const sharedMB = items.reduce((s, i) => s + i.sizeMB, 0) - instancesMB;
   const selectedCount = items.filter((i) => i.selected).length;
   const hasDiskTotals = diskTotalMB != null && diskFreeMB != null;
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [videoSearch, setVideoSearch] = useState('');
+  const [videoTag, setVideoTag] = useState('all');
 
   function clearCache() {
     setCacheSize(0);
@@ -425,10 +438,46 @@ async function handleCheckUpdate() {
             <SettingRow label="Reduce motion" hint="Minimizes transitions for motion sensitivity.">
               <Toggle checked={settings.reduceMotion} onChange={(checked) => update({ reduceMotion: checked })} />
             </SettingRow>
+
+            <SettingRow label="Background quality" hint="SD compresses the video to a lower resolution. Static shows only a still frame.">
+              <div className="flex gap-1.5">
+                {VIDEO_QUALITY_OPTIONS.map((q) => {
+                  const isActive = (settings.backgroundQuality ?? 'hd') === q.id;
+                  return (
+                    <button
+                      key={q.id}
+                      type="button"
+                      title={q.hint}
+                      onClick={() => { update({ backgroundQuality: q.id }); setToast(`Video quality: ${q.label}`); }}
+                      style={{
+                        padding: '4px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600,
+                        cursor: 'pointer', border: 'none', transition: 'all 150ms',
+                        background: isActive ? accent.hex : 'rgba(255,255,255,0.07)',
+                        color: isActive ? accent.on : 'rgba(255,255,255,0.5)',
+                      }}
+                    >
+                      {q.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </SettingRow>
             {/* ── Background video carousel ── */}
             <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-[13px] font-medium text-bone/90">Background video</p>
+                <div className="mb-3 mt-4 flex items-center justify-between">
+                  <p className="text-[14px] font-medium text-bone/90">Background video</p>
+                    <div className='flex gap-3'>
+                                          <button
+                      type="button"
+                      onClick={() => setShowVideoModal(true)}
+                      style={{
+                        fontSize: '11px', fontWeight: 500, color: accent.hex,
+                        background: `${accent.hex}14`, border: `1px solid ${accent.hex}33`,
+                        borderRadius: '7px', padding: '4px 14px', cursor: 'pointer',
+                      }}
+                    >
+                      Browse all
+                    </button>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
@@ -445,17 +494,21 @@ async function handleCheckUpdate() {
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4.5 2L8.5 6l-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
                   </div>
+                    </div>
                 </div>
 
                 {/* Scrollable strip */}
                 <div
                   ref={carouselRef}
-                  style={{ display: 'flex', gap: '10px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: '4px' }}
+                  style={{ display: 'flex', gap: '6px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: '4px' }}
                 >
-                  {[{ id: 'default', label: 'Default', src: DEFAULT_BACKGROUND_VIDEO },
-                    ...BG_VIDEO_PRESETS.map(p => ({ ...p, src: PRESET_VIDEO_MAP[p.id] })),
-                    { id: 'none', label: 'None', src: null },
-                  ].map((opt) => {
+                {[
+                  { id: 'default', label: 'Default', src: DEFAULT_BACKGROUND_VIDEO },
+                  ...BG_VIDEO_PRESETS
+                    .slice(0, 3)
+                    .map(p => ({ ...p, src: PRESET_VIDEO_MAP[p.id] })),
+                  { id: 'none', label: 'None', src: null },
+                ].map((opt) => {
                     const isActive = (settings.backgroundVideoType ?? 'default') === opt.id;
                     return (
                       <button
@@ -559,6 +612,141 @@ async function handleCheckUpdate() {
                   <input ref={bgVideoInputRef} type="file" accept="video/mp4,video/webm" onChange={handleBackgroundVideoFile} className="hidden" />
                 </div>
               </div>
+
+              {/* ── Video picker modal ── */}
+              {showVideoModal && (() => {
+                const allOpts = [
+                  { id: 'default', label: 'Default', src: DEFAULT_BACKGROUND_VIDEO, tags: [] },
+                  ...BG_VIDEO_PRESETS.map(p => ({ ...p, src: PRESET_VIDEO_MAP[p.id] })),
+                  { id: 'none', label: 'None', src: null, tags: [] },
+                ];
+                const filtered = allOpts.filter(opt => {
+                  const matchSearch = !videoSearch || opt.label.toLowerCase().includes(videoSearch.toLowerCase());
+                  const matchTag = videoTag === 'all' || (opt.tags ?? []).includes(videoTag);
+                  return matchSearch && matchTag;
+                });
+                return (
+                  <div
+                    onClick={() => { setShowVideoModal(false); setVideoSearch(''); setVideoTag('all'); }}
+                    style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(14px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <div
+                      onClick={e => e.stopPropagation()}
+                      style={{ width: '860px', height: '72vh', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '20px', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(0,0,0,0.6)' }}
+                    >
+                      {/* Header */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
+                        <p style={{ fontSize: '15px', fontWeight: 600, color: theme.text, margin: 0 }}>Background videos</p>
+                        <button type="button" onClick={() => { setShowVideoModal(false); setVideoSearch(''); setVideoTag('all'); }} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '8px', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}>
+                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                        </button>
+                      </div>
+
+                      {/* Search + tag filters */}
+                      <div style={{ padding: '12px 20px', borderBottom: `1px solid ${theme.border}`, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ position: 'relative' }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', opacity: 0.35, pointerEvents: 'none' }}>
+                            <circle cx="11" cy="11" r="8" stroke="white" strokeWidth="2"/><path d="M21 21l-4.35-4.35" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
+                          <input
+                            type="text"
+                            placeholder="Search videos..."
+                            value={videoSearch}
+                            onChange={e => setVideoSearch(e.target.value)}
+                            style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: `1px solid ${theme.border}`, borderRadius: '9px', padding: '7px 12px 7px 32px', fontSize: '12px', color: theme.text, outline: 'none', boxSizing: 'border-box' }}
+                          />
+                          {videoSearch && (
+                            <button type="button" onClick={() => setVideoSearch('')} style={{ position: 'absolute', right: '9px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.35)', padding: 0, display: 'flex' }}>
+                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          {ALL_VIDEO_TAGS.map(tag => {
+                            const isActiveTag = videoTag === tag;
+                            return (
+                              <button key={tag} type="button" onClick={() => setVideoTag(tag)} style={{ padding: '3px 11px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, cursor: 'pointer', border: 'none', transition: 'all 130ms', background: isActiveTag ? accent.hex : 'rgba(255,255,255,0.07)', color: isActiveTag ? accent.on : 'rgba(255,255,255,0.5)', textTransform: 'capitalize' }}>
+                                {tag}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Grid */}
+                      <div style={{ overflowY: 'auto', padding: '14px 20px 20px' }}>
+                        {filtered.length === 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '160px', gap: '8px', opacity: 0.4 }}>
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="white" strokeWidth="1.5"/><path d="M21 21l-4.35-4.35" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                            <p style={{ color: theme.text, fontSize: '13px', margin: 0 }}>No videos match</p>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                            {filtered.map((opt) => {
+                              const isActive = (settings.backgroundVideoType ?? 'default') === opt.id;
+                              return (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (opt.id === 'none') { disableBackgroundVideo(); }
+                                    else if (opt.id === 'default') { setDefaultBackgroundVideo(); }
+                                    else { setCustomVideoUrl(null); update({ backgroundVideoType: opt.id, backgroundVideoPath: null, backgroundVideoName: opt.label }); setToast(`Background: ${opt.label}`); }
+                                    setShowVideoModal(false); setVideoSearch(''); setVideoTag('all');
+                                  }}
+                                  style={{ borderRadius: '10px', border: isActive ? `2px solid ${accent.hex}` : '2px solid rgba(255,255,255,0.08)', overflow: 'hidden', cursor: 'pointer', padding: 0, background: 'transparent', position: 'relative', transition: 'border-color 150ms', boxShadow: isActive ? `0 0 0 1px ${accent.hex}33` : 'none' }}
+                                >
+                                  <div style={{ width: '100%', height: '110px', position: 'relative', background: '#0a0a0a' }}>
+                                    {opt.src ? (
+                                      <video src={opt.src} muted playsInline preload="none" onMouseEnter={e => e.currentTarget.play()} onMouseLeave={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.85 }} />
+                                    ) : (
+                                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#111,#0a0a0a)' }}>
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.25 }}><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="1.5"/><line x1="4" y1="4" x2="20" y2="20" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                                      </div>
+                                    )}
+                                    {isActive && <div style={{ position: 'absolute', inset: 0, background: `${accent.hex}22` }} />}
+                                    {isActive && (
+                                      <div style={{ position: 'absolute', top: '5px', right: '5px', width: '16px', height: '16px', borderRadius: '50%', background: accent.hex, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2 3-3" stroke={accent.on} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div style={{ padding: '6px 8px 7px', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
+                                    <p style={{ fontSize: '11px', fontWeight: 500, color: isActive ? accent.hex : 'rgba(255,255,255,0.65)', margin: 0, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opt.label}</p>
+                                    {(opt.tags ?? []).length > 0 && (
+                                      <div style={{ display: 'flex', gap: '4px', marginTop: '3px', flexWrap: 'wrap' }}>
+                                        {opt.tags.slice(0, 3).map(t => (
+                                          <span key={t} style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.35)', textTransform: 'capitalize' }}>{t}</span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                            {videoTag === 'all' && !videoSearch && (
+                              <button type="button" onClick={() => { chooseCustomBackgroundVideo(); setShowVideoModal(false); setVideoSearch(''); setVideoTag('all'); }} style={{ borderRadius: '10px', border: settings.backgroundVideoType === 'custom' ? `2px solid ${accent.hex}` : '2px dashed rgba(255,255,255,0.15)', overflow: 'hidden', cursor: 'pointer', padding: 0, background: 'transparent', position: 'relative' }}>
+                                <div style={{ width: '100%', height: '110px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', background: settings.backgroundVideoType === 'custom' ? `${accent.hex}15` : 'rgba(255,255,255,0.02)', position: 'relative' }}>
+                                  {settings.backgroundVideoType === 'custom' && (customVideoUrl || settings.backgroundVideoPath) ? (
+                                    <video src={settings.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : customVideoUrl} muted playsInline preload="none" onMouseEnter={e => e.currentTarget.play()} onMouseLeave={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.85, position: 'absolute', inset: 0 }} />
+                                  ) : (
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.4 }}><path d="M12 5v14M5 12h14" stroke="white" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                                  )}
+                                </div>
+                                <div style={{ padding: '6px 8px 7px', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
+                                  <p style={{ fontSize: '11px', fontWeight: 500, color: settings.backgroundVideoType === 'custom' ? accent.hex : 'rgba(255,255,255,0.4)', margin: 0, textAlign: 'left' }}>
+                                    {settings.backgroundVideoType === 'custom' && settings.backgroundVideoName ? settings.backgroundVideoName : 'Custom...'}
+                                  </p>
+                                </div>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>{/* end LEFT col */}
 
             {/* RIGHT — preview panel, fixed width, aspect-ratio locked */}
@@ -1333,6 +1521,8 @@ function ScanButton({ state, onScan, scanLabel, doneLabel, accent, dangerOnError
     </button>
   );
 }
+
+
 
 /**
  * Custom dropdown replacing the native <select> so it can actually follow

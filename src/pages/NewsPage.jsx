@@ -6,17 +6,31 @@ import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
 import VIDEO_GAMING    from './videos/gaming.mp4';
 import VIDEO_DRAGON_TRAVELLER from './videos/Xuanwu - Dragon Traveler.mp4';
 import VIDEO_LUCY from './videos/Lucy Cyberpunk.mp4';
-import VIDEO_FOREST from './videos/Forest Cafe.mp4';
 import VIDEO_KALTSIT from './videos/Kaltsit.mp4';
 import { FaCross, FaIdBadge, FaRegNewspaper, FaSearch } from 'react-icons/fa';
 import { AlertCircle, AlertTriangle, Search, ListFilter } from 'lucide-react';
+import VIDEO_ROSSI from './videos/rossi.mp4';
+
+import ROSSI_FRAME    from './videos/frames/rossi frame.png';
+import KALTSIT_FRAME  from './videos/frames/kaltsit frame.png';
+import XUANWU_FRAME   from './videos/frames/xuanwu frame.png';
+import FIREFLY_FRAME  from './videos/frames/firefly frame.png';
+import LUCY_FRAME     from './videos/frames/lucy frame.png';
 
 const PRESET_VIDEO_MAP = {
     'preset-gaming':    VIDEO_GAMING,
     'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
     'preset-lucy':      VIDEO_LUCY,
-    'preset-forest':    VIDEO_FOREST,
     'preset-kaltsit':   VIDEO_KALTSIT,
+    'preset-rossi': VIDEO_ROSSI
+};
+
+const PRESET_STATIC_MAP = {
+  'preset-gaming':           FIREFLY_FRAME,
+  'preset-dragon-traveller': XUANWU_FRAME,
+  'preset-lucy':             LUCY_FRAME,
+  'preset-kaltsit':          KALTSIT_FRAME,
+  'preset-rossi':            ROSSI_FRAME,
 };
 
 export default function NewsPage() {
@@ -27,8 +41,10 @@ export default function NewsPage() {
   const motionOn = settings ? settings.animations && !settings.reduceMotion : true;
 
   const backgroundVideoType = settings?.backgroundVideoType ?? 'default';
+  const backgroundQuality   = settings?.backgroundQuality   ?? 'hd';
+
   const backgroundVideoSrc =
-    backgroundVideoType === 'none'
+    backgroundVideoType === 'none' || backgroundQuality === 'static'
       ? null
       : backgroundVideoType === 'custom'
       ? settings?.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : null
@@ -36,13 +52,17 @@ export default function NewsPage() {
       ? PRESET_VIDEO_MAP[backgroundVideoType] ?? DEFAULT_BACKGROUND_VIDEO
       : DEFAULT_BACKGROUND_VIDEO;
 
+  const bgStaticPoster = backgroundQuality === 'static'
+    ? (PRESET_STATIC_MAP[backgroundVideoType] ?? null)
+    : null;
+
   const videoRef = useRef(null);
   useEffect(() => {
     const el = videoRef.current;
-    if (!el) return;
+    if (!el || backgroundQuality === 'static') return;
     if (motionOn) el.play().catch(() => {});
     else el.pause();
-  }, [motionOn]);
+  }, [motionOn, backgroundQuality]);
 
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -72,18 +92,29 @@ export default function NewsPage() {
 
   return (
     <div className="relative h-full overflow-y-auto font-['Inter']">
-      {/* Background video */}
-      {backgroundVideoSrc && (
+      {/* Background video / static frame */}
+      {backgroundQuality === 'static' && bgStaticPoster ? (
+        <div
+          className="pointer-events-none fixed inset-0 -z-20 h-full w-full"
+          style={{ backgroundImage: `url(${bgStaticPoster})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+        />
+      ) : backgroundQuality === 'sd' && backgroundVideoSrc ? (
+        <div style={{ position: 'fixed', inset: 0, zIndex: -20, overflow: 'hidden', pointerEvents: 'none' }}>
+          <video
+            ref={videoRef}
+            src={backgroundVideoSrc}
+            autoPlay muted loop playsInline
+            style={{ width: '40%', height: '40%', objectFit: 'cover', transform: 'scale(2.6)', transformOrigin: 'top left', filter: 'blur(0.5px)' }}
+          />
+        </div>
+      ) : backgroundVideoSrc ? (
         <video
           ref={videoRef}
           src={backgroundVideoSrc}
-          autoPlay
-          muted
-          loop
-          playsInline
+          autoPlay muted loop playsInline
           className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover opacity-[0.8]"
         />
-      )}
+      ) : null}
 
       <div className="px-9 py-7">
       <h2 className="font-['Manrope'] text-3xl font-bold tracking-tight text-bone">Updates & Patch Notes</h2>
