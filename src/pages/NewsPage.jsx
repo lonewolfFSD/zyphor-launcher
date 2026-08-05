@@ -18,7 +18,7 @@ import FIREFLY_FRAME  from './videos/frames/firefly frame.png';
 import LUCY_FRAME     from './videos/frames/lucy frame.png';
 
 const GITHUB_REPO = 'lonewolfFSD/zyphor-launcher';
-const RELEASES_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases`;
+const RELEASES_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100`;
 
 const PRESET_VIDEO_MAP = {
   'preset-gaming':           VIDEO_GAMING,
@@ -117,22 +117,32 @@ export default function NewsPage() {
   const [search,    setSearch]    = useState('');
   const [tagFilter, setTagFilter] = useState('all');
 
-  const fetchReleases = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(RELEASES_URL, {
-        headers: { Accept: 'application/vnd.github+json' },
-      });
-      if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
-      const data = await res.json();
-      setReleases(data.map(mapRelease));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+const fetchReleases = useCallback(async () => {
+  setLoading(true);
+  setError(null);
+  try {
+    const [listRes, latestRes] = await Promise.all([
+      fetch(`${RELEASES_URL}?per_page=100`, { headers: { Accept: 'application/vnd.github+json' } }),
+      fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } }),
+    ]);
+
+    if (!listRes.ok) throw new Error(`GitHub API returned ${listRes.status}`);
+    
+    const list = await listRes.json();
+    const latest = latestRes.ok ? await latestRes.json() : null;
+
+    // Merge: put latest first, remove duplicate if already in list
+    const merged = latest
+      ? [latest, ...list.filter(r => r.tag_name !== latest.tag_name)]
+      : list;
+
+    setReleases(merged.map(mapRelease));
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   useEffect(() => { fetchReleases(); }, [fetchReleases]);
 
@@ -199,17 +209,16 @@ export default function NewsPage() {
             type="button"
             onClick={fetchReleases}
             title="Refresh"
-            className="flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium text-ash/60 transition-colors hover:text-bone"
+            className="flex items-center gap-1.5 backdrop-blur-glass rounded-xl border px-3 py-2 text-xs font-medium text-ash/60 transition-colors hover:text-bone"
             style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66` }}
           >
-            <RefreshCw size={13} />
-            Refresh
+            <RefreshCw size={16} />
           </button>
         </div>
 
         {/* Caution banner */}
         <div
-          className="mt-4 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-xs leading-relaxed text-ash/80"
+          className="mt-4 flex backdrop-blur-sm items-start gap-2.5 rounded-xl border px-4 py-3 text-xs leading-relaxed text-ash/80"
           style={{ borderColor: `${accent.hex}40`, backgroundColor: `${theme.surface}66` }}
         >
           <AlertTriangle size={15} className="mt-0.5 shrink-0" style={{ color: accent.hex }} />
@@ -218,7 +227,7 @@ export default function NewsPage() {
 
         {/* Search + tag filter bar */}
         <div
-          className="mt-5 flex items-center gap-0 overflow-hidden rounded-2xl border"
+          className="mt-5 flex backdrop-blur-sm items-center gap-0 overflow-hidden rounded-2xl border"
           style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99` }}
         >
           <div className="flex w-[350px] shrink-0 items-center gap-2 border-r px-3 py-3" style={{ borderColor: theme.border }}>
@@ -254,7 +263,7 @@ export default function NewsPage() {
         </div>
 
         {/* Cards grid */}
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <AnimatePresence mode="wait">
             {loading ? (
               <motion.div key="skeletons" className="contents" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
@@ -319,9 +328,10 @@ export default function NewsPage() {
                     key={entry.version}
                     entry={entry}
                     index={i}
+                    isLatest={i === 0}
                     theme={theme}
                     accent={accent}
-                    onOpen={() => setSelectedEntry(entry)}
+                    onOpen={() => setSelectedEntry({ ...entry, isLatest: i === 0 })}
                   />
                 ))}
               </motion.div>
@@ -347,14 +357,14 @@ export default function NewsPage() {
 
 // ── Release card ───────────────────────────────────────────────────────────────
 
-function ReleaseCard({ entry, index, theme, accent, onOpen }) {
+function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
   return (
     <motion.article
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
-      className="flex flex-col overflow-hidden rounded-xl border transition-colors"
-      style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66` }}
+      className={`flex flex-col overflow-hidden rounded-3xl backdrop-blur-lg border transition-colors ${ isLatest ? 'border border-white/80' : 'border-white/10'}`}
+      style={{ backgroundColor: `${theme.surface}66` }}
     >
       {entry.image && (
         <div className="h-48 w-full overflow-hidden bg-white/5">
@@ -364,16 +374,24 @@ function ReleaseCard({ entry, index, theme, accent, onOpen }) {
 
       <div className="flex flex-1 flex-col px-5 py-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="font-['Manrope'] text-lg font-bold tracking-tight text-bone">{entry.title}</h3>
+          <h3 className="font-['Manrope'] text-lg font-bold tracking-tight text-bone">v{entry.title}</h3>
           <time className="text-[11px] font-medium text-ash/60">{entry.date}</time>
         </div>
 
         {entry.tags?.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-1 flex flex-row gap-2">
+            {isLatest && (
+              <span
+                className="rounded-lg border border-transparent px-3 py-1 text-[9px] font-bold uppercase tracking-wide"
+                style={{ backgroundColor: accent.hex, color: accent.on }}
+              >
+                Latest
+              </span>
+            )}
             {entry.tags.map((tag) => (
               <span
                 key={tag}
-                className="rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+                className="rounded-lg border px-3 py-1 text-[9px] font-medium uppercase tracking-wide"
                 style={{ borderColor: `${accent.hex}4d`, color: accent.hex }}
               >
                 {tag}
@@ -382,25 +400,92 @@ function ReleaseCard({ entry, index, theme, accent, onOpen }) {
           </div>
         )}
 
-        {/* Preview notes — capped at 3 */}
-        <ul className="mt-3 flex flex-col gap-1.5">
-          {entry.notes.slice(0, 3).map((note, i) => (
-            <li key={i} className="flex gap-2 text-sm text-bone/80">
-              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ backgroundColor: `${accent.hex}80` }} />
-              <span className="line-clamp-2">{note}</span>
-            </li>
-          ))}
-          {entry.notes.length > 3 && (
-            <li className="text-[11px] text-ash/40">+{entry.notes.length - 3} more changes…</li>
-          )}
-        </ul>
+        {/* Preview notes */}
+        {/* Release Information */}
+<div
+  className="mt-4 overflow-hidden rounded-2xl border"
+  style={{ borderColor: theme.border }}
+>
+  <div
+    className="flex items-center justify-between border-b px-5 py-3"
+    style={{ borderColor: theme.border, background: `${theme.surface}99` }}
+  >
+    <h3 className="font-['Manrope'] text-xs font-semibold text-bone">
+      Release Info
+    </h3>
+
+    <span
+      className="rounded-md px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide"
+      style={{
+        background:
+          entry.title.toLowerCase().includes('alpha')
+            ? '#ef444420'
+            : entry.title.toLowerCase().includes('beta')
+            ? '#facc1520'
+            : '#22c55e20',
+        color:
+          entry.title.toLowerCase().includes('alpha')
+            ? '#ef4444'
+            : entry.title.toLowerCase().includes('beta')
+            ? '#facc15'
+            : '#22c55e',
+      }}
+    >
+      {entry.title.toLowerCase().includes('alpha')
+        ? 'Alpha'
+        : entry.title.toLowerCase().includes('beta')
+        ? 'Beta'
+        : 'Stable'}
+    </span>
+  </div>
+
+  <div className="space-y-4 px-5 py-5">
+    <div className="flex flex-col font-semibold text-[13px]">
+      <span className="text-ash/50">Recommendation</span>
+
+      <span className="text-bone/80 font-medium text-[13px] mb-2">
+        {isLatest ? (
+          'This is the latest release and is recommended for all users.'
+        ) : entry.tags.includes('major') ? (
+          'This is a stable major release. While fully supported, we always recommend using the latest available version.'
+        ) : entry.title.toLowerCase().includes('alpha') ? (
+          'Experimental build. Not recommended for everyday use.'
+        ) : entry.title.toLowerCase().includes('beta') ? (
+          'Preview build. Use with caution as bugs or incomplete features may still exist.'
+        ) : (
+          'Stable release. Safe to use, though updating to the latest version is always recommended.'
+        )}
+      </span>
+
+      <span className="text-ash/50 font-semibold text-[13px]">Download</span>
+
+      <span className="text-bone/80 font-medium text-[13px]">
+        This version can be downloaded from the official GitHub Releases page.
+      </span>
+    </div>
+
+    <a
+      href={entry.url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold transition-all hover:scale-[1.02]"
+      style={{
+        borderColor: `${accent.hex}55`,
+        color: accent.hex,
+        backgroundColor: `${accent.hex}10`,
+      }}
+    >
+      Download this Version
+    </a>
+  </div>
+</div>
 
         {/* Spacer + button pinned to bottom */}
         <div className="mt-auto pt-4">
           <button
             type="button"
             onClick={onOpen}
-            className="w-full rounded-lg border py-2 text-xs font-semibold tracking-wide transition-colors hover:text-bone"
+            className="w-full uppercase rounded-2xl border py-3 text-[11px] font-semibold tracking-wide transition-colors hover:text-bone"
             style={{ borderColor: `${accent.hex}55`, color: accent.hex, backgroundColor: `${accent.hex}10` }}
           >
             View Full Notes
@@ -440,9 +525,10 @@ function ReleaseModal({ entry, theme, accent, onClose }) {
           style={{ borderColor: theme.border }}
         >
           <div>
-            <h2 className="font-['Manrope'] text-xl font-bold tracking-tight text-bone">{entry.title}</h2>
+            <h2 className="font-['Manrope'] text-2xl font-bold tracking-tight text-bone">v{entry.title}</h2>
             <div className="mt-1 flex items-center gap-3">
               <time className="text-[11px] text-ash/50">{entry.date}</time>
+              
               {entry.tags.map((tag) => (
                 <span
                   key={tag}
@@ -477,7 +563,7 @@ function ReleaseModal({ entry, theme, accent, onClose }) {
         </div>
 
         {/* Markdown body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-20 text-sm py-16 font-mono">
           {entry.body ? (
             <div className="prose prose-invert prose-sm max-w-none
               prose-headings:font-['Manrope'] prose-headings:tracking-tight prose-headings:text-bone
@@ -497,9 +583,9 @@ function ReleaseModal({ entry, theme, accent, onClose }) {
                       {children}
                     </a>
                   ),
-                  h1: ({ children }) => <h1 className="mt-6 first:mt-0">{children}</h1>,
+                  h1: ({ children }) => <h1 className="mt-6 mt-10 mb-4 text-2xl font-bold first:mt-0">{children}</h1>,
                   h2: ({ children }) => (
-                    <h2 className="mt-5 border-b pb-1.5 first:mt-0" style={{ borderColor: theme.border }}>{children}</h2>
+                    <h2 className="mt-10 mb-4 text-xl font-bold border-b pb-1.5 first:mt-0" style={{ borderColor: theme.border }}>{children}</h2>
                   ),
                 }}
               >

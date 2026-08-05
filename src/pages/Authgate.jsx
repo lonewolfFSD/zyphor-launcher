@@ -1,5 +1,6 @@
 /**
  * AuthGate.jsx — Zyphor Electron Launcher
+ * REDESIGNED: Split-panel layout. Left = full cinematic video. Right = auth drawer.
  *
  * Generates a random session ID, opens zyphorstudios.com/handshake?session=<ID>
  * in the browser, then listens to Firestore auth_sessions/<ID>.
@@ -12,39 +13,162 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js'
-import Grainient from '../effects/Grainient.jsx'
-import { ExternalLink, Loader2, ShieldAlert, RefreshCw } from 'lucide-react'
+import { ExternalLink, ShieldAlert, RefreshCw, ArrowRight, Zap } from 'lucide-react'
 import { clearSession, saveUid } from '../lib/authSession.js'
 
-const HANDSHAKE_BASE = 'https://zyphorstudios.com/login-game-handshake'
-const SESSION_TTL_MS = 5 * 60 * 1000   // 5 min — matches the website timer
+import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4'
+import VIDEO_GAMING             from './videos/gaming.mp4'
+import VIDEO_DRAGON_TRAVELLER   from './videos/Xuanwu - Dragon Traveler.mp4'
+import VIDEO_LUCY               from './videos/Lucy Cyberpunk.mp4'
+import VIDEO_KALTSIT            from './videos/Kaltsit.mp4'
+import VIDEO_ROSSI              from './videos/rossi.mp4'
 
-/** Generates a random session ID like the C# Guid.NewGuid() */
+import ROSSI_FRAME   from './videos/frames/rossi frame.png'
+import KALTSIT_FRAME from './videos/frames/kaltsit frame.png'
+import XUANWU_FRAME  from './videos/frames/xuanwu frame.png'
+import FIREFLY_FRAME from './videos/frames/firefly frame.png'
+import LUCY_FRAME    from './videos/frames/lucy frame.png'
+
+import Logo from '../Logo/icon.png';
+
+const PRESET_VIDEO_MAP = {
+  'preset-gaming':           VIDEO_GAMING,
+  'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
+  'preset-lucy':             VIDEO_LUCY,
+  'preset-kaltsit':          VIDEO_KALTSIT,
+  'preset-rossi':            VIDEO_ROSSI,
+}
+
+const PRESET_STATIC_MAP = {
+  'preset-gaming':           FIREFLY_FRAME,
+  'preset-dragon-traveller': XUANWU_FRAME,
+  'preset-lucy':             LUCY_FRAME,
+  'preset-kaltsit':          KALTSIT_FRAME,
+  'preset-rossi':            ROSSI_FRAME,
+}
+
+const HANDSHAKE_BASE = 'https://zyphorstudios.com/login-game-handshake'
+const SESSION_TTL_MS = 5 * 60 * 1000
+
 const newSessionId = () => crypto.randomUUID()
+
+/* ─── Spinner: clean arc, no wobble ─── */
+function ArcSpinner({ size = 32, color = '#8b5cf6', thickness = 6 }) {
+  const r = (size - thickness) / 2
+  const circ = 2 * Math.PI * r
+  return (
+    <svg width={size} height={size} style={{ display: 'block' }}>
+      {/* Track */}
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeOpacity={0.12} strokeWidth={thickness} />
+      {/* Arc */}
+      <motion.circle
+        cx={size/2} cy={size/2} r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth={thickness}
+        strokeLinecap="round"
+        strokeDasharray={`${circ * 0.7} ${circ * 0.3}`}
+        style={{ originX: '50%', originY: '50%' }}
+        animate={{ rotate: 360 }}
+        transition={{ repeat: Infinity, duration: 1.1, ease: 'linear' }}
+      />
+    </svg>
+  )
+}
+
+/* ─── Countdown ring ─── */
+function CountdownRing({ secondsLeft, total, color }) {
+  const size = 72
+  const thickness = 2
+  const r = (size - thickness) / 2
+  const circ = 2 * Math.PI * r
+  const progress = secondsLeft / total
+  const mins = Math.floor(secondsLeft / 60)
+  const secs = String(secondsLeft % 60).padStart(2, '0')
+  const isLow = secondsLeft < 60
+
+  return (
+    <div style={{ position: 'relative', width: size, height: size }}>
+      <svg width={size} height={size} style={{ display: 'block', transform: 'rotate(-90deg)' }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={isLow ? '#ef4444' : color} strokeOpacity={0.12} strokeWidth={thickness} />
+        <motion.circle
+          cx={size/2} cy={size/2} r={r}
+          fill="none"
+          stroke={isLow ? '#ef4444' : color}
+          strokeWidth={thickness}
+          strokeLinecap="round"
+          strokeDasharray={`${circ * progress} ${circ * (1 - progress)}`}
+          animate={{ strokeDasharray: `${circ * progress} ${circ * (1 - progress)}` }}
+          transition={{ duration: 0.5 }}
+        />
+      </svg>
+      <div style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: 1,
+      }}>
+        <span style={{
+          fontFamily: "'Space Grotesk', monospace",
+          fontSize: 13,
+          fontWeight: 700,
+          letterSpacing: '-0.02em',
+          color: isLow ? '#ef4444' : '#ffffff',
+          lineHeight: 1,
+        }}>
+          {mins}:{secs}
+        </span>
+        <span style={{ fontSize: 7, marginTop: 2, opacity: 0.35, color: '#ffffff', letterSpacing: '0.08em', textTransform: 'uppercase' }}>left</span>
+      </div>
+    </div>
+  )
+}
 
 export default function AuthGate({ onAuthSuccess }) {
   const { settings } = useSettings()
-  const theme  = THEMES[settings?.theme]  || THEMES.oled
   const accent = ACCENTS[settings?.accent] || ACCENTS.bulb
 
-  const [status, setStatus]   = useState('idle')   // idle | waiting | loading | error
-  const [errorMsg, setErrorMsg] = useState('')
-  const [dots, setDots]         = useState('')
+  const motionOn            = settings ? settings.animations && !settings.reduceMotion : true
+  const backgroundVideoType = settings?.backgroundVideoType ?? 'default'
+  const backgroundQuality   = settings?.backgroundQuality   ?? 'hd'
+
+  const backgroundVideoSrc =
+    backgroundVideoType === 'none' || backgroundQuality === 'static'
+      ? null
+      : backgroundVideoType === 'custom'
+      ? settings?.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : null
+      : backgroundVideoType?.startsWith('preset-')
+      ? PRESET_VIDEO_MAP[backgroundVideoType] ?? DEFAULT_BACKGROUND_VIDEO
+      : DEFAULT_BACKGROUND_VIDEO
+
+  const bgStaticPoster = backgroundQuality === 'static'
+    ? (PRESET_STATIC_MAP[backgroundVideoType] ?? null)
+    : null
+
+  const [status,      setStatus]      = useState('idle')
+  const [errorMsg,    setErrorMsg]    = useState('')
+  const [dots,        setDots]        = useState('')
   const [secondsLeft, setSecondsLeft] = useState(0)
 
-  const unsubRef    = useRef(null)   // Firestore listener
-  const timerRef    = useRef(null)   // countdown interval
-  const expiryRef   = useRef(null)   // expiry timeout
-  const sessionRef  = useRef(null)   // current session ID
+  const unsubRef   = useRef(null)
+  const timerRef   = useRef(null)
+  const expiryRef  = useRef(null)
+  const sessionRef = useRef(null)
+  const videoRef   = useRef(null)
 
-  // ── Animated waiting dots ─────────────────────────────────────────────────
+  useEffect(() => {
+    const el = videoRef.current
+    if (!el || backgroundQuality === 'static') return
+    if (motionOn) el.play().catch(() => {})
+    else el.pause()
+  }, [motionOn, backgroundQuality])
+
   useEffect(() => {
     if (status !== 'waiting') return
     const t = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 500)
     return () => clearInterval(t)
   }, [status])
 
-  // ── Cleanup on unmount ────────────────────────────────────────────────────
   useEffect(() => () => stopListening(), [])
 
   const stopListening = () => {
@@ -53,38 +177,29 @@ export default function AuthGate({ onAuthSuccess }) {
     clearTimeout(expiryRef.current)
   }
 
-  // ── Main handler — generate session, open browser, start listener ─────────
   const handleLogin = () => {
     stopListening()
-
     const sessionId = newSessionId()
     sessionRef.current = sessionId
-
-    const url = `${HANDSHAKE_BASE}?session=${sessionId}`
-    window.open(url)   // intercepted by setWindowOpenHandler → shell.openExternal
-
+    window.open(`${HANDSHAKE_BASE}?session=${sessionId}`)
     setStatus('waiting')
     setErrorMsg('')
 
-    // Countdown
     const expiry = Date.now() + SESSION_TTL_MS
     setSecondsLeft(Math.round(SESSION_TTL_MS / 1000))
     timerRef.current = setInterval(() => {
-      const left = Math.round((expiry - Date.now()) / 1000)
-      setSecondsLeft(Math.max(left, 0))
+      setSecondsLeft(Math.max(Math.round((expiry - Date.now()) / 1000), 0))
     }, 1000)
 
-    // Expire after TTL
     expiryRef.current = setTimeout(() => {
       stopListening()
       setStatus('error')
-      setErrorMsg('Session expired. The 5-minute window closed before you signed in. Try again.')
+      setErrorMsg('Session expired. The 5-minute window closed before you signed in.')
     }, SESSION_TTL_MS)
 
-    // Listen to auth_sessions/<sessionId> in Firestore
     const sessionDoc = doc(db, 'auth_sessions', sessionId)
     unsubRef.current = onSnapshot(sessionDoc, async (snap) => {
-      if (!snap.exists()) return          // not written yet — keep waiting
+      if (!snap.exists()) return
       const { uid } = snap.data()
       if (!uid) return
 
@@ -98,33 +213,26 @@ export default function AuthGate({ onAuthSuccess }) {
           setStatus('error')
           return
         }
-        const d = userSnap.data();
-
+        const d = userSnap.data()
         const profile = {
           uid,
-          email:        d.email        ?? '',
-          displayName:  d.displayName  ?? 'Unknown',
-          photoURL:     d.photoURL     ?? '',
-          location:     d.location     ?? '',
-          timezone:     d.timezone     ?? 'UTC',
-          gender:       d.gender       ?? '',
-          isVip:        Boolean(d.isVip),
-          hasGame:      Boolean(d.hasGame || d.steamOwnsGame),
-          steamId:      d.steamId      ?? '',   // ← add this
-          rememberMe:   Boolean(d.rememberMe),
-          totpLinked:   Boolean(d.totpLinked),
-          hasPasskey:   Boolean(d.hasPasskey),
+          email:       d.email        ?? '',
+          displayName: d.displayName  ?? 'Unknown',
+          photoURL:    d.photoURL     ?? '',
+          location:    d.location     ?? '',
+          timezone:    d.timezone     ?? 'UTC',
+          gender:      d.gender       ?? '',
+          isVip:       Boolean(d.isVip),
+          hasGame:     Boolean(d.hasGame || d.steamOwnsGame),
+          steamId:     d.steamId      ?? '',
+          rememberMe:  Boolean(d.rememberMe),
+          totpLinked:  Boolean(d.totpLinked),
+          hasPasskey:  Boolean(d.hasPasskey),
           raw: d,
-        };
-
-        // Only store the uid when rememberLogin is enabled
-        if (settings?.rememberLogin) {
-          saveUid(uid);
-        } else {
-          clearSession();
         }
-
-        onAuthSuccess(profile);
+        if (settings?.rememberLogin) saveUid(uid)
+        else clearSession()
+        onAuthSuccess(profile)
       } catch (err) {
         console.error('Profile fetch failed:', err)
         setErrorMsg('Failed to load your profile. Check your connection and try again.')
@@ -145,184 +253,473 @@ export default function AuthGate({ onAuthSuccess }) {
     setDots('')
   }
 
-  // ── Shared styles from NavRail tokens ─────────────────────────────────────
-  const card = {
-    backgroundColor: `${theme.surface}ee`,
-    borderColor:     theme.border,
-    color:           theme.text,
-  }
-
-  const mins = Math.floor(secondsLeft / 60)
-  const secs = String(secondsLeft % 60).padStart(2, '0')
+  /* ── Design tokens ── */
+  const A  = accent.hex   // accent color
+  const BG = '#0a0a0c'    // near-black base
+  const S  = '#111115'    // panel surface
+  const B  = 'rgba(255,255,255,0.07)'  // border
+  const T  = '#ffffff'    // text
+  const M  = 'rgba(255,255,255,0.45)'  // muted text
 
   return (
-    <div>
-      <span className="pointer-events-none" style={{ position: 'fixed', inset: 0, zIndex: -1 }}>
-        <Grainient
-          color1="#FF9FFC" color2="#5227FF" color3="#B497CF"
-          timeSpeed={0.25} colorBalance={0}
-          warpStrength={1} warpFrequency={5} warpSpeed={2} warpAmplitude={50}
-          blendAngle={0} blendSoftness={0.05} rotationAmount={500}
-          noiseScale={2} grainAmount={0.1} grainScale={2} grainAnimated={false}
-          contrast={1.5} gamma={1} saturation={1}
-          centerX={0} centerY={0} zoom={0.9}
-        />
-      </span>
+    <div style={{
+      position: 'fixed', inset: 0,
+      backgroundColor: BG,
+      display: 'flex',
+      fontFamily: "'Inter', system-ui, sans-serif",
+      overflow: 'hidden',
+    }}>
+      {/* ── Google Fonts ── */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        ::-webkit-scrollbar { display: none; }
+      `}</style>
 
-      <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/60">
+      {/* ════════════════════════════════════════
+          LEFT PANEL — Full cinematic media
+      ════════════════════════════════════════ */}
+      <div style={{
+        flex: 1,
+        position: 'relative',
+        overflow: 'hidden',
+        minWidth: 0,
+      }}>
+        {/* Video / static background */}
+        {backgroundQuality === 'static' && bgStaticPoster ? (
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: `url(${bgStaticPoster})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }} />
+        ) : backgroundQuality === 'sd' && backgroundVideoSrc ? (
+          <video
+            ref={videoRef}
+            src={backgroundVideoSrc}
+            autoPlay muted loop playsInline
+            style={{
+              position: 'absolute', inset: 0,
+              width: '40%', height: '40%',
+              objectFit: 'cover',
+              transform: 'scale(2.6)',
+              transformOrigin: 'top left',
+            }}
+          />
+        ) : backgroundVideoSrc ? (
+          <video
+            ref={videoRef}
+            src={backgroundVideoSrc}
+            autoPlay muted loop playsInline
+            style={{
+              position: 'absolute', inset: 0,
+              width: '100%', height: '100%',
+              objectFit: 'cover',
+            }}
+          />
+        ) : (
+          /* Fallback: abstract gradient field */
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: `radial-gradient(ellipse at 30% 60%, ${A}22 0%, transparent 60%),
+                         radial-gradient(ellipse at 80% 20%, #3b1d8a18 0%, transparent 55%),
+                         linear-gradient(135deg, #0d0d12 0%, #0a0a0c 100%)`,
+          }} />
+        )}
 
-        <div
-          className="pointer-events-none absolute inset-0 opacity-40"
-          style={{ background: `radial-gradient(ellipse 80% 50% at 50% -20%, ${accent.hex}22, transparent)` }}
-        />
+        {/* Gradient vignette — right edge fades into panel */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: `linear-gradient(to right, transparent 40%, ${BG} 100%),
+                       linear-gradient(to top, ${BG}cc 0%, transparent 40%)`,
+        }} />
 
-        <motion.div
-          initial={{ opacity: 0, y: 14, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0,  scale: 1 }}
-          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-          className="relative z-10 w-full max-w-[380px] rounded-2xl border overflow-hidden shadow-2xl"
-          style={card}
-        >
-          {/* Banner */}
-          <div className="relative h-36 overflow-hidden">
-            <img
-              src="https://i.pinimg.com/1200x/2c/ec/c4/2cecc43c8878eba88a376f5c88353547.jpg"
-              alt=""
-              className="w-full h-full object-cover"
-            />
-            <div
-              className="absolute inset-0"
-              style={{ background: `linear-gradient(to bottom, transparent 40%, ${theme.surface}ee 100%)` }}
-            />
-            <div className="absolute bottom-3 left-5">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40">Welcome to</p>
-              <h1 className="text-xl font-black uppercase tracking-wider leading-none">Zyphor</h1>
-            </div>
-          </div>
-
-          {/* Body */}
-          <div className="px-6 pb-7 pt-5 flex flex-col gap-4">
-            <AnimatePresence mode="wait">
-
-              {/* ── IDLE ── */}
-              {status === 'idle' && (
-                <motion.div
-                  key="idle"
-                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-                  className="flex flex-col gap-3"
-                >
-                  <p className="text-sm opacity-50 leading-relaxed">
-                    Sign in or create an account on the Zyphor website. The launcher connects automatically once you're done.
-                  </p>
-                  <motion.button
-                    onClick={handleLogin}
-                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                    className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3 text-sm font-semibold"
-                    style={{ backgroundColor: accent.hex, color: accent.on }}
-                  >
-                    <ExternalLink size={15} />
-                    Sign in / Create account
-                  </motion.button>
-                </motion.div>
-              )}
-
-              {/* ── WAITING ── */}
-              {status === 'waiting' && (
-                <motion.div
-                  key="waiting"
-                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-                  className="flex flex-col items-center gap-4 py-2"
-                >
-                  {/* Pulsing ring */}
-                  <div className="relative flex items-center justify-center">
-                    <motion.div
-                      animate={{ scale: [1, 1.6, 1], opacity: [0.3, 0, 0.3] }}
-                      transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
-                      className="absolute h-14 w-14 rounded-full"
-                      style={{ backgroundColor: accent.hex }}
-                    />
-                    <div
-                      className="relative flex h-12 w-12 items-center justify-center rounded-full"
-                      style={{ backgroundColor: `${accent.hex}22`, border: `2px solid ${accent.hex}55` }}
-                    >
-                      <Loader2 size={22} className="animate-spin" style={{ color: accent.hex }} />
-                    </div>
-                  </div>
-
-                  <div className="text-center">
-                    <p className="text-sm font-semibold">Waiting for browser{dots}</p>
-                    <p className="text-xs opacity-40 mt-1 leading-relaxed">
-                      Complete sign-in on the website — we'll connect automatically.
-                    </p>
-                  </div>
-
-                  {/* Countdown */}
-                  <div
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-mono font-bold"
-                    style={{ backgroundColor: `${theme.border}44` }}
-                  >
-                    <span className="opacity-40">Session expires in</span>
-                    <span style={{ color: secondsLeft < 60 ? '#ef4444' : accent.hex }}>
-                      {mins}:{secs}
-                    </span>
-                  </div>
-
-                  <div className="flex gap-3 w-full">
-                    <button
-                      onClick={handleLogin}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-semibold transition hover:bg-white/5"
-                      style={{ borderColor: theme.border }}
-                    >
-                      <RefreshCw size={12} /> Reopen browser
-                    </button>
-                    <button
-                      onClick={handleRetry}
-                      className="text-xs opacity-30 hover:opacity-60 transition-opacity px-3"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* ── LOADING ── */}
-              {status === 'loading' && (
-                <motion.div
-                  key="loading"
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="flex flex-col items-center gap-3 py-4"
-                >
-                  <Loader2 size={28} className="animate-spin" style={{ color: accent.hex }} />
-                  <p className="text-sm opacity-50">Loading your profile…</p>
-                </motion.div>
-              )}
-
-              {/* ── ERROR ── */}
-              {status === 'error' && (
-                <motion.div
-                  key="error"
-                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  className="flex flex-col gap-3"
-                >
-                  <div className="flex items-start gap-2.5 rounded-xl border border-red-500/25 bg-red-500/10 px-3.5 py-2.5">
-                    <ShieldAlert size={15} className="text-red-400 mt-0.5 shrink-0" />
-                    <p className="text-xs text-red-400 leading-relaxed">{errorMsg}</p>
-                  </div>
-                  <motion.button
-                    onClick={handleLogin}
-                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold"
-                    style={{ backgroundColor: accent.hex, color: accent.on }}
-                  >
-                    <ExternalLink size={15} /> Try again
-                  </motion.button>
-                </motion.div>
-              )}
-
-            </AnimatePresence>
-          </div>
-        </motion.div>
+        
       </div>
+
+      {/* ════════════════════════════════════════
+          RIGHT PANEL — Auth drawer
+          Pinned flush to the right edge
+      ════════════════════════════════════════ */}
+      <motion.div
+        initial={{ x: 40, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        style={{
+          width: 580,
+          flexShrink: 0,
+          backgroundColor: S,
+          borderLeft: `1px solid ${B}`,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          padding: '48px 90px',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Subtle glow behind the panel content */}
+        <div style={{
+          position: 'absolute',
+          top: -160, right: -160,
+          width: 600, height: 600,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${A}14 0%, transparent 70%)`,
+          pointerEvents: 'none',
+        }} />
+
+        {/* ── Logo / Brand ── */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.5 }}
+          style={{ marginBottom: 40 }}
+        >
+
+          <div className='flex gap-3'>
+            <img className='w-[70px]' src={Logo} />
+
+          
+
+          <span>
+            <h1 style={{
+            fontFamily: "Manrope",
+            marginTop: 4,
+            fontSize: 36, fontWeight: 700,
+            letterSpacing: '-0.03em',
+            color: T,
+            lineHeight: 1,
+          }}>
+            Zyphor Launcher
+          </h1>
+                    <p style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontSize: 10, fontWeight: 600,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            marginTop: 10,
+            color: M,
+            marginBottom: 6,
+          }}>
+            v.1.1.6
+          </p>
+
+          </span>
+          </div>
+
+
+
+         
+        </motion.div>
+
+        {/* ── State content ── */}
+        <AnimatePresence mode="wait">
+
+          {/* ── IDLE ── */}
+          {status === 'idle' && (
+            <motion.div
+              key="idle"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.3 }}
+              className='-mt-4'
+              style={{ display: 'flex', flexDirection: 'column', gap: 24 }}
+            >
+              <p style={{
+                fontSize: 14.5, lineHeight: 1.7,
+                color: M,
+                fontWeight: 400,
+              }}>
+                Sign in or create an account on the Zyphor website. The launcher connects automatically once you're done.
+              </p>
+
+              <motion.button
+                onClick={handleLogin}
+                
+                whileTap={{ scale: 0.97 }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  padding: '16px 28px',
+                  borderRadius: 16,
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: A,
+                  color: '#ffffff',
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  letterSpacing: '0.01em',
+                  transition: 'box-shadow 0.2s',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  
+                  Sign in through Zyphor Portal
+                </span>
+                <ArrowRight size={15} strokeWidth={2.2} style={{ opacity: 0.7 }} />
+              </motion.button>
+
+              {/* Divider hint */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.06em' }}>
+                  BROWSER AUTHENTICATION
+                </span>
+                <div style={{ flex: 1, height: 1, backgroundColor: B }} />
+              </div>
+
+              <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.22)', marginTop: -10, lineHeight: 1.65, textAlign: 'left' }}>
+                A browser window will open. Sign in there — the launcher detects it automatically.
+              </p>
+            </motion.div>
+          )}
+
+          {/* ── WAITING ── */}
+          {status === 'waiting' && (
+            <motion.div
+              key="waiting"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.3 }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 24 }}
+            >
+              {/* Status row */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 14,
+                padding: '14px 16px',
+                borderRadius: 22,
+                backgroundColor: `${A}0d`,
+                border: `1px solid ${A}25`,
+              }}>
+                <ArcSpinner size={28} color={A} thickness={2.5} />
+                <div>
+                  <p style={{
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontSize: 13, fontWeight: 600, color: T,
+                    lineHeight: 1,
+                  }}>
+                    Waiting for browser{dots}
+                  </p>
+                  <p style={{ fontSize: 11, color: M, marginTop: 4, lineHeight: 1.4 }}>
+                    Complete sign-in on the website
+                  </p>
+                </div>
+
+                {/* Countdown ring — right side */}
+                <div style={{ marginLeft: 'auto' }}>
+                  <CountdownRing secondsLeft={secondsLeft} total={SESSION_TTL_MS / 1000} color={A} />
+                </div>
+              </div>
+
+              {/* Steps */}
+              {[
+                { n: '1', t: 'Browser opened', done: true },
+                { n: '2', t: 'Sign in on website', done: false },
+                { n: '3', t: 'Auto-connect', done: false },
+              ].map((step, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  opacity: step.done ? 0.4 : 0.85,
+                }}>
+                  <div style={{
+                    width: 22, height: 22,
+                    borderRadius: '50%',
+                    border: `1.5px solid ${step.done ? A : B}`,
+                    backgroundColor: step.done ? `${A}20` : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    {step.done
+                      ? <span style={{ fontSize: 10, color: A, marginTop: 1 }}>✓</span>
+                      : <span style={{ fontSize: 10, color: M, marginTop: 1, fontFamily: 'monospace' }}>{step.n}</span>
+                    }
+                  </div>
+                  <span style={{ fontSize: 13, color: step.done ? M : T }}>{step.t}</span>
+                </div>
+              ))}
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={handleLogin}
+                  style={{
+                    flex: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                    padding: '14px 14px',
+                    borderRadius: 16,
+                    border: `1px solid ${B}`,
+                    backgroundColor: 'transparent',
+                    color: T,
+                    fontSize: 12.5, fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <RefreshCw size={13} strokeWidth={2.2} />
+                  Reopen browser
+                </button>
+                <button
+                  onClick={handleRetry}
+                  style={{
+                    padding: '14px 16px',
+                    borderRadius: 10,
+                    border: `1px solid ${B}`,
+                    backgroundColor: 'transparent',
+                    color: M,
+                    fontSize: 12.5, fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'color 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = T}
+                  onMouseLeave={e => e.currentTarget.style.color = M}
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── LOADING ── */}
+          {status === 'loading' && (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              style={{
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', gap: 16,
+                padding: '16px 0',
+              }}
+            >
+              <ArcSpinner size={44} color={A} thickness={2.5} />
+              <div style={{ textAlign: 'center' }}>
+                <p style={{
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontSize: 14, fontWeight: 600, color: T,
+                  marginBottom: 4,
+                }}>
+                  Loading profile
+                </p>
+                <p style={{ fontSize: 12, color: M }}>One moment…</p>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── ERROR ── */}
+          {status === 'error' && (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
+            >
+              {/* Error card */}
+              <div style={{
+                borderRadius: 12,
+                border: '1px solid rgba(239,68,68,0.2)',
+                backgroundColor: 'rgba(239,68,68,0.07)',
+                padding: '14px 16px',
+                display: 'flex', gap: 12, alignItems: 'flex-start',
+              }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 8,
+                  backgroundColor: 'rgba(239,68,68,0.12)',
+                  border: '1px solid rgba(239,68,68,0.2)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, marginTop: 1,
+                }}>
+                  <ShieldAlert size={13} color="#f87171" strokeWidth={2.2} />
+                </div>
+                <p style={{ fontSize: 12.5, lineHeight: 1.6, color: '#f87171' }}>
+                  {errorMsg}
+                </p>
+              </div>
+
+              <motion.button
+                onClick={handleLogin}
+                whileHover={{ scale: 1.015, boxShadow: `0 8px 28px ${A}55` }}
+                whileTap={{ scale: 0.97 }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  padding: '14px 18px',
+                  borderRadius: 12,
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: A,
+                  color: '#ffffff',
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  boxShadow: `0 4px 20px ${A}40`,
+                  transition: 'box-shadow 0.2s',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ExternalLink size={15} strokeWidth={2.2} />
+                  Try again
+                </span>
+                <ArrowRight size={15} strokeWidth={2.2} style={{ opacity: 0.7 }} />
+              </motion.button>
+
+              <button
+                onClick={handleRetry}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: M,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  padding: '4px 0',
+                  transition: 'color 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = T}
+                onMouseLeave={e => e.currentTarget.style.color = M}
+              >
+                Back to start
+              </button>
+            </motion.div>
+          )}
+
+        </AnimatePresence>
+
+        {/* ── Bottom version tag ── */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1, duration: 0.5 }}
+          style={{
+            position: 'absolute', bottom: 24, left: 40, right: 40,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}
+        >
+          <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.06em' }}>
+            ZYPHOR LAUNCHER
+          </span>
+          <span style={{
+            fontSize: 10,
+            color: 'rgba(255,255,255,0.18)',
+            fontFamily: 'monospace',
+            letterSpacing: '0.04em',
+          }}>
+            v1.0
+          </span>
+        </motion.div>
+      </motion.div>
     </div>
   )
 }
