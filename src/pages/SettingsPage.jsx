@@ -1027,7 +1027,7 @@ async function handleCheckUpdate() {
                 </div>
                 <div>
                   <p className="text-[11px] text-ash/50">Version</p>
-                  <p className="mt-0.5 text-[13px] font-semibold text-bone">1.1.2</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-bone">1.1.3</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-ash/50">Build channel</p>

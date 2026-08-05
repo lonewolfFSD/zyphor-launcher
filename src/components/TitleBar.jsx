@@ -13,7 +13,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 
-const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.1.2';
+const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.1.3';
 
 /** Map WMO weather_code → { icon, color, label } */
 function getWeatherMeta(code, isNight = false) {
