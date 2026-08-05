@@ -292,6 +292,12 @@ app.whenReady().then(() => {
   });
 });
 
+// Anywhere after app is ready:
+ipcMain.on('set-fullscreen', (event, flag) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.setFullScreen(Boolean(flag));
+});
+
 app.on('window-all-closed', () => {
   // If closeToTray is on, windows being hidden doesn't mean we should quit.
   const s = readSettings();

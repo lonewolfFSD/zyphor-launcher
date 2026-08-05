@@ -849,6 +849,12 @@ async function handleCheckUpdate() {
                 ]}
               />
             </SettingRow>
+            <SettingRow label="Fullscreen on launch" hint="Automatically enters fullscreen after the splash screen finishes.">
+              <Toggle
+                checked={settings.fullscreenOnLaunch ?? false}
+                onChange={(checked) => update({ fullscreenOnLaunch: checked })}
+              />
+            </SettingRow>
           </Section>
         )}
 
@@ -1215,7 +1221,7 @@ async function handleCheckUpdate() {
                 </div>
                 <div>
                   <p className="text-[11px] text-ash/50">Version</p>
-                  <p className="mt-0.5 text-[13px] font-semibold text-bone">1.1.3</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-bone">1.1.5</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-ash/50">Build channel</p>

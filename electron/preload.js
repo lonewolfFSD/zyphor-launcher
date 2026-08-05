@@ -33,7 +33,8 @@ contextBridge.exposeInMainWorld('launcherAPI', {  // was 'api'
   getAppVersion:    () => ipcRenderer.invoke('app:getVersion'),
   openExternal:     (url) => ipcRenderer.send('shell:openExternal', url),
   getLauncherPath:  () => ipcRenderer.invoke('app:getLauncherPath'),
-
+  setFullscreen: (flag) => ipcRenderer.send('set-fullscreen', flag),
+  
   // ── New: Storage ──────────────────────────────────────────────────
   getDiskItems:         () => ipcRenderer.invoke('storage:getDiskItems'),
   getDiskSpace:         () => ipcRenderer.invoke('storage:getDiskSpace'),

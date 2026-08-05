@@ -1,14 +1,14 @@
-import { useRef, useEffect, useMemo, useState } from 'react';
+import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import newsEntries from '../data/news.json';
+import ReactMarkdown from 'react-markdown';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
 import VIDEO_GAMING    from './videos/gaming.mp4';
 import VIDEO_DRAGON_TRAVELLER from './videos/Xuanwu - Dragon Traveler.mp4';
 import VIDEO_LUCY from './videos/Lucy Cyberpunk.mp4';
 import VIDEO_KALTSIT from './videos/Kaltsit.mp4';
-import { FaCross, FaIdBadge, FaRegNewspaper, FaSearch } from 'react-icons/fa';
-import { AlertCircle, AlertTriangle, Search, ListFilter } from 'lucide-react';
+import { FaSearch } from 'react-icons/fa';
+import { AlertCircle, AlertTriangle, Search, X, ExternalLink, RefreshCw } from 'lucide-react';
 import VIDEO_ROSSI from './videos/rossi.mp4';
 
 import ROSSI_FRAME    from './videos/frames/rossi frame.png';
@@ -17,12 +17,15 @@ import XUANWU_FRAME   from './videos/frames/xuanwu frame.png';
 import FIREFLY_FRAME  from './videos/frames/firefly frame.png';
 import LUCY_FRAME     from './videos/frames/lucy frame.png';
 
+const GITHUB_REPO = 'lonewolfFSD/zyphor-launcher';
+const RELEASES_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases`;
+
 const PRESET_VIDEO_MAP = {
-    'preset-gaming':    VIDEO_GAMING,
-    'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
-    'preset-lucy':      VIDEO_LUCY,
-    'preset-kaltsit':   VIDEO_KALTSIT,
-    'preset-rossi': VIDEO_ROSSI
+  'preset-gaming':           VIDEO_GAMING,
+  'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
+  'preset-lucy':             VIDEO_LUCY,
+  'preset-kaltsit':          VIDEO_KALTSIT,
+  'preset-rossi':            VIDEO_ROSSI,
 };
 
 const PRESET_STATIC_MAP = {
@@ -33,9 +36,50 @@ const PRESET_STATIC_MAP = {
   'preset-rossi':            ROSSI_FRAME,
 };
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function extractPreviewNotes(body = '', max = 4) {
+  return body
+    .split('\n')
+    .filter((l) => /^[-*]\s/.test(l.trim()))
+    .map((l) => l.trim().replace(/^[-*]\s+/, ''))
+    .slice(0, max);
+}
+
+function deriveTagsFromRelease(release) {
+  const tags = [];
+  if (release.prerelease) tags.push('pre-release');
+  else tags.push('stable');
+
+  const name = (release.name ?? release.tag_name ?? '').toLowerCase();
+  if (name.includes('hotfix') || name.includes('patch')) tags.push('hotfix');
+  if (name.includes('major') || /v?\d+\.0\.0/.test(release.tag_name)) tags.push('major');
+
+  return tags;
+}
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function mapRelease(release) {
+  return {
+    version:   release.tag_name,
+    title:     release.name || release.tag_name,
+    date:      formatDate(release.published_at),
+    tags:      deriveTagsFromRelease(release),
+    notes:     extractPreviewNotes(release.body),
+    body:      release.body ?? '',
+    url:       release.html_url,
+    image:     null,
+  };
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
+
 export default function NewsPage() {
   const { settings } = useSettings();
-  const theme = THEMES[settings?.theme] || THEMES.oled;
+  const theme  = THEMES[settings?.theme]  || THEMES.oled;
   const accent = ACCENTS[settings?.accent] || ACCENTS.bulb;
 
   const motionOn = settings ? settings.animations && !settings.reduceMotion : true;
@@ -64,35 +108,64 @@ export default function NewsPage() {
     else el.pause();
   }, [motionOn, backgroundQuality]);
 
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  // ── GitHub fetch state ───────────────────────────────────────────────────────
+  const [releases, setReleases]   = useState([]);
+  const [loading,  setLoading]    = useState(true);
+  const [error,    setError]      = useState(null);
+  const [selectedEntry, setSelectedEntry] = useState(null); // modal
+
+  const [search,    setSearch]    = useState('');
   const [tagFilter, setTagFilter] = useState('all');
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 700);
-    return () => clearTimeout(t);
+  const fetchReleases = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(RELEASES_URL, {
+        headers: { Accept: 'application/vnd.github+json' },
+      });
+      if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+      const data = await res.json();
+      setReleases(data.map(mapRelease));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => { fetchReleases(); }, [fetchReleases]);
+
+  // ── Close modal on Escape ────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') setSelectedEntry(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // ── Filter / tag logic ───────────────────────────────────────────────────────
   const allTags = useMemo(() => {
     const set = new Set();
-    newsEntries.forEach((e) => e.tags?.forEach((t) => set.add(t)));
+    releases.forEach((e) => e.tags?.forEach((t) => set.add(t)));
     return Array.from(set);
-  }, []);
+  }, [releases]);
 
   const filteredEntries = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return newsEntries.filter((entry) => {
+    return releases.filter((entry) => {
       const matchesTag = tagFilter === 'all' || entry.tags?.includes(tagFilter);
       if (!matchesTag) return false;
       if (!q) return true;
-      const haystack = [entry.title, ...(entry.notes ?? [])].join(' ').toLowerCase();
+      const haystack = [entry.title, ...entry.notes].join(' ').toLowerCase();
       return haystack.includes(q);
     });
-  }, [search, tagFilter]);
+  }, [search, tagFilter, releases]);
 
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="relative h-full overflow-y-auto font-['Inter']">
-      {/* Background video / static frame */}
+
+      {/* Background */}
       {backgroundQuality === 'static' && bgStaticPoster ? (
         <div
           className="pointer-events-none fixed inset-0 -z-20 h-full w-full"
@@ -117,173 +190,333 @@ export default function NewsPage() {
       ) : null}
 
       <div className="px-9 py-7">
-      <h2 className="font-['Manrope'] text-3xl font-bold tracking-tight text-bone">Updates & Patch Notes</h2>
-      <p className="mt-3 text-sm text-ash/70">Patch notes for the latest updates.</p>
-
-      {/* Caution note — short, always-visible heads-up about patch note lag */}
-      <div
-        className="mt-4 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-xs leading-relaxed text-ash/80"
-        style={{ borderColor: `${accent.hex}40`, backgroundColor: `${theme.surface}66` }}
-      >
-        <AlertTriangle size={15} className="mt-0.5 shrink-0" style={{ color: accent.hex }} />
-        <span>Patch notes are compiled after each release and may not reflect hotfixes pushed without a full client update.</span>
-      </div>
-
-      {/* Combined search + tag filter bar */}
-      <div
-        className="mt-5 flex items-center gap-0 overflow-hidden rounded-2xl border"
-        style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99` }}
-      >
-        {/* Search — shorter, fixed width */}
-        <div className="flex w-[350px] shrink-0 items-center gap-2 border-r px-3 py-3" style={{ borderColor: theme.border }}>
-          <FaSearch size={16} className="shrink-0 text-ash/40" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search…"
-            className="w-full bg-transparent text-sm ml-1 text-bone placeholder:text-ash/40 focus:outline-none"
-          />
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-['Manrope'] text-3xl font-bold tracking-tight text-bone">Updates & Patch Notes</h2>
+            <p className="mt-1 text-sm text-ash/70">Fetched live from GitHub Releases.</p>
+          </div>
+          <button
+            type="button"
+            onClick={fetchReleases}
+            title="Refresh"
+            className="flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium text-ash/60 transition-colors hover:text-bone"
+            style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66` }}
+          >
+            <RefreshCw size={13} />
+            Refresh
+          </button>
         </div>
 
-        {/* Tag pills — scroll horizontally if there are many */}
-        <div className="flex flex-1 items-center gap-1.5 overflow-x-auto px-3 py-2 scrollbar-none">
-          <span className="text-[13px] font-[Manrope] font-semibold text-ash/60">Filters:</span>
-          {[{ value: 'all', label: 'All' }, ...allTags.map((t) => ({ value: t, label: t }))].map((opt) => {
-            const active = tagFilter === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setTagFilter(opt.value)}
-                style={active
-                  ? { backgroundColor: accent.hex, color: accent.on, borderColor: accent.hex }
-                  : { borderColor: theme.border }
-                }
-                className="shrink-0 rounded-lg border px-5 py-1 text-[11px] font-medium transition-colors whitespace-nowrap"
-              >
-                {active ? '' : ''}{opt.label}
-              </button>
-            );
-          })}
+        {/* Caution banner */}
+        <div
+          className="mt-4 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-xs leading-relaxed text-ash/80"
+          style={{ borderColor: `${accent.hex}40`, backgroundColor: `${theme.surface}66` }}
+        >
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" style={{ color: accent.hex }} />
+          <span>Patch notes are compiled after each release and may not reflect hotfixes pushed without a full client update.</span>
         </div>
-      </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <AnimatePresence mode="wait">
-          {loading ? (
-            // ── Skeleton cards ──────────────────────────────────────────
-            <motion.div
-              key="skeletons"
-              className="contents"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              {Array.from({ length: 8 }).map((_, i) => (
-                <SkeletonCard key={i} theme={theme} delay={i * 60} />
-              ))}
-            </motion.div>
-          ) : (
-            // ── Real content ────────────────────────────────────────────
-            <motion.div
-              key="content"
-              className="contents"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              {newsEntries.length === 0 && (
-                <p className="col-span-full mt-3 flex w-full px-6 py-4 text-sm text-ash/60 backdrop-blur-glass" style={{
-                  backgroundColor: `${theme.surface}66`,
-                  borderColor: `${accent.hex}66`,
-                  borderWidth: 2,
-                  borderStyle: 'solid',
-                  borderRadius: '1.2em',
-                }}>
-                  <AlertCircle size={20} className="mr-2.5" style={{ color: accent.hex }} />
-                  No news yet. Check back after the next update.
-                </p>
-              )}
+        {/* Search + tag filter bar */}
+        <div
+          className="mt-5 flex items-center gap-0 overflow-hidden rounded-2xl border"
+          style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99` }}
+        >
+          <div className="flex w-[350px] shrink-0 items-center gap-2 border-r px-3 py-3" style={{ borderColor: theme.border }}>
+            <FaSearch size={16} className="shrink-0 text-ash/40" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search…"
+              className="ml-1 w-full bg-transparent text-sm text-bone placeholder:text-ash/40 focus:outline-none"
+            />
+          </div>
+          <div className="flex flex-1 items-center gap-1.5 overflow-x-auto px-3 py-2 scrollbar-none">
+            <span className="font-['Manrope'] text-[13px] font-semibold text-ash/60">Filters:</span>
+            {[{ value: 'all', label: 'All' }, ...allTags.map((t) => ({ value: t, label: t }))].map((opt) => {
+              const active = tagFilter === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setTagFilter(opt.value)}
+                  style={active
+                    ? { backgroundColor: accent.hex, color: accent.on, borderColor: accent.hex }
+                    : { borderColor: theme.border }
+                  }
+                  className="shrink-0 whitespace-nowrap rounded-lg border px-5 py-1 text-[11px] font-medium transition-colors"
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-              {newsEntries.length > 0 && filteredEntries.length === 0 && (
-                <div className="col-span-full flex w-full flex-col items-center justify-center gap-3 rounded-2xl border px-6 py-12 text-center" style={{
-                  backgroundColor: `${theme.surface}66`,
-                  borderColor: theme.border,
-                }}>
-                  <Search size={28} className="text-ash/30" />
-                  <p className="text-sm font-medium text-ash/60">
-                    No patch notes match
-                    {search && <span className="ml-1 text-bone/70">"{search}"</span>}
-                    {tagFilter !== 'all' && <span className="ml-1 text-bone/70">in <span style={{ color: accent.hex }}>{tagFilter}</span></span>}
-                  </p>
+        {/* Cards grid */}
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <AnimatePresence mode="wait">
+            {loading ? (
+              <motion.div key="skeletons" className="contents" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <SkeletonCard key={i} theme={theme} delay={i * 60} />
+                ))}
+              </motion.div>
+            ) : error ? (
+              <motion.div key="error" className="contents" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <div
+                  className="col-span-full flex w-full flex-col items-center justify-center gap-3 rounded-2xl border px-6 py-12 text-center"
+                  style={{ backgroundColor: `${theme.surface}66`, borderColor: theme.border }}
+                >
+                  <AlertCircle size={28} style={{ color: accent.hex }} />
+                  <p className="text-sm font-medium text-bone/70">Failed to load releases</p>
+                  <p className="text-xs text-ash/50">{error}</p>
                   <button
                     type="button"
-                    onClick={() => { setSearch(''); setTagFilter('all'); }}
-                    className="text-[11px] font-medium underline text-ash/50 hover:text-bone/70 transition-colors"
+                    onClick={fetchReleases}
+                    className="mt-1 rounded-lg border px-4 py-1.5 text-xs font-medium text-ash/60 transition-colors hover:text-bone"
+                    style={{ borderColor: theme.border }}
                   >
-                    Clear filters
+                    Retry
                   </button>
                 </div>
-              )}
+              </motion.div>
+            ) : (
+              <motion.div key="content" className="contents" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+                {releases.length === 0 && (
+                  <p
+                    className="col-span-full mt-3 flex w-full px-6 py-4 text-sm text-ash/60"
+                    style={{ backgroundColor: `${theme.surface}66`, borderColor: `${accent.hex}66`, borderWidth: 2, borderStyle: 'solid', borderRadius: '1.2em' }}
+                  >
+                    <AlertCircle size={20} className="mr-2.5" style={{ color: accent.hex }} />
+                    No releases found on GitHub yet.
+                  </p>
+                )}
 
-              {filteredEntries.map((entry, i) => (
-                <motion.article
-                  key={entry.version}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: i * 0.04 }}
-                  className="overflow-hidden rounded-xl border transition-colors"
-                  style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66` }}
-                >
-                  {entry.image && (
-                    <div className="h-48 w-full overflow-hidden bg-white/5">
-                      <img src={entry.image} alt="" className="h-full w-full object-cover" />
-                    </div>
-                  )}
-
-                  <div className="px-5 py-4">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <h3 className="font-['Manrope'] text-lg font-bold tracking-tight text-bone">{entry.title}</h3>
-                      <time className="text-[11px] font-medium text-ash/60">{entry.date}</time>
-                    </div>
-
-                    {entry.tags?.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {entry.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
-                            style={{ borderColor: `${accent.hex}4d`, color: accent.hex }}
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    <ul className="mt-3 flex flex-col gap-1.5">
-                      {entry.notes.map((note, i) => (
-                        <li key={i} className="flex gap-2 text-sm text-bone/80">
-                          <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ backgroundColor: `${accent.hex}80` }} />
-                          <span>{note}</span>
-                        </li>
-                      ))}
-                    </ul>
+                {releases.length > 0 && filteredEntries.length === 0 && (
+                  <div
+                    className="col-span-full flex w-full flex-col items-center justify-center gap-3 rounded-2xl border px-6 py-12 text-center"
+                    style={{ backgroundColor: `${theme.surface}66`, borderColor: theme.border }}
+                  >
+                    <Search size={28} className="text-ash/30" />
+                    <p className="text-sm font-medium text-ash/60">
+                      No patch notes match
+                      {search && <span className="ml-1 text-bone/70">"{search}"</span>}
+                      {tagFilter !== 'all' && <span className="ml-1 text-bone/70">in <span style={{ color: accent.hex }}>{tagFilter}</span></span>}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { setSearch(''); setTagFilter('all'); }}
+                      className="text-[11px] font-medium text-ash/50 underline transition-colors hover:text-bone/70"
+                    >
+                      Clear filters
+                    </button>
                   </div>
-                </motion.article>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+                )}
+
+                {filteredEntries.map((entry, i) => (
+                  <ReleaseCard
+                    key={entry.version}
+                    entry={entry}
+                    index={i}
+                    theme={theme}
+                    accent={accent}
+                    onOpen={() => setSelectedEntry(entry)}
+                  />
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
-    </div>
+
+      {/* Fullscreen modal */}
+      <AnimatePresence>
+        {selectedEntry && (
+          <ReleaseModal
+            entry={selectedEntry}
+            theme={theme}
+            accent={accent}
+            onClose={() => setSelectedEntry(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
+// ── Release card ───────────────────────────────────────────────────────────────
+
+function ReleaseCard({ entry, index, theme, accent, onOpen }) {
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: index * 0.04 }}
+      className="flex flex-col overflow-hidden rounded-xl border transition-colors"
+      style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66` }}
+    >
+      {entry.image && (
+        <div className="h-48 w-full overflow-hidden bg-white/5">
+          <img src={entry.image} alt="" className="h-full w-full object-cover" />
+        </div>
+      )}
+
+      <div className="flex flex-1 flex-col px-5 py-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="font-['Manrope'] text-lg font-bold tracking-tight text-bone">{entry.title}</h3>
+          <time className="text-[11px] font-medium text-ash/60">{entry.date}</time>
+        </div>
+
+        {entry.tags?.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {entry.tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+                style={{ borderColor: `${accent.hex}4d`, color: accent.hex }}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Preview notes — capped at 3 */}
+        <ul className="mt-3 flex flex-col gap-1.5">
+          {entry.notes.slice(0, 3).map((note, i) => (
+            <li key={i} className="flex gap-2 text-sm text-bone/80">
+              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ backgroundColor: `${accent.hex}80` }} />
+              <span className="line-clamp-2">{note}</span>
+            </li>
+          ))}
+          {entry.notes.length > 3 && (
+            <li className="text-[11px] text-ash/40">+{entry.notes.length - 3} more changes…</li>
+          )}
+        </ul>
+
+        {/* Spacer + button pinned to bottom */}
+        <div className="mt-auto pt-4">
+          <button
+            type="button"
+            onClick={onOpen}
+            className="w-full rounded-lg border py-2 text-xs font-semibold tracking-wide transition-colors hover:text-bone"
+            style={{ borderColor: `${accent.hex}55`, color: accent.hex, backgroundColor: `${accent.hex}10` }}
+          >
+            View Full Notes
+          </button>
+        </div>
+      </div>
+    </motion.article>
+  );
+}
+
+// ── Release modal ──────────────────────────────────────────────────────────────
+
+function ReleaseModal({ entry, theme, accent, onClose }) {
+  return (
+    <motion.div
+      key="modal-backdrop"
+      className="fixed inset-0 z-50 flex items-center justify-center p-6"
+      style={{ backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="relative flex h-full max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border"
+        style={{ borderColor: theme.border, backgroundColor: theme.surface }}
+        initial={{ opacity: 0, scale: 0.96, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 16 }}
+        transition={{ duration: 0.22 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal header */}
+        <div
+          className="flex shrink-0 items-center justify-between border-b px-6 py-4"
+          style={{ borderColor: theme.border }}
+        >
+          <div>
+            <h2 className="font-['Manrope'] text-xl font-bold tracking-tight text-bone">{entry.title}</h2>
+            <div className="mt-1 flex items-center gap-3">
+              <time className="text-[11px] text-ash/50">{entry.date}</time>
+              {entry.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+                  style={{ borderColor: `${accent.hex}4d`, color: accent.hex }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href={entry.url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-ash/60 transition-colors hover:text-bone"
+              style={{ borderColor: theme.border }}
+            >
+              <ExternalLink size={12} />
+              GitHub
+            </a>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border p-1.5 text-ash/50 transition-colors hover:text-bone"
+              style={{ borderColor: theme.border }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Markdown body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {entry.body ? (
+            <div className="prose prose-invert prose-sm max-w-none
+              prose-headings:font-['Manrope'] prose-headings:tracking-tight prose-headings:text-bone
+              prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
+              prose-p:text-bone/80 prose-p:leading-relaxed
+              prose-li:text-bone/80
+              prose-strong:text-bone
+              prose-code:rounded prose-code:bg-white/10 prose-code:px-1 prose-code:py-0.5 prose-code:text-[11px] prose-code:text-bone/90
+              prose-pre:rounded-xl prose-pre:bg-white/5 prose-pre:border prose-pre:border-white/10
+              prose-a:no-underline
+              prose-hr:border-white/10"
+            >
+              <ReactMarkdown
+                components={{
+                  a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noreferrer" style={{ color: accent.hex }} className="hover:underline">
+                      {children}
+                    </a>
+                  ),
+                  h1: ({ children }) => <h1 className="mt-6 first:mt-0">{children}</h1>,
+                  h2: ({ children }) => (
+                    <h2 className="mt-5 border-b pb-1.5 first:mt-0" style={{ borderColor: theme.border }}>{children}</h2>
+                  ),
+                }}
+              >
+                {entry.body}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <p className="text-sm text-ash/50">No release notes provided.</p>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // ── Skeleton shimmer ───────────────────────────────────────────────────────────
+
 const shimmerStyle = {
   background: 'linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%)',
   backgroundSize: '200% 100%',
@@ -306,28 +539,22 @@ function SkeletonCard({ theme, delay = 0 }) {
       className="overflow-hidden rounded-xl border"
       style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66` }}
     >
-      {/* Image placeholder */}
       <div className="h-48 w-full" style={shimmerStyle} />
-
-      <div className="px-5 py-4 flex flex-col gap-3">
-        {/* Title + date row */}
+      <div className="flex flex-col gap-3 px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="h-4 w-2/3 rounded-md" style={shimmerStyle} />
           <div className="h-3 w-12 rounded-md" style={shimmerStyle} />
         </div>
-
-        {/* Tag pills */}
         <div className="flex gap-2">
           <div className="h-4 w-14 rounded-full" style={shimmerStyle} />
           <div className="h-4 w-10 rounded-full" style={shimmerStyle} />
         </div>
-
-        {/* Note lines */}
-        <div className="flex flex-col gap-2 mt-1">
-          {[80, 95, 65, 85].map((w, i) => (
+        <div className="mt-1 flex flex-col gap-2">
+          {[80, 95, 65].map((w, i) => (
             <div key={i} className="h-3 rounded-md" style={{ ...shimmerStyle, width: `${w}%` }} />
           ))}
         </div>
+        <div className="h-7 w-full rounded-lg" style={shimmerStyle} />
       </div>
     </motion.div>
   );

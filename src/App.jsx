@@ -108,7 +108,7 @@ function SplashScreen() {
             Zyphor Launcher
           </p>
           <p className="text-[12px] uppercase tracking-[0.25em] text-white/30">
-            v1.1.3
+            v1.1.5
           </p>
         </motion.div>
 
@@ -157,6 +157,8 @@ const PAGES = {
 
 const MIN_SPLASH_MS = 8000;
 
+
+
 export default function App() {
   const { settings } = useSettings();
   const [profile, setProfile]       = useState(null);
@@ -169,6 +171,14 @@ export default function App() {
     const id = setTimeout(() => setMinSplashDone(true), MIN_SPLASH_MS);
     return () => clearTimeout(id);
   }, []);
+
+  // After the existing MIN_SPLASH_MS useEffect, add:
+useEffect(() => {
+  if (!minSplashDone || checking || !settings || !profile) return;
+  if (settings.fullscreenOnLaunch) {
+    window.launcherAPI?.setFullscreen?.(true);
+  }
+}, [minSplashDone, checking, settings, profile]);
 
   // Auto-login: only stores uid, always fetches fresh profile from Firestore
   useEffect(() => {

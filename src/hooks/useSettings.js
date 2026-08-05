@@ -47,6 +47,8 @@ const DEFAULTS = {
   autoUpdate: true,
   updateChannel: 'stable',
 
+  fullscreenOnLaunch: true,
+
   gamePath: '',
   logLevel: 'normal',
 
