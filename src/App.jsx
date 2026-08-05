@@ -108,7 +108,7 @@ function SplashScreen() {
             Zyphor Launcher
           </p>
           <p className="text-[12px] uppercase tracking-[0.25em] text-white/30">
-            v1.1.2
+            v1.1.3
           </p>
         </motion.div>
 
