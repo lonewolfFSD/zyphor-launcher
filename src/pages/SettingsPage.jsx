@@ -1022,8 +1022,12 @@ async function handleCheckUpdate() {
             <div className="rounded-xl border p-5" style={{ borderColor: theme.border }}>
               <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                 <div>
+                  <p className="text-[11px] text-ash/50">Launcher Name</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-bone">Zyphor Launcher</p>
+                </div>
+                <div>
                   <p className="text-[11px] text-ash/50">Version</p>
-                  <p className="mt-0.5 text-[13px] font-semibold text-bone">STAY Launcher 1.0.0</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-bone">1.1.2</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-ash/50">Build channel</p>

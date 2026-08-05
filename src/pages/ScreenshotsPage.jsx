@@ -605,7 +605,7 @@ export default function ScreenshotsPage() {
                 <p className="text-[15px] font-semibold" style={{ color: theme.text }}>No screenshots found</p>
                 <p className="text-[13px] opacity-40 mt-1.5 text-center max-w-sm">
                   Press <code className="px-1.5 py-0.5 rounded text-[11px] font-mono"
-                    style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>F2</code> in-game to capture.
+                    style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>F2</code> in-game to capture a moment. Your screenshots will appear here automatically.
                 </p>
                 <button type="button" onClick={openFolder}
                   className="mt-4 flex items-center gap-2 rounded-xl px-4 py-2 text-[12px] font-semibold"

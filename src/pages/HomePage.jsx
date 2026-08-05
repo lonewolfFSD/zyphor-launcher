@@ -276,7 +276,7 @@ export default function HomePage({ profile }) {
         <motion.div
           {...fadeUp}
           transition={{ duration: 0.35 }}
-          className="flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-4"
+          className="flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-4 backdrop-blur-lg"
           style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99` }}
         >
           <StatusChip
@@ -303,7 +303,7 @@ export default function HomePage({ profile }) {
         <motion.div
           {...fadeUp}
           transition={{ duration: 0.4, delay: 0.05 }}
-          className="relative h-72 shrink-0 overflow-hidden rounded-[2em] border backdrop-blur-sm"
+          className="relative h-72 shrink-0 overflow-hidden rounded-[2.5em] border backdrop-blur-md"
           style={{ borderColor: theme.border }}
         >
           <AnimatePresence mode="wait">
@@ -346,10 +346,10 @@ export default function HomePage({ profile }) {
 
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
-          <div className="absolute bottom-0 left-0 right-0 p-10">
+          <div className="absolute bottom-0 left-0 right-0 py-10 px-12">
 
-            <h2 className="mt-1 font-['Manrope'] text-3xl font-bold tracking-tight text-bone">
-              {banner?.title ?? 'No Updates Avaialble Yet'}
+            <h2 className="mt-1 font-['Manrope'] text-[1.8em] font-bold tracking-tight text-bone">
+              {banner?.title ?? 'No Updates Available'}
             </h2>
             {banner?.date && <p className="mt-1 text-[13px] text-ash/60">{banner.date}</p>}
           </div>
@@ -472,15 +472,15 @@ height: 177,
   initial={{ opacity: 0 }}
   animate={{ opacity: 1 }}
   transition={{ delay: 0.12, duration: 0.4 }}
-  className="relative flex w-80 shrink-0 flex-col overflow-hidden rounded-2xl border  backdrop-blur-glass"
-  style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66` }}
+  className="relative flex w-80 shrink-0 flex-col overflow-hidden rounded-[1.8em] border  backdrop-blur-lg"
+  style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99` }}
 >
   {/* Header */}
-  <div className="flex shrink-0 items-center gap-2.5 border-b px-4 py-3.5" style={{ borderColor: theme.border }}>
-    <FontAwesomeIcon icon={faNewspaper} className="text-[20px]" style={{ color: accent.hex }} />
-    <h2 className="font-['Manrope'] text-[14px] font-bold tracking-tight text-bone">What's New?</h2>
+  <div className="flex shrink-0 items-center gap-2.5 border-b px-6 py-3.5" style={{ borderColor: theme.border }}>
+    <FontAwesomeIcon icon={faNewspaper} className="text-[20px] hidden" style={{ color: accent.hex }} />
+    <h2 className="font-['Manrope'] text-[15.5px] mt-0.5 font-bold tracking-tight text-bone">What's New?</h2>
     <span
-      className="ml-auto rounded-md px-2 py-0.5 text-[10px] font-bold"
+      className="ml-auto rounded-lg px-2 py-1 text-[10px] font-bold"
       style={{ backgroundColor: `${accent.hex}22`, color: `#${accent.hex}99`, border: `2px solid ${accent.hex}66` }}
     >
       {banners.length}
@@ -583,7 +583,7 @@ height: 177,
         if (span) span.style.color = '';
       }}
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl transition-colors hover:bg-white/[0.06]">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl transition-colors hover:bg-white/[0.06]">
         {type === 'image' ? (
           <img src={image} alt={label} className="h-[28px] w-[28px] object-contain opacity-20 transition-opacity group-hover:opacity-100" />
         ) : (
@@ -664,147 +664,282 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
 }
 
 function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose, onDownload, onInstall }) {
+  const hero = info?.banner || info?.image || info?.hero || null;
+
+  const highlights = Array.isArray(info?.highlights) && info.highlights.length
+    ? info.highlights
+    : null;
+
+  const notesText = !info?.releaseNotes
+    ? ''
+    : typeof info.releaseNotes === 'string'
+      ? info.releaseNotes
+      : info.releaseNotes?.map?.((n) => (typeof n === 'string' ? n : n?.note)).filter(Boolean).join('\n') ?? '';
+
+  const fileSizeMb = info?.files?.[0]?.size != null
+    ? (info.files[0].size / (1024 * 1024)).toFixed(1)
+    : null;
+
+  const statusLabel =
+    dlState === 'downloaded' ? 'Ready to install'
+    : dlState === 'downloading' ? 'Downloading'
+    : 'Update Available';
+
   return (
     <AnimatePresence>
-      {visible && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="absolute inset-0 z-50 flex items-center justify-center"
-          style={{ backdropFilter: 'blur(12px)', backgroundColor: 'rgba(0,0,0,0.75)' }}
-          onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+  {visible && (
+    <motion.div
+      key="update-fs-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-6"
+      style={{
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        backgroundColor: 'rgba(0,0,0,0.75)',
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && dlState !== 'downloading') onClose();
+      }}
+    >
+      <motion.div
+        key="update-fs-card"
+        initial={{ scale: 0.95, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.97, opacity: 0, y: 12 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+        className="relative z-10 flex w-full max-w-[560px] max-h-[min(90vh,780px)] flex-col overflow-hidden rounded-2xl border shadow-2xl"
+        style={{
+          backgroundColor: theme.surface,
+          borderColor: theme.border,
+        }}
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Header */}
+        <div
+          className="flex items-start justify-between gap-4 p-6 pb-5"
+          style={{ borderBottom: `0.5px solid ${theme.border}` }}
         >
-          <motion.div
-            initial={{ scale: 0.94, opacity: 0, y: 24 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.94, opacity: 0, y: 24 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-            className="relative overflow-hidden rounded-[2rem] border shadow-2xl"
-            style={{ width: 480, backgroundColor: `${theme.surface}f2`, borderColor: theme.border }}
-          >
-            {/* Glow blob */}
+          <div className="flex items-start gap-3.5">
             <div
-              className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full blur-3xl opacity-20"
-              style={{ backgroundColor: accent.hex }}
-            />
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+              style={{ backgroundColor: `${accent.hex}18` }}
+            >
+              <FontAwesomeIcon
+                icon={dlState === 'downloaded' ? faCircleCheck : faCircleArrowUp}
+                style={{ color: accent.hex, fontSize: 18 }}
+              />
+            </div>
+            <div className="min-w-0 pt-0.5">
+              <p
+                className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-1"
+                style={{ color: accent.hex }}
+              >
+                {statusLabel}
+              </p>
+              <h2
+                className="text-[18px] font-semibold leading-tight truncate"
+                style={{ color: theme.text }}
+              >
+                Zyphor Launcher{info?.version ? ` v${info.version}` : ''}
+              </h2>
+              {info?.tagline ? (
+                <p className="text-[13px] mt-0.5 truncate" style={{ color: `${theme.text}60` }}>
+                  {info.tagline}
+                </p>
+              ) : (
+                <p className="text-[13px] mt-0.5" style={{ color: `${theme.text}55` }}>
+                  A newer build is ready for your launcher.
+                </p>
+              )}
+            </div>
+          </div>
 
-            <div className="relative p-8">
-              {/* Header */}
-              <div className="flex items-start justify-between gap-4 mb-6">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: `${accent.hex}22` }}
-                  >
-                    <FontAwesomeIcon icon={faCircleArrowUp} style={{ color: accent.hex }} className="text-lg" />
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: accent.hex }}>
-                      Update Available
-                    </p>
-                    <h2 className="text-xl font-bold text-bone mt-0.5">
-                      Zyphor Launcher {info?.version ? `v${info.version}` : ''}
-                    </h2>
-                  </div>
-                </div>
-                <button
-                  onClick={onClose}
-                  className="rounded-lg p-1.5 text-ash/40 transition hover:bg-white/10 hover:text-bone"
-                >
-                  <FontAwesomeIcon icon={faXmark} />
-                </button>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={dlState === 'downloading'}
+            className="rounded-lg p-1.5 transition hover:bg-white/8 disabled:opacity-30"
+            style={{ color: `${theme.text}55` }}
+          >
+            <FontAwesomeIcon icon={faXmark} style={{ fontSize: 15 }} />
+          </button>
+        </div>
+
+        {/* Version chips + file size */}
+        {(info?.version || fileSizeMb) && (
+          <div
+            className="flex items-center gap-2 px-6 py-3.5"
+            style={{ borderBottom: `0.5px solid ${theme.border}` }}
+          >
+            {info?.currentVersion && (
+              <span
+                className="rounded-md px-2 py-0.5 text-[11px] font-mono"
+                style={{ backgroundColor: `${theme.text}0e`, color: `${theme.text}55` }}
+              >
+                v{info.currentVersion}
+              </span>
+            )}
+            {info?.currentVersion && info?.version && (
+              <span className="text-[11px]" style={{ color: `${theme.text}30` }}>→</span>
+            )}
+            {info?.version && (
+              <span
+                className="rounded-md px-2 py-0.5 text-[11px] font-mono font-semibold"
+                style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}
+              >
+                v{info.version}
+              </span>
+            )}
+            {fileSizeMb && (
+              <span className="text-[11px] ml-1" style={{ color: `${theme.text}40` }}>
+                {fileSizeMb} MB
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Scrollable body */}
+        <div className="relative min-h-0 flex-1 overflow-y-auto p-6">
+
+          {/* Highlights */}
+          {highlights && dlState === 'idle' && (
+            <div className="mb-5">
+              <p
+                className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-3"
+                style={{ color: `${theme.text}40` }}
+              >
+                What's new
+              </p>
+              <ul className="flex flex-col gap-2.5">
+                {highlights.slice(0, 5).map((h, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-[13px]" style={{ color: `${theme.text}80` }}>
+                    <span className="mt-[3px] shrink-0 text-[10px]" style={{ color: `${theme.text}30` }}>—</span>
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Notes fallback */}
+          {notesText && !highlights && (
+            <div className="mb-5">
+              <p
+                className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-3"
+                style={{ color: `${theme.text}40` }}
+              >
+                What's new
+              </p>
+              <p
+                className="text-[13px] leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto"
+                style={{ color: `${theme.text}70` }}
+              >
+                {notesText}
+              </p>
+            </div>
+          )}
+
+          {/* Download progress */}
+          {dlState === 'downloading' && (
+            <div className="mb-5">
+              <div className="flex justify-between text-[12px] mb-2" style={{ color: `${theme.text}55` }}>
+                <span>Downloading update…</span>
+                <span className="font-mono font-semibold" style={{ color: accent.hex }}>
+                  {Math.round(progress)}%
+                </span>
               </div>
-
-              {/* Release notes */}
-              {info?.releaseNotes && (
-                <div
-                  className="mb-6 rounded-xl border p-4 text-[12px] text-ash/70 leading-relaxed max-h-32 overflow-y-auto"
-                  style={{ borderColor: theme.border, backgroundColor: `${theme.bg}88` }}
-                >
-                  {typeof info.releaseNotes === 'string'
-                    ? info.releaseNotes
-                    : info.releaseNotes?.map?.((n) => n.note).join(' ') ?? ''}
-                </div>
-              )}
-
-              {/* Progress bar */}
-              {dlState === 'downloading' && (
-                <div className="mb-6">
-                  <div className="flex justify-between text-[11px] text-ash/50 mb-1.5">
-                    <span>Downloading update...</span>
-                    <span>{progress}%</span>
-                  </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: theme.border }}>
-                    <motion.div
-                      className="h-full rounded-full"
-                      style={{ backgroundColor: accent.hex }}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${progress}%` }}
-                      transition={{ ease: 'linear', duration: 0.3 }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Downloaded badge */}
-              {dlState === 'downloaded' && (
-                <div
-                  className="mb-6 flex items-center gap-2 rounded-xl border px-4 py-3 text-[12px]"
-                  style={{ borderColor: `${accent.hex}44`, backgroundColor: `${accent.hex}11` }}
-                >
-                  <FontAwesomeIcon icon={faCircleCheck} style={{ color: accent.hex }} />
-                  <span style={{ color: accent.hex }}>Download complete &mdash; ready to install</span>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex items-center justify-end gap-3">
-                <button
-                  onClick={onClose}
-                  className="rounded-xl px-4 py-2 text-[13px] font-medium text-ash/60 transition hover:bg-white/5 hover:text-bone"
-                >
-                  {dlState === 'idle' ? 'Remind me later' : 'Close'}
-                </button>
-
-                {dlState === 'idle' && (
-                  <button
-                    onClick={onDownload}
-                    className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]"
-                    style={{ backgroundColor: accent.hex, color: accent.on }}
-                  >
-                    Download update
-                  </button>
-                )}
-
-                {dlState === 'downloading' && (
-                  <button
-                    disabled
-                    className="rounded-xl px-5 py-2 text-[13px] font-semibold opacity-50 cursor-not-allowed"
-                    style={{ backgroundColor: accent.hex, color: accent.on }}
-                  >
-                    Downloading... {progress}%
-                  </button>
-                )}
-
-                {dlState === 'downloaded' && (
-                  <button
-                    onClick={onInstall}
-                    className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]"
-                    style={{ backgroundColor: accent.hex, color: accent.on }}
-                  >
-                    Restart &amp; install
-                  </button>
-                )}
+              <div
+                className="h-[3px] w-full overflow-hidden rounded-full"
+                style={{ backgroundColor: `${theme.text}12` }}
+              >
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ backgroundColor: accent.hex }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ ease: 'linear', duration: 0.3 }}
+                />
               </div>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          )}
+
+          {/* Downloaded banner */}
+          {dlState === 'downloaded' && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-5 flex items-center gap-2.5 rounded-xl px-4 py-3 text-[13px]"
+              style={{
+                backgroundColor: `${accent.hex}12`,
+                border: `0.5px solid ${accent.hex}33`,
+                color: accent.hex,
+              }}
+            >
+              <FontAwesomeIcon icon={faCircleCheck} style={{ fontSize: 14, flexShrink: 0 }} />
+              Download complete — ready to install.
+            </motion.div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div
+          className="flex items-center justify-end gap-2 px-6 py-4"
+          style={{ borderTop: `0.5px solid ${theme.border}` }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={dlState === 'downloading'}
+            className="rounded-xl px-4 py-2 text-[13px] font-medium transition hover:bg-white/6 disabled:opacity-30"
+            style={{ color: `${theme.text}60` }}
+          >
+            {dlState === 'idle' ? 'Remind me later' : 'Close'}
+          </button>
+
+          {dlState === 'idle' && (
+            <button
+              type="button"
+              onClick={onDownload}
+              className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]"
+              style={{ backgroundColor: accent.hex, color: accent.on }}
+            >
+              Download update
+            </button>
+          )}
+
+          {dlState === 'downloading' && (
+            <button
+              type="button"
+              disabled
+              className="rounded-xl px-5 py-2 text-[13px] font-semibold opacity-45 cursor-not-allowed"
+              style={{ backgroundColor: accent.hex, color: accent.on }}
+            >
+              Downloading… {Math.round(progress)}%
+            </button>
+          )}
+
+          {dlState === 'downloaded' && (
+            <button
+              type="button"
+              onClick={onInstall}
+              className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]"
+              style={{ backgroundColor: accent.hex, color: accent.on }}
+            >
+              Restart &amp; install
+            </button>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
   );
 }
+
 
 function StatusChip({ icon, label, tone, onClick }) {
   return (
