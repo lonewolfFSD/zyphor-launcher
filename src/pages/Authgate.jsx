@@ -30,6 +30,7 @@ import FIREFLY_FRAME from './videos/frames/firefly frame.png'
 import LUCY_FRAME    from './videos/frames/lucy frame.png'
 
 import Logo from '../Logo/icon.png';
+import Trans from '../Logo/trans-logo.png';
 
 const PRESET_VIDEO_MAP = {
   'preset-gaming':           VIDEO_GAMING,
@@ -109,7 +110,7 @@ function CountdownRing({ secondsLeft, total, color }) {
         gap: 1,
       }}>
         <span style={{
-          fontFamily: "'Space Grotesk', monospace",
+          fontFamily: "'Manrope', monospace",
           fontSize: 13,
           fontWeight: 700,
           letterSpacing: '-0.02em',
@@ -129,21 +130,11 @@ export default function AuthGate({ onAuthSuccess }) {
   const accent = ACCENTS[settings?.accent] || ACCENTS.bulb
 
   const motionOn            = settings ? settings.animations && !settings.reduceMotion : true
-  const backgroundVideoType = settings?.backgroundVideoType ?? 'default'
-  const backgroundQuality   = settings?.backgroundQuality   ?? 'hd'
 
-  const backgroundVideoSrc =
-    backgroundVideoType === 'none' || backgroundQuality === 'static'
-      ? null
-      : backgroundVideoType === 'custom'
-      ? settings?.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : null
-      : backgroundVideoType?.startsWith('preset-')
-      ? PRESET_VIDEO_MAP[backgroundVideoType] ?? DEFAULT_BACKGROUND_VIDEO
-      : DEFAULT_BACKGROUND_VIDEO
-
-  const bgStaticPoster = backgroundQuality === 'static'
-    ? (PRESET_STATIC_MAP[backgroundVideoType] ?? null)
-    : null
+  // AuthGate always uses the default ambient video — it's the first thing
+  // the user sees, so it should be consistent regardless of their theme choice.
+  const backgroundVideoSrc  = DEFAULT_BACKGROUND_VIDEO
+  const bgStaticPoster      = null
 
   const [status,      setStatus]      = useState('idle')
   const [errorMsg,    setErrorMsg]    = useState('')
@@ -158,10 +149,10 @@ export default function AuthGate({ onAuthSuccess }) {
 
   useEffect(() => {
     const el = videoRef.current
-    if (!el || backgroundQuality === 'static') return
+    if (!el) return
     if (motionOn) el.play().catch(() => {})
     else el.pause()
-  }, [motionOn, backgroundQuality])
+  }, [motionOn])
 
   useEffect(() => {
     if (status !== 'waiting') return
@@ -253,12 +244,12 @@ export default function AuthGate({ onAuthSuccess }) {
     setDots('')
   }
 
-  /* ── Design tokens ── */
-  const A  = accent.hex   // accent color
-  const BG = '#0a0a0c'    // near-black base
-  const S  = '#111115'    // panel surface
+  /* ── Design tokens — always OLED, always white CTA ── */
+  const A  = '#ffffff'                  // button / accent → white
+  const BG = '#000000'                  // OLED black base
+  const S  = '#0a0a0a'                  // panel surface
   const B  = 'rgba(255,255,255,0.07)'  // border
-  const T  = '#ffffff'    // text
+  const T  = '#ffffff'                  // text
   const M  = 'rgba(255,255,255,0.45)'  // muted text
 
   return (
@@ -266,12 +257,12 @@ export default function AuthGate({ onAuthSuccess }) {
       position: 'fixed', inset: 0,
       backgroundColor: BG,
       display: 'flex',
-      fontFamily: "'Inter', system-ui, sans-serif",
+      fontFamily: "'Manrope', 'Inter', system-ui, sans-serif",
       overflow: 'hidden',
     }}>
       {/* ── Google Fonts ── */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { display: none; }
       `}</style>
@@ -285,47 +276,17 @@ export default function AuthGate({ onAuthSuccess }) {
         overflow: 'hidden',
         minWidth: 0,
       }}>
-        {/* Video / static background */}
-        {backgroundQuality === 'static' && bgStaticPoster ? (
-          <div style={{
+        {/* Always the default ambient video — consistent first impression */}
+        <video
+          ref={videoRef}
+          src={backgroundVideoSrc}
+          autoPlay muted loop playsInline
+          style={{
             position: 'absolute', inset: 0,
-            backgroundImage: `url(${bgStaticPoster})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }} />
-        ) : backgroundQuality === 'sd' && backgroundVideoSrc ? (
-          <video
-            ref={videoRef}
-            src={backgroundVideoSrc}
-            autoPlay muted loop playsInline
-            style={{
-              position: 'absolute', inset: 0,
-              width: '40%', height: '40%',
-              objectFit: 'cover',
-              transform: 'scale(2.6)',
-              transformOrigin: 'top left',
-            }}
-          />
-        ) : backgroundVideoSrc ? (
-          <video
-            ref={videoRef}
-            src={backgroundVideoSrc}
-            autoPlay muted loop playsInline
-            style={{
-              position: 'absolute', inset: 0,
-              width: '100%', height: '100%',
-              objectFit: 'cover',
-            }}
-          />
-        ) : (
-          /* Fallback: abstract gradient field */
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: `radial-gradient(ellipse at 30% 60%, ${A}22 0%, transparent 60%),
-                         radial-gradient(ellipse at 80% 20%, #3b1d8a18 0%, transparent 55%),
-                         linear-gradient(135deg, #0d0d12 0%, #0a0a0c 100%)`,
-          }} />
-        )}
+            width: '100%', height: '100%',
+            objectFit: 'cover',
+          }}
+        />
 
         {/* Gradient vignette — right edge fades into panel */}
         <div style={{
@@ -333,6 +294,16 @@ export default function AuthGate({ onAuthSuccess }) {
           background: `linear-gradient(to right, transparent 40%, ${BG} 100%),
                        linear-gradient(to top, ${BG}cc 0%, transparent 40%)`,
         }} />
+
+        {/* Logo centered */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          zIndex: 2,
+        }}>
+          <img src={Trans} style={{ width: 430, opacity: 0.95 }} />
+        </div>
 
         
       </div>
@@ -377,23 +348,23 @@ export default function AuthGate({ onAuthSuccess }) {
         >
 
           <div className='flex gap-3'>
-            <img className='w-[70px]' src={Logo} />
+            <img className='w-[70px] h-[70px]' src={Logo} />
 
           
 
           <span>
             <h1 style={{
-            fontFamily: "Manrope",
+            fontFamily: "Apple Garamond",
             marginTop: 4,
-            fontSize: 36, fontWeight: 700,
-            letterSpacing: '-0.03em',
+            fontSize: 40, fontWeight: 500,
+            letterSpacing: '0.01em',
             color: T,
             lineHeight: 1,
           }}>
             Zyphor Launcher
           </h1>
                     <p style={{
-            fontFamily: "'Space Grotesk', sans-serif",
+            fontFamily: "Apple Garamond",
             fontSize: 10, fontWeight: 600,
             letterSpacing: '0.22em',
             textTransform: 'uppercase',
@@ -427,9 +398,10 @@ export default function AuthGate({ onAuthSuccess }) {
               style={{ display: 'flex', flexDirection: 'column', gap: 24 }}
             >
               <p style={{
-                fontSize: 14.5, lineHeight: 1.7,
+                fontSize: 18.5, lineHeight: 1.3,
                 color: M,
-                fontWeight: 400,
+                fontFamily: "Apple Garamond",
+                fontWeight: 200,
               }}>
                 Sign in or create an account on the Zyphor website. The launcher connects automatically once you're done.
               </p>
@@ -443,16 +415,16 @@ export default function AuthGate({ onAuthSuccess }) {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   width: '100%',
-                  padding: '16px 28px',
+                  padding: '15px 28px',
                   borderRadius: 16,
                   border: 'none',
                   cursor: 'pointer',
                   backgroundColor: A,
-                  color: '#ffffff',
-                  fontFamily: "'Space Grotesk', sans-serif",
-                  fontSize: 15,
+                  color: '#000000',
+                  fontFamily: "Apple Garamond",
+                  fontSize: 17,
                   fontWeight: 600,
-                  letterSpacing: '0.01em',
+                  letterSpacing: '0.02em',
                   transition: 'box-shadow 0.2s',
                 }}
               >
@@ -460,19 +432,19 @@ export default function AuthGate({ onAuthSuccess }) {
                   
                   Sign in through Zyphor Portal
                 </span>
-                <ArrowRight size={15} strokeWidth={2.2} style={{ opacity: 0.7 }} />
+                <ArrowRight size={18} strokeWidth={2.2} style={{ opacity: 0.7 }} />
               </motion.button>
 
               {/* Divider hint */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.06em' }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.06em', fontFamily: "Apple Garamond", }}>
                   BROWSER AUTHENTICATION
                 </span>
                 <div style={{ flex: 1, height: 1, backgroundColor: B }} />
               </div>
 
-              <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.22)', marginTop: -10, lineHeight: 1.65, textAlign: 'left' }}>
+              <p style={{ fontSize: 15.5, color: 'rgba(255,255,255,0.22)', marginTop: -10, lineHeight: 1.2, textAlign: 'left', fontFamily: "Apple Garamond", }}>
                 A browser window will open. Sign in there — the launcher detects it automatically.
               </p>
             </motion.div>
@@ -499,13 +471,13 @@ export default function AuthGate({ onAuthSuccess }) {
                 <ArcSpinner size={28} color={A} thickness={2.5} />
                 <div>
                   <p style={{
-                    fontFamily: "'Space Grotesk', sans-serif",
-                    fontSize: 13, fontWeight: 600, color: T,
+                    fontFamily: "Apple Garamond",
+                    fontSize: 16, fontWeight: 400, color: T,
                     lineHeight: 1,
                   }}>
                     Waiting for browser{dots}
                   </p>
-                  <p style={{ fontSize: 11, color: M, marginTop: 4, lineHeight: 1.4 }}>
+                  <p style={{ fontSize: 14, color: M, marginTop: 4, lineHeight: 1.4, fontFamily: "Apple Garamond", }}>
                     Complete sign-in on the website
                   </p>
                 </div>
@@ -536,10 +508,10 @@ export default function AuthGate({ onAuthSuccess }) {
                   }}>
                     {step.done
                       ? <span style={{ fontSize: 10, color: A, marginTop: 1 }}>✓</span>
-                      : <span style={{ fontSize: 10, color: M, marginTop: 1, fontFamily: 'monospace' }}>{step.n}</span>
+                      : <span style={{ fontSize: 10, color: M, marginTop: 1, fontFamily: "Apple Garamond", }}>{step.n}</span>
                     }
                   </div>
-                  <span style={{ fontSize: 13, color: step.done ? M : T }}>{step.t}</span>
+                  <span style={{ fontSize: 15.5, fontFamily: "Apple Garamond", color: step.done ? M : T }}>{step.t}</span>
                 </div>
               ))}
 
@@ -550,30 +522,32 @@ export default function AuthGate({ onAuthSuccess }) {
                   style={{
                     flex: 1,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    padding: '14px 14px',
+                    padding: '16px 14px',
                     borderRadius: 16,
                     border: `1px solid ${B}`,
+                    fontFamily: "Apple Garamond",
                     backgroundColor: 'transparent',
                     color: T,
-                    fontSize: 12.5, fontWeight: 500,
+                    fontSize: 15, fontWeight: 500,
                     cursor: 'pointer',
                     transition: 'background 0.15s',
                   }}
                   onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
                   onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
-                  <RefreshCw size={13} strokeWidth={2.2} />
+                  <RefreshCw size={15} strokeWidth={2.2} />
                   Reopen browser
                 </button>
                 <button
                   onClick={handleRetry}
                   style={{
-                    padding: '14px 16px',
+                    padding: '14px 28px',
                     borderRadius: 10,
                     border: `1px solid ${B}`,
                     backgroundColor: 'transparent',
+                    fontFamily: "Apple Garamond",
                     color: M,
-                    fontSize: 12.5, fontWeight: 500,
+                    fontSize: 15, fontWeight: 500,
                     cursor: 'pointer',
                     transition: 'color 0.15s',
                   }}
@@ -603,7 +577,7 @@ export default function AuthGate({ onAuthSuccess }) {
               <ArcSpinner size={44} color={A} thickness={2.5} />
               <div style={{ textAlign: 'center' }}>
                 <p style={{
-                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontFamily: "'Manrope', sans-serif",
                   fontSize: 14, fontWeight: 600, color: T,
                   marginBottom: 4,
                 }}>
@@ -660,8 +634,8 @@ export default function AuthGate({ onAuthSuccess }) {
                   border: 'none',
                   cursor: 'pointer',
                   backgroundColor: A,
-                  color: '#ffffff',
-                  fontFamily: "'Space Grotesk', sans-serif",
+                  color: '#000000',
+                  fontFamily: "'Manrope', sans-serif",
                   fontSize: 14,
                   fontWeight: 600,
                   boxShadow: `0 4px 20px ${A}40`,
@@ -707,7 +681,7 @@ export default function AuthGate({ onAuthSuccess }) {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}
         >
-          <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.06em' }}>
+          <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.06em', opacity: '0' }}>
             ZYPHOR LAUNCHER
           </span>
           <span style={{
@@ -716,7 +690,7 @@ export default function AuthGate({ onAuthSuccess }) {
             fontFamily: 'monospace',
             letterSpacing: '0.04em',
           }}>
-            v1.0
+            v1.1.6
           </span>
         </motion.div>
       </motion.div>

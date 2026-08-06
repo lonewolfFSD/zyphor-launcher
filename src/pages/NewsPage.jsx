@@ -263,7 +263,7 @@ const fetchReleases = useCallback(async () => {
         </div>
 
         {/* Cards grid */}
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5">
           <AnimatePresence mode="wait">
             {loading ? (
               <motion.div key="skeletons" className="contents" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
@@ -379,10 +379,10 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
         </div>
 
         {entry.tags?.length > 0 && (
-          <div className="mt-1 flex flex-row gap-2">
+          <div className="mt-2 flex flex-row gap-2">
             {isLatest && (
               <span
-                className="rounded-lg border border-transparent px-3 py-1 text-[9px] font-bold uppercase tracking-wide"
+                className="rounded-lg border border-transparent px-3 py-[5px] text-[9px] font-bold uppercase tracking-wide"
                 style={{ backgroundColor: accent.hex, color: accent.on }}
               >
                 Latest
@@ -391,7 +391,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
             {entry.tags.map((tag) => (
               <span
                 key={tag}
-                className="rounded-lg border px-3 py-1 text-[9px] font-medium uppercase tracking-wide"
+                className="rounded-lg border px-3 py-[5px] text-[9px] font-medium uppercase tracking-wide"
                 style={{ borderColor: `${accent.hex}4d`, color: accent.hex }}
               >
                 {tag}
@@ -403,7 +403,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
         {/* Preview notes */}
         {/* Release Information */}
 <div
-  className="mt-4 overflow-hidden rounded-2xl border"
+  className="mb-8 overflow-hidden rounded-2xl mt-4 border"
   style={{ borderColor: theme.border }}
 >
   <div
@@ -415,7 +415,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
     </h3>
 
     <span
-      className="rounded-md px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide"
+      className="rounded-lg px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide"
       style={{
         background:
           entry.title.toLowerCase().includes('alpha')
@@ -439,27 +439,27 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
     </span>
   </div>
 
-  <div className="space-y-4 px-5 py-5">
-    <div className="flex flex-col font-semibold text-[13px]">
+  <div className="space-y-4 px-5 py-4">
+    <div className="flex flex-col gap-y-2 text-xs">
       <span className="text-ash/50">Recommendation</span>
 
-      <span className="text-bone/80 font-medium text-[13px] mb-2">
-        {isLatest ? (
-          'This is the latest release and is recommended for all users.'
-        ) : entry.tags.includes('major') ? (
-          'This is a stable major release. While fully supported, we always recommend using the latest available version.'
-        ) : entry.title.toLowerCase().includes('alpha') ? (
-          'Experimental build. Not recommended for everyday use.'
-        ) : entry.title.toLowerCase().includes('beta') ? (
-          'Preview build. Use with caution as bugs or incomplete features may still exist.'
-        ) : (
-          'Stable release. Safe to use, though updating to the latest version is always recommended.'
-        )}
-      </span>
+<span className="text-bone/80 font-medium text-[12px] mb-2">
+  {isLatest ? (
+    'This is the latest release and is recommended for all users.'
+  ) : entry.tags.includes('major') ? (
+    'This is a stable major release. While fully supported, we always recommend using the latest available version.'
+  ) : entry.title.toLowerCase().includes('alpha') ? (
+    'Experimental build. Not recommended for everyday use.'
+  ) : entry.title.toLowerCase().includes('beta') ? (
+    'Preview build. Use with caution as bugs or incomplete features may still exist.'
+  ) : (
+    'Stable release. Safe to use, though updating to the latest version is always recommended.'
+  )}
+</span>
 
-      <span className="text-ash/50 font-semibold text-[13px]">Download</span>
+      <span className="text-ash/50">Download</span>
 
-      <span className="text-bone/80 font-medium text-[13px]">
+      <span className="text-bone/80">
         This version can be downloaded from the official GitHub Releases page.
       </span>
     </div>
@@ -468,7 +468,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
       href={entry.url}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold transition-all hover:scale-[1.02]"
+      className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-[11px] font-semibold transition-all hover:scale-[1.02]"
       style={{
         borderColor: `${accent.hex}55`,
         color: accent.hex,
@@ -479,9 +479,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
     </a>
   </div>
 </div>
-
-        {/* Spacer + button pinned to bottom */}
-        <div className="mt-auto pt-4">
+<div className="">
           <button
             type="button"
             onClick={onOpen}
@@ -491,7 +489,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
             View Full Notes
           </button>
         </div>
-      </div>
+</div>
     </motion.article>
   );
 }
