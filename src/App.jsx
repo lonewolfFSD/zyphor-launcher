@@ -13,9 +13,9 @@ import FriendsPage from './pages/FriendsPage.jsx';
 import { useSettings } from './hooks/useSettings.js';
 import { loadUid, clearSession } from './lib/authSession.js';
 import ScreenshotsPage from './pages/ScreenshotsPage.jsx';
-import DEFAULT_BACKGROUND_VIDEO from './pages/videos/test_video.mp4';
-import PageShell from './PageShell.jsx';
 import Logo from './Logo/icon.png';
+
+import DEFAULT_BACKGROUND_VIDEO from './pages/videos/test_video.mp4';
 
 // ─── Splash screen ────────────────────────────────────────────────────────────
 const SPLASH_MESSAGES = [
@@ -35,7 +35,6 @@ function SplashScreen() {
     videoRef.current?.play().catch(() => {});
   }, []);
 
-  // Cycle through messages: fade out → swap → fade in
   useEffect(() => {
     const cycle = () => {
       setMsgVisible(false);
@@ -55,7 +54,6 @@ function SplashScreen() {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.7, ease: 'easeInOut' }}
     >
-      {/* Background video */}
       <video
         ref={videoRef}
         src={DEFAULT_BACKGROUND_VIDEO}
@@ -64,8 +62,6 @@ function SplashScreen() {
         playsInline
         className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-30"
       />
-
-      {/* Vignette */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -73,10 +69,7 @@ function SplashScreen() {
             'radial-gradient(ellipse 70% 70% at 50% 50%, transparent 30%, rgba(0,0,0,0.85) 100%)',
         }}
       />
-
-      {/* Content */}
       <div className="relative flex flex-col items-center gap-8">
-        {/* Logo */}
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -94,8 +87,6 @@ function SplashScreen() {
             onError={(e) => { e.currentTarget.style.display = 'none'; }}
           />
         </motion.div>
-
-        {/* Name + version */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -114,8 +105,6 @@ function SplashScreen() {
             v1.1.6
           </p>
         </motion.div>
-
-        {/* Spinner + cycling status text */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -130,8 +119,6 @@ function SplashScreen() {
             <circle cx="11" cy="11" r="9" stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
             <path d="M11 2a9 9 0 0 1 9 9" stroke="white" strokeWidth="2" strokeLinecap="round" />
           </svg>
-
-          {/* Status message */}
           <p
             className="text-[10px] uppercase tracking-[0.22em] transition-opacity duration-300"
             style={{
@@ -150,17 +137,15 @@ function SplashScreen() {
 }
 
 const PAGES = {
-  home:     HomePage,
-  news:     NewsPage,
-  friends:  FriendsPage,
-  settings: SettingsPage,
-  achievements:  AchievementsPage,
-  screenshots:   ScreenshotsPage
+  home:         HomePage,
+  news:         NewsPage,
+  friends:      FriendsPage,
+  settings:     SettingsPage,
+  achievements: AchievementsPage,
+  screenshots:  ScreenshotsPage
 };
 
 const MIN_SPLASH_MS = 8000;
-
-
 
 export default function App() {
   const { settings } = useSettings();
@@ -169,21 +154,18 @@ export default function App() {
   const [minSplashDone, setMinSplashDone] = useState(false);
   const [activePage, setActivePage] = useState('home');
 
-  // Enforce minimum splash duration
   useEffect(() => {
     const id = setTimeout(() => setMinSplashDone(true), MIN_SPLASH_MS);
     return () => clearTimeout(id);
   }, []);
 
-  // After the existing MIN_SPLASH_MS useEffect, add:
-useEffect(() => {
-  if (!minSplashDone || checking || !settings || !profile) return;
-  if (settings.fullscreenOnLaunch) {
-    window.launcherAPI?.setFullscreen?.(true);
-  }
-}, [minSplashDone, checking, settings, profile]);
+  useEffect(() => {
+    if (!minSplashDone || checking || !settings || !profile) return;
+    if (settings.fullscreenOnLaunch) {
+      window.launcherAPI?.setFullscreen?.(true);
+    }
+  }, [minSplashDone, checking, settings, profile]);
 
-  // Auto-login: only stores uid, always fetches fresh profile from Firestore
   useEffect(() => {
     if (!settings) return;
 
@@ -220,7 +202,7 @@ useEffect(() => {
           isVip:        Boolean(d.isVip),
           hasGame: Boolean(d.hasGame || d.steamOwnsGame),
           steamOwnsGame: Boolean(d.steamOwnsGame),
-          steamId:      d.steamId      ?? '',   // ← add this
+          steamId:      d.steamId      ?? '',
           rememberMe:   Boolean(d.rememberMe),
           totpLinked:   Boolean(d.totpLinked),
           hasPasskey:   Boolean(d.hasPasskey),
@@ -249,9 +231,8 @@ useEffect(() => {
     return <AuthGate onAuthSuccess={setProfile} />;
   }
 
-  // Let the nav highlight paint first, then swap the page on the next frame
   function handleNavigate(page) {
-    requestAnimationFrame(() => setActivePage(page));
+    setActivePage(page);
   }
 
   const ActivePageComponent = PAGES[activePage];
@@ -271,11 +252,18 @@ useEffect(() => {
           }}
         />
         <main className="min-h-0 flex-1 overflow-hidden relative">
-  {Object.entries(PAGES).map(([id, Page]) => (
-    <PageShell key={id} isActive={activePage === id}>
-      <Page profile={profile} />
-    </PageShell>
-  ))}
+  <AnimatePresence mode="wait">
+    <motion.div
+      key={activePage}
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      transition={{ duration: 0.2 }}
+      className="h-full w-full"
+    >
+      <ActivePageComponent profile={profile} />
+    </motion.div>
+  </AnimatePresence>
 </main>
       </div>
     </div>

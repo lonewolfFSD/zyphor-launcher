@@ -211,7 +211,7 @@ export default function FriendsPage({ profile }) {
 
   return (
     <div
-      className="h-full flex flex-col gap-4 overflow-hidden rounded-3xl border p-5"
+      className="h-full flex flex-col gap-4 overflow-hidden rounded-3xl border p-5 backdrop-blur-sm"
       style={{ backgroundColor: `${theme.surface}cc`, borderColor: theme.border, color: theme.text }}
     >
       {/* Header */}
