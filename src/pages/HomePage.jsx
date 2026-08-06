@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
+
+gsap.registerPlugin(useGSAP);
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faPlay, faSquare, faXmark, faClock, faCircleCheck, faCircleArrowUp,
@@ -68,9 +72,148 @@ const fadeUp = {
   animate: { opacity: 1, y: 0 },
 };
 
+// Module-level: survives remounts so the skeleton + GSAP intro only run
+// once per app session, not every time the user navigates back to Home.
+let homeVisited = false;
+
 const placeholderNews = [
       
 ];
+
+/** Shared shimmer keyframes for home skeleton */
+const HP_SHIMMER_CSS = `
+@keyframes hp-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.hp-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.05) 40%,
+    rgba(255,255,255,0.10) 50%,
+    rgba(255,255,255,0.05) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: hp-shimmer 1.5s ease-in-out infinite;
+}
+`;
+
+function Bone({ className = '', style = {}, theme, accent }) {
+  return (
+    <div
+      className={`hp-skel relative overflow-hidden ${className}`}
+      style={{
+        backgroundColor: theme.surface,
+        borderColor: theme.border,
+        ...style,
+      }}
+    >
+      <div className="absolute inset-0 hp-shimmer" />
+    </div>
+  );
+}
+
+/**
+ * Full-page skeleton that mirrors the Home layout.
+ * GSAP staggers blocks in on mount; Framer handles the fade-out when ready.
+ */
+function HomeSkeleton({ theme, accent }) {
+  const skelRef = useRef(null);
+
+  useGSAP(() => {
+    if (!skelRef.current) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        '.hp-skel',
+        { opacity: 0, y: 14 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.4,
+          stagger: 0.06,
+          ease: 'power3.out',
+        }
+      );
+    }, skelRef);
+    return () => ctx.revert();
+  }, []);
+
+  return (
+    <motion.div
+      ref={skelRef}
+      key="hp-skeleton"
+      initial={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.35 } }}
+      className="absolute inset-0 z-30 flex gap-4 px-8 pointer-events-none"
+    >
+      <style>{HP_SHIMMER_CSS}</style>
+
+      {/* Left / center column */}
+      <div className="flex min-w-0 flex-1 flex-col gap-4 py-0">
+        {/* Status strip */}
+        <Bone
+          className="h-[52px] rounded-2xl border"
+          theme={theme}
+          style={{ backgroundColor: `${theme.surface}99` }}
+        />
+
+        {/* Banner */}
+        <Bone
+          className="h-64 rounded-[2.5em] border"
+          theme={theme}
+          style={{ backgroundColor: `${theme.surface}aa` }}
+        />
+
+        {/* Section title bar */}
+        <Bone
+          className="h-6 mt-4 rounded-lg"
+          theme={theme}
+          style={{ width: '55%', border: 'none' }}
+        />
+
+        {/* Game cards */}
+        <div className="flex gap-3 mt-1">
+          <Bone
+            className="h-[177px] w-[308px] rounded-3xl border"
+            theme={theme}
+          />
+          <Bone
+            className="h-[177px] w-[308px] rounded-3xl border border-dashed"
+            theme={theme}
+            style={{
+              borderColor: `${accent.hex}55`,
+              backgroundColor: `${theme.surface}80`,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Right sidebar */}
+      <div className="flex w-80 shrink-0 flex-col gap-3">
+        <Bone
+          className="h-12 rounded-[1.8em] border"
+          theme={theme}
+          style={{ backgroundColor: `${theme.surface}88` }}
+        />
+        {[0, 1, 2].map((i) => (
+          <Bone
+            key={i}
+            className="h-36 rounded-2xl border"
+            theme={theme}
+            style={{ backgroundColor: `${theme.surface}66` }}
+          />
+        ))}
+        <Bone
+          className="mt-auto h-16 rounded-2xl border"
+          theme={theme}
+          style={{ backgroundColor: `${theme.surface}55` }}
+        />
+      </div>
+    </motion.div>
+  );
+}
 
 export default function HomePage({ profile }) {
   const { settings } = useSettings();
@@ -113,6 +256,10 @@ export default function HomePage({ profile }) {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateDlState, setUpdateDlState] = useState('idle');
+  // Skip skeleton on revisits — show content immediately
+  const [pageReady, setPageReady] = useState(homeVisited);
+  const pageRef = useRef(null);
+  const didIntro = useRef(homeVisited);
 
   const fadeMask = {
   WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 100%)',
@@ -155,6 +302,18 @@ export default function HomePage({ profile }) {
     setUpdateStatus('current');
   }
 })(); }, []);
+
+  // Only delay on the very first visit so the GSAP intro can play.
+  // On revisits pageReady is already true (homeVisited=true), so this is a no-op.
+  useEffect(() => {
+    if (homeVisited) return;
+    const minMs = 700;
+    const t0 = Date.now();
+    let cancelled = false;
+    const left = Math.max(0, minMs - (Date.now() - t0));
+    const id = setTimeout(() => { if (!cancelled) setPageReady(true); }, left);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, []);
 
   // Wire electron-updater events
   useEffect(() => {
@@ -258,10 +417,31 @@ export default function HomePage({ profile }) {
     else if (launchState === 'idle') handlePlay();
   }
 
+  // GSAP intro when skeleton lifts — skipped on revisits
+  useGSAP(() => {
+    if (!pageReady || !pageRef.current || didIntro.current) return;
+    didIntro.current = true;
+    homeVisited = true; // persist across future remounts
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+      tl.from('.hp-status', { y: -16, opacity: 0, duration: 0.55 }, 0)
+        .from('.hp-banner', { y: 28, opacity: 0, scale: 0.98, duration: 0.7 }, 0.08)
+        .from('.hp-section-title', { y: 12, opacity: 0, duration: 0.45 }, 0.22)
+        .from('.hp-game-card', { y: 24, opacity: 0, duration: 0.5, stagger: 0.1 }, 0.28)
+        .from('.hp-aside', { x: 32, opacity: 0, duration: 0.6 }, 0.12);
+    }, pageRef);
+    return () => ctx.revert();
+  }, [pageReady]);
+
   return (
-    <div className="relative flex h-full gap-4 font-['Manrope']" style={{ color: 'inherit' }}>
+    <div ref={pageRef} className="relative flex h-full gap-4" style={{ color: 'inherit',fontFamily: 'Apple Garamond' }}>
       <BackgroundVideo key={backgroundVideoSrc + backgroundQuality} src={backgroundVideoSrc} active={motionOn} quality={backgroundQuality} videoStyle={bgVideoStyle} staticPoster={bgStaticPoster} />
       <AnimatedGrid accent={accent} theme={theme} active={motionOn} />
+
+      {/* Skeleton loading layer — GSAP stagger-in + shimmer; fades out when ready */}
+      <AnimatePresence>
+        {!pageReady && <HomeSkeleton theme={theme} accent={accent} />}
+      </AnimatePresence>
 
       {/* ── Update modal ── */}
       <UpdateModal
@@ -294,12 +474,13 @@ export default function HomePage({ profile }) {
       />
 
       {/* ── LEFT / CENTER ── */}
-      <div className="relative flex min-w-0 flex-1 flex-col gap-4 px-8 overflow-y-auto">
+      <div className="relative flex min-w-0 flex-1 flex-col gap-4 px-8 overflow-y-auto transition-opacity duration-300"
+        style={{ opacity: pageReady ? 1 : 0 }}>
         {/* Status strip: version / update / server — the stuff a launcher actually needs up top */}
         <motion.div
           {...fadeUp}
           transition={{ duration: 0.35 }}
-          className="flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-4 backdrop-blur-lg"
+          className="hp-status flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-4 backdrop-blur-lg"
           style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99` }}
         >
           <StatusChip
@@ -326,7 +507,7 @@ export default function HomePage({ profile }) {
         <motion.div
           {...fadeUp}
           transition={{ duration: 0.4, delay: 0.05 }}
-          className="relative h-72 shrink-0 overflow-hidden rounded-[2.5em] border backdrop-blur-md"
+          className="hp-banner relative h-64 3xl:h-70 shrink-0 overflow-hidden rounded-[2.5em] border backdrop-blur-md"
           style={{ borderColor: theme.border }}
         >
           <AnimatePresence mode="wait">
@@ -371,8 +552,8 @@ export default function HomePage({ profile }) {
 
           <div className="absolute bottom-0 left-0 right-0 py-10 px-12">
 
-            <h2 className="mt-1 font-['Manrope'] text-[1.8em] font-bold tracking-tight text-bone">
-              {banner?.title ?? 'No Updates Available'}
+            <h2 className="mt-1 text-[2.1em] font-medium text-bone">
+              {banner?.title ?? 'Welcome To Zyphor Launcher'}
             </h2>
             {banner?.date && <p className="mt-1 text-[13px] text-ash/60">{banner.date}</p>}
           </div>
@@ -398,14 +579,14 @@ export default function HomePage({ profile }) {
         </motion.div>
         <hr className="mt-4 border-ash/20" />
 
-        <h3 className='text-xl font-bold mt-4 font-["Manrope"]'>STAY: Possession • Obsession • Permanence <span className="text-ash/40 px-2">|</span> <span className="text-base font-extrabold" style={{ color: accent.hex }}>SERIES</span></h3>
+        <h3 className='hp-section-title text-2xl font-medium mt-4 font-["Apple Garamond"]'>STAY: Possession • Obsession • Permanence <span className="text-ash/40 px-0.5">|</span> <span className="text-xs font-extrabold font-[Manrope]" style={{ color: accent.hex }}>SERIES</span></h3>
 
         {/* Games */}
         <motion.div {...fadeUp} transition={{ delay: 0.1, duration: 0.4 }}>
           <div className="flex flex-wrap gap-3">
             {/* STAY card — poster + play or purchase on hover */}
 <div
-  className="group relative overflow-hidden rounded-3xl border-2  transition-colors duration-200"
+  className="hp-game-card group relative overflow-hidden rounded-3xl border-2  transition-colors duration-200"
   style={{
 width: 308,
 height: 177,
@@ -481,7 +662,7 @@ height: 177,
 
             {/* Coming-soon slot */}
             <div
-              className="flex h-[177px] w-[308px] flex-col items-center justify-center rounded-3xl border border-dashed backdrop-blur-glass text-ash/40 transition-colors hover:text-ash/60"
+              className="hp-game-card flex h-[177px] w-[308px] flex-col items-center justify-center rounded-3xl border border-dashed backdrop-blur-glass text-ash/40 transition-colors hover:text-ash/60"
               style={{ backgroundColor: `${theme.surface}90`, border: `2px dashed ${accent.hex}95` }}
             >
               <p className="text-sm font-['Manrope'] text-ash/40">More titles coming soon</p>
@@ -492,16 +673,15 @@ height: 177,
 
       {/* ── RIGHT: News sidebar ── */}
       <motion.aside
-  initial={{ opacity: 0 }}
-  animate={{ opacity: 1 }}
-  transition={{ delay: 0.12, duration: 0.4 }}
-  className="relative flex w-80 shrink-0 flex-col overflow-hidden rounded-[1.8em] border  backdrop-blur-lg"
-  style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99` }}
+  className="hp-aside relative flex w-80 shrink-0 flex-col overflow-hidden rounded-[1.8em] border  backdrop-blur-lg transition-opacity duration-300"
+  style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99`, opacity: pageReady ? 1 : 0 }}
 >
   {/* Header */}
   <div className="flex shrink-0 items-center gap-2.5 border-b px-6 py-3.5" style={{ borderColor: theme.border }}>
     <FontAwesomeIcon icon={faNewspaper} className="text-[20px] hidden" style={{ color: accent.hex }} />
-    <h2 className="font-['Manrope'] text-[15.5px] mt-0.5 font-bold tracking-tight text-bone">What's New?</h2>
+    <h2 className="text-[18.5px] mt-0.5 font-medium tracking-tight text-bone" style={{
+      fontFamily: 'Apple Garamond'
+    }}>What's New?</h2>
     <span
       className="ml-auto rounded-lg px-2 py-1 text-[10px] font-bold"
       style={{ backgroundColor: `${accent.hex}22`, color: `#${accent.hex}99`, border: `2px solid ${accent.hex}66` }}
@@ -512,7 +692,7 @@ height: 177,
 
   {/* News list */}
   <div className="flex-1 overflow-y-auto">
-    <div className="flex flex-col">
+    <div className="flex flex-col font-[Manrope]">
       {banners.map((item, i) => (
         <a
           key={item.id ?? i}
@@ -553,7 +733,7 @@ height: 177,
     {/* Promo card */}
     <div className="p-3">
       <div
-        className="overflow-hidden rounded-2xl border"
+        className="overflow-hidden rounded-2xl border font-[Manrope]"
         style={{ borderColor: theme.border, backgroundColor: `${theme.surface}60` }}
       >
         <div className="relative h-ful overflow-hidden">
@@ -653,11 +833,11 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
             {/* Right */}
             <div className="flex flex-1 flex-col justify-between p-7">
               <div>
-                <h2 className="text-xl font-bold text-bone">{gameName}</h2>
-                <p className="mt-1 text-sm text-ash/60">Preparing to launch via Steam…</p>
+                <h2 className="text-2xl font-medium text-bone mt-3">{gameName}</h2>
+                <p className="mt-1 text-base text-ash/60 ">Preparing to launch via Steam…</p>
 
                 {/* Clean spinner — no error state here */}
-                <div className="mt-6 flex items-center gap-3 text-sm text-ash/70">
+                <div className="mt-6 flex items-center gap-3 font-[Manrope] text-xs text-ash/70">
                   <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
                     <path d="M4 12a8 8 0 018-8v8z" fill="currentColor" className="opacity-75" />
@@ -668,10 +848,9 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
 
               <button
                 onClick={onCancel}
-                className="self-end rounded-xl px-5 py-2 text-sm font-semibold text-ash/60 transition hover:bg-white/5 hover:text-bone"
+                className="self-end rounded-xl font-[Manrope] px-5 py-3 text-xs font-semibold text-ash/60 transition hover:bg-white/5 hover:text-bone"
               >
-                <FontAwesomeIcon icon={faXmark} className="mr-2" />
-                Cancel
+                Cancel Launch
               </button>
             </div>
 
@@ -967,7 +1146,7 @@ function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose,
 function StatusChip({ icon, label, tone, onClick }) {
   return (
     <div
-      className={`flex items-center gap-1.5 px-1.5 text-[12px] font-medium ${onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+      className={`flex items-center gap-1.5 px-1.5 text-[11px] font-[Manrope] ${onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
       style={{ color: tone }}
       onClick={onClick}
     >

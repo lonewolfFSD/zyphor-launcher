@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -13,7 +13,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 
-const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.1.5';
+const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.1.6';
 
 function getWeatherMeta(code, isNight = false) {
   if (code === 0) return isNight ? { icon: faMoon, color: '#a5b4fc', label: 'Clear' } : { icon: faSun, color: '#fbbf24', label: 'Clear' };
@@ -102,6 +102,8 @@ export default function TitleBar({ profile }) {
   const vipGold     = '#FDB515';
   const accentColor = isVip ? vipGold : accent.hex;
 
+  const locRef = useRef(null);
+
   // Live clock
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -133,9 +135,10 @@ export default function TitleBar({ profile }) {
   // fired with resolvedLocation=null before the Firestore getDoc returned.
   useEffect(() => {
     const ac = new AbortController();
-    let loc = null;
 
     async function run() {
+      let loc = null;
+
       // 1. Resolve location string
       const propLoc = profile?.location ?? null;
       if (!BLANK.has(propLoc)) {
@@ -150,6 +153,7 @@ export default function TitleBar({ profile }) {
         } catch { /* fall through */ }
       }
       if (ac.signal.aborted) return;
+      locRef.current = loc;
       setResolvedLocation(loc);
 
       // 2. Fetch weather with the resolved location
@@ -167,7 +171,7 @@ export default function TitleBar({ profile }) {
     run();
 
     const id = setInterval(() => {
-      fetchWeatherForLoc(loc, ac.signal)
+      fetchWeatherForLoc(locRef.current, ac.signal)
         .then((r) => { if (!ac.signal.aborted) setWeather(r); })
         .catch(() => {});
     }, 30 * 60 * 1000);
@@ -294,7 +298,7 @@ export default function TitleBar({ profile }) {
         <div className="flex items-center gap-1.5">
           <FontAwesomeIcon icon={faClock} className="text-[10px]" style={{ color: `${theme.text}55` }} />
           <span className="font-mono text-[12px] font-semibold tabular-nums tracking-tight" style={{ color: theme.text }}>{timeStr}</span>
-          <span className="text-[10px] opacity-40 hidden sm:inline" style={{ color: theme.text }}>{dateStr}</span>
+          <span className="text-[9px] mt-0.5 opacity-40 hidden sm:inline" style={{ color: theme.text }}>{dateStr}</span>
         </div>
 
         <span className="h-3.5 w-px" style={{ backgroundColor: theme.border }} />
@@ -310,7 +314,7 @@ export default function TitleBar({ profile }) {
               <span className="text-[10px] opacity-45 max-w-[90px] truncate hidden md:inline" title={weather.place}>{weather.place}</span>
             </>
           ) : (
-            <span className="text-[10px] opacity-30 flex items-center gap-1">
+            <span className="text-[9.5px] mt-0.5 opacity-30 flex items-center gap-1">
               <FontAwesomeIcon icon={faLocationDot} className="text-[9px]" />
               No location
             </span>
@@ -324,9 +328,9 @@ export default function TitleBar({ profile }) {
             <div className="flex items-center gap-1.5" title={`${Math.round(battery.level * 100)}% — ${battery.charging ? 'Charging' : 'On battery'}`}>
               <BatteryIcon level={battery.level} charging={battery.charging} color={accentColor} />
               <span
-                className="font-mono text-[11px] tabular-nums"
+                className="font-mono text-[10px] tabular-nums"
                 style={{
-                  color: battery.charging ? '#4ade80'
+                  color: battery.charging ? '#fff'
                     : battery.level <= 0.15 ? '#f87171'
                     : battery.level <= 0.30 ? '#fb923c'
                     : `${theme.text}99`,

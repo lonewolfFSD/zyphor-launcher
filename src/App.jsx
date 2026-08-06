@@ -14,6 +14,7 @@ import { useSettings } from './hooks/useSettings.js';
 import { loadUid, clearSession } from './lib/authSession.js';
 import ScreenshotsPage from './pages/ScreenshotsPage.jsx';
 import DEFAULT_BACKGROUND_VIDEO from './pages/videos/test_video.mp4';
+import PageShell from './PageShell.jsx';
 import Logo from './Logo/icon.png';
 
 // ─── Splash screen ────────────────────────────────────────────────────────────
@@ -102,13 +103,15 @@ function SplashScreen() {
           className="flex flex-col items-center gap-1 -mt-3 mb-24"
         >
           <p
-            className="font-['Manrope'] text-[30px] font-bold tracking-tight text-white"
-            style={{ letterSpacing: '-0.02em' }}
+            className="text-[40px] font-medium tracking-wide text-white"
+            style={{ letterSpacing: '-0.01em', fontFamily: 'Apple Garamond' }}
           >
             Zyphor Launcher
           </p>
-          <p className="text-[12px] uppercase tracking-[0.25em] text-white/30">
-            v1.1.5
+          <p className="text-[14px] uppercase tracking-[0.25em] -mt-1 text-white/30" style={{
+            fontFamily: 'Apple Garamond'
+          }}>
+            v1.1.6
           </p>
         </motion.div>
 
@@ -246,6 +249,11 @@ useEffect(() => {
     return <AuthGate onAuthSuccess={setProfile} />;
   }
 
+  // Let the nav highlight paint first, then swap the page on the next frame
+  function handleNavigate(page) {
+    requestAnimationFrame(() => setActivePage(page));
+  }
+
   const ActivePageComponent = PAGES[activePage];
 
   return (
@@ -254,7 +262,7 @@ useEffect(() => {
       <div className="flex min-h-0 flex-1 gap-4 p-4">
         <NavRail
           activePage={activePage}
-          onNavigate={setActivePage}
+          onNavigate={handleNavigate}
           onExit={() => window.launcherAPI.quitApp()}
           profile={profile}
           onLogout={() => {
@@ -262,9 +270,13 @@ useEffect(() => {
             setProfile(null);
           }}
         />
-        <main className="min-h-0 flex-1 overflow-hidden">
-          <ActivePageComponent profile={profile} />
-        </main>
+        <main className="min-h-0 flex-1 overflow-hidden relative">
+  {Object.entries(PAGES).map(([id, Page]) => (
+    <PageShell key={id} isActive={activePage === id}>
+      <Page profile={profile} />
+    </PageShell>
+  ))}
+</main>
       </div>
     </div>
   );

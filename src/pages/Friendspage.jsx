@@ -204,8 +204,8 @@ export default function FriendsPage({ profile }) {
   };
 
   const TABS = [
-    { id: 'friends',  label: 'Allies',      icon: faUsers },
-    { id: 'requests', label: 'Requests',    icon: faUserPlus, badge: pendingRequests.length },
+    { id: 'friends',  label: 'Your Allies',      icon: faUsers },
+    { id: 'requests', label: 'Pending Requests',    icon: faUserPlus, badge: pendingRequests.length },
     { id: 'search',   label: 'Global Scan', icon: faMagnifyingGlass },
   ];
 
@@ -217,8 +217,8 @@ export default function FriendsPage({ profile }) {
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <p className="text-[9px] font-black uppercase tracking-[0.3em] opacity-40">SOCIAL NETWORK</p>
-          <h1 className="text-lg font-black uppercase tracking-widest leading-tight" style={{ color: accentColor }}>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">SOCIAL NETWORK</p>
+          <h1 className="text-3xl font-medium uppercase leading-tight tracking-wide" style={{ color: accentColor, fontFamily: 'Apple Garamond' }}>
             Allied Operatives
           </h1>
         </div>
@@ -237,10 +237,12 @@ export default function FriendsPage({ profile }) {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className="relative flex-1 flex items-center justify-center gap-1.5 py-3 text-[9px] font-black uppercase tracking-widest transition-all"
+            className="relative flex-1 flex items-center justify-center gap-1.5 py-3 text-[12px] uppercase tracking-widest transition-all"
             style={{
               backgroundColor: tab === t.id ? accentColor : 'transparent',
               color: tab === t.id ? (profile?.isVip ? '#000' : accent.on) : undefined,
+              fontFamily: 'Apple Garamond',
+              fontWeight: tab === t.id ? '800' : '400',
               opacity: tab === t.id ? 1 : 0.45,
             }}
           >
@@ -248,8 +250,8 @@ export default function FriendsPage({ profile }) {
             {t.label}
             {t.badge > 0 && (
               <span
-                className="absolute top-1 right-2 h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-black"
-                style={{ backgroundColor: '#ef4444', color: '#fff' }}
+                className="absolute top-1 right-2 h-4 w-4 rounded-full flex items-center justify-center text-[12px] font-black"
+                style={{ backgroundColor: '#ef4444', color: '#fff',  }}
               >
                 {t.badge}
               </span>

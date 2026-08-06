@@ -307,7 +307,7 @@ async function handleCheckUpdate() {
     >
       {/* Left section nav */}
       <div className="w-56 shrink-0 border-r px-4 py-7" style={{ borderColor: theme.border }}>
-        <h2 className="mb-6 px-2 font-['Manrope'] text-xl font-bold tracking-tight text-bone">
+        <h2 className="mb-6 px-2 text-[1.85em] font-medium tracking-tight text-bone" style={{ fontFamily: 'Apple Garamond'}}>
           Settings
         </h2>
         <nav className="flex flex-col gap-1">
@@ -320,7 +320,7 @@ async function handleCheckUpdate() {
                 type="button"
                 onClick={() => setActiveSection(s.id)}
                 style={active ? { backgroundColor: accent.hex, color: accent.on } : undefined}
-                className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[14px] font-medium transition-colors ${
+                className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium transition-colors ${
                   active ? 'font-extrabold' : 'text-ash hover:bg-white/[0.04] hover:text-bone'
                 }`}
               >
@@ -859,7 +859,7 @@ async function handleCheckUpdate() {
         )}
 
         {activeSection === 'privacy' && (
-          <Section title="Privacy" description="Control what STAY checks, scans, and reports.">
+          <Section title="Privacy" description="Control what launcher checks, scans, and reports.">
 
             {/* Game integrity */}
             <div className="col-span-full">
@@ -882,7 +882,7 @@ async function handleCheckUpdate() {
               />
             </SettingRow>
 
-            <SettingRow label="Locate STAY.exe via Steam" hint="Searches your Steam library paths for STAY.exe. Useful if you moved the install.">
+            <SettingRow label="Locate games via Steam" hint="Searches your Steam library paths for zyphor titles. Useful if you moved the install.">
               <ScanButton
                 state={scanState.steamExe}
                 onScan={async () => {
@@ -1221,7 +1221,7 @@ async function handleCheckUpdate() {
                 </div>
                 <div>
                   <p className="text-[11px] text-ash/50">Version</p>
-                  <p className="mt-0.5 text-[13px] font-semibold text-bone">1.1.5</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-bone">6</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-ash/50">Build channel</p>

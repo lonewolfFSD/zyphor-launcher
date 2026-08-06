@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
 import {
   faHouse, faNewspaper, faGear, faTrophy, faRightFromBracket, faPlay,
   faShield, faGamepad, faCrown, faCopy, faCheck, faFingerprint,
@@ -11,6 +13,8 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase.js';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import { clearSession } from '../lib/authSession.js';
+
+gsap.registerPlugin(useGSAP);
 
 const NAV_ITEMS = [
   { id: 'home',         label: 'Home',         icon: faHouse },
@@ -57,9 +61,55 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
   const [fullProfile, setFullProfile] = useState(null);
   const popoverRef = useRef(null);
   const avatarBtnRef = useRef(null);
+  const railRef = useRef(null);
 
   const theme  = THEMES[settings?.theme]  || THEMES.oled;
   const accent = ACCENTS[settings?.accent] || ACCENTS.bulb;
+  const motionOn = settings ? settings.animations !== false && !settings.reduceMotion : true;
+
+  // GSAP intro — section-wise stagger (avatar → play → items → footer)
+  useGSAP(() => {
+    if (!railRef.current || !motionOn) return;
+
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+
+      // Start hidden
+      gsap.set('.nr-section', { opacity: 0, y: 14 });
+      gsap.set('.nr-item', { opacity: 0, scale: 0.7 });
+      gsap.set(railRef.current, { opacity: 0, x: -18 });
+
+      tl.to(railRef.current, { opacity: 1, x: 0, duration: 0.45 }, 0)
+        // Avatar block
+        .to('.nr-avatar', { opacity: 1, y: 0, duration: 0.4 }, 0.08)
+        // Divider + quick launch
+        .to('.nr-launch', { opacity: 1, y: 0, duration: 0.4 }, 0.16)
+        // Nav items — staggered
+        .to('.nr-item', {
+          opacity: 1,
+          scale: 1,
+          duration: 0.38,
+          stagger: 0.055,
+          ease: 'back.out(1.6)',
+        }, 0.24)
+        // Footer (settings + exit)
+        .to('.nr-footer', { opacity: 1, y: 0, duration: 0.4 }, 0.42);
+    }, railRef);
+
+    return () => ctx.revert();
+  }, [motionOn]);
+
+  // Soft pulse on active page change
+  useGSAP(() => {
+    if (!railRef.current || !motionOn) return;
+    const activeBtn = railRef.current.querySelector('[aria-current="page"]');
+    if (!activeBtn) return;
+    gsap.fromTo(
+      activeBtn,
+      { scale: 0.88 },
+      { scale: 1, duration: 0.35, ease: 'back.out(2)' }
+    );
+  }, [activePage, motionOn]);
 
   // Enrich profile from Firestore when popover opens
   useEffect(() => {
@@ -69,15 +119,13 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
     });
   }, [accountOpen, profile]);
 
-  // Close on outside click — but ignore the avatar button itself (toggle handles that)
+  // Close on outside click — ignore the avatar button (toggle handles that)
   useEffect(() => {
     if (!accountOpen) return;
     function onDocClick(e) {
       const inPopover = popoverRef.current?.contains(e.target);
       const onAvatar  = avatarBtnRef.current?.contains(e.target);
-      if (!inPopover && !onAvatar) {
-        setAccountOpen(false);
-      }
+      if (!inPopover && !onAvatar) setAccountOpen(false);
     }
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
@@ -97,6 +145,14 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
       setLaunchState('error');
       setTimeout(() => setLaunchState('idle'), 2000);
       return;
+    }
+    // Micro feedback on success
+    if (motionOn && railRef.current) {
+      gsap.fromTo(
+        '.nr-launch-btn',
+        { scale: 0.9 },
+        { scale: 1, duration: 0.4, ease: 'elastic.out(1, 0.5)' }
+      );
     }
     setTimeout(() => setLaunchState('idle'), 2500);
   }
@@ -121,6 +177,11 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
     setAccountOpen((o) => !o);
   }
 
+  function handleNav(id) {
+    if (id === activePage) return;
+    onNavigate(id);
+  }
+
   return (
     <>
       {/* ── COMPACT ACCOUNT POPOVER ─────────────────────────────────────── */}
@@ -128,10 +189,10 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
         {accountOpen && (
           <motion.div
             ref={popoverRef}
-            initial={{ opacity: 0, x: -8, scale: 0.96 }}
+            initial={{ opacity: 0, x: -10, scale: 0.94 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: -8, scale: 0.96 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
             className="fixed z-50 ml-4 overflow-hidden rounded-3xl border shadow-2xl"
             style={{
               left: 92,
@@ -143,7 +204,6 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
               color: theme.text,
             }}
           >
-            {/* Header — avatar + name + uid */}
             <div className="flex items-center gap-3 px-4 py-3">
               <div
                 className="relative h-12 w-12 mt-1 shrink-0 overflow-hidden rounded-2xl border"
@@ -187,18 +247,7 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
               </div>
             </div>
 
-            {/* Status chips */}
             <div className="flex gap-1.5 px-3.5 pb-2.5">
-              {/* <span
-                className="rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider"
-                style={{
-                  backgroundColor: hasGame ? '#22c55e18' : `${theme.border}`,
-                  color: hasGame ? '#22c55e' : undefined,
-                  opacity: hasGame ? 1 : 0.45,
-                }}
-              >
-                {hasGame ? 'Owned' : 'No game'}
-              </span> */}
               <span
                 className="rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider"
                 style={{
@@ -213,7 +262,6 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
 
             <div className="mx-3 h-px" style={{ backgroundColor: theme.border }} />
 
-            {/* Compact action list */}
             <div className="py-1.5">
               {[
                 {
@@ -267,7 +315,6 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
 
             <div className="mx-3 h-px" style={{ backgroundColor: theme.border }} />
 
-            {/* Sign out */}
             <div className="p-1.5">
               <button
                 type="button"
@@ -286,93 +333,98 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
 
       {/* ── NAV RAIL ──────────────────────────────────────────────────────── */}
       <nav
+        ref={railRef}
         className="relative flex w-[80px] shrink-0 flex-col items-center gap-1 overflow-hidden rounded-3xl border py-4 backdrop-blur-glass"
         style={{ backgroundColor: `${theme.surface}cc`, borderColor: theme.border }}
       >
-        {/* Avatar button — toggles open/close */}
-        <button
-          ref={avatarBtnRef}
-          type="button"
-          onClick={toggleAccount}
-          title={p?.displayName ?? 'Account'}
-          className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl border transition-all hover:scale-105 active:scale-95"
-          style={{
-            borderColor: accountOpen
-              ? accentColor
-              : isVip ? `${vipGold}66` : theme.border,
-            boxShadow: isVip ? `0 0 12px ${vipGold}33` : undefined,
-          }}
-        >
-          {p?.photoURL ? (
-            <img src={p.photoURL} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <div
-              className="flex h-full w-full items-center justify-center text-sm font-bold"
-              style={{ backgroundColor: `${accentColor}22`, color: accentColor }}
-            >
-              {avatarLetter}
-            </div>
-          )}
-          {isVip && (
-            <motion.div
-              className="absolute inset-0 rounded-2xl pointer-events-none"
-              animate={{ opacity: [0.4, 0.8, 0.4] }}
-              transition={{ repeat: Infinity, duration: 2 }}
-              style={{ boxShadow: `inset 0 0 0 1.5px ${vipGold}66` }}
-            />
-          )}
-        </button>
+        {/* Avatar */}
+        <div className="nr-section nr-avatar flex flex-col items-center">
+          <button
+            ref={avatarBtnRef}
+            type="button"
+            onClick={toggleAccount}
+            title={p?.displayName ?? 'Account'}
+            className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl border transition-all hover:scale-105 active:scale-95"
+            style={{
+              borderColor: accountOpen
+                ? accentColor
+                : isVip ? `${vipGold}66` : theme.border,
+              boxShadow: isVip ? `0 0 12px ${vipGold}33` : undefined,
+            }}
+          >
+            {p?.photoURL ? (
+              <img src={p.photoURL} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <div
+                className="flex h-full w-full items-center justify-center text-sm font-bold"
+                style={{ backgroundColor: `${accentColor}22`, color: accentColor }}
+              >
+                {avatarLetter}
+              </div>
+            )}
+            {isVip && (
+              <motion.div
+                className="absolute inset-0 rounded-2xl pointer-events-none"
+                animate={motionOn ? { opacity: [0.4, 0.8, 0.4] } : {}}
+                transition={{ repeat: Infinity, duration: 2 }}
+                style={{ boxShadow: `inset 0 0 0 1.5px ${vipGold}66` }}
+              />
+            )}
+          </button>
+        </div>
 
-        <div className="my-3 h-px w-8" style={{ backgroundColor: theme.border }} />
+        <div className="nr-section nr-launch my-3 h-px w-8" style={{ backgroundColor: theme.border }} />
 
         {/* Quick launch */}
-        <button
-          type="button"
-          onClick={handleQuickLaunch}
-          disabled={launchState === 'launching'}
-          title="Quick Launch"
-          style={{
-            backgroundColor: launchState === 'error' ? undefined : accent.hex,
-            color: accent.on,
-          }}
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-transform duration-150 ${
-            launchState === 'launching'
-              ? 'cursor-wait opacity-70'
-              : launchState === 'error'
-                ? 'bg-rust text-bone'
-                : 'hover:scale-[1.05] active:scale-95'
-          }`}
-        >
-          {launchState === 'launching' ? (
-            <motion.span
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
-              className="block h-4 w-4 rounded-full border-2 border-current border-t-transparent"
-            />
-          ) : (
-            <FontAwesomeIcon icon={faPlay} style={{ fontSize: 20 }} />
-          )}
-        </button>
+        <div className="nr-section nr-launch">
+          <button
+            type="button"
+            onClick={handleQuickLaunch}
+            disabled={launchState === 'launching'}
+            title="Quick Launch"
+            style={{
+              backgroundColor: launchState === 'error' ? undefined : accent.hex,
+              color: accent.on,
+            }}
+            className={`nr-launch-btn flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-transform duration-150 ${
+              launchState === 'launching'
+                ? 'cursor-wait opacity-70'
+                : launchState === 'error'
+                  ? 'bg-rust text-bone'
+                  : 'hover:scale-[1.05] active:scale-95'
+            }`}
+          >
+            {launchState === 'launching' ? (
+              <motion.span
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
+                className="block h-4 w-4 rounded-full border-2 border-current border-t-transparent"
+              />
+            ) : (
+              <FontAwesomeIcon icon={faPlay} style={{ fontSize: 20 }} />
+            )}
+          </button>
+        </div>
 
-        <div className="my-3 h-px w-8" style={{ backgroundColor: theme.border }} />
+        <div className="nr-section nr-launch my-3 h-px w-8" style={{ backgroundColor: theme.border }} />
 
         {/* Nav items */}
         <ul className="flex flex-1 flex-col items-center gap-3">
           {NAV_ITEMS.map((item) => {
             const isActive = activePage === item.id;
             return (
-              <li key={item.id} className="relative">
+              <li key={item.id} className="nr-item relative">
                 {isActive && (
                   <motion.span
                     layoutId="nav-active"
-                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                     className="absolute inset-0 rounded-2xl"
                     style={{ backgroundColor: accent.hex }}
                   />
                 )}
                 <button
                   type="button"
-                  onClick={() => onNavigate(item.id)}
+                  onClick={() => handleNav(item.id)}
                   aria-current={isActive ? 'page' : undefined}
                   title={item.label}
                   style={{ color: isActive ? accent.on : undefined }}
@@ -387,13 +439,13 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
           })}
         </ul>
 
-        <div className="mt-2 h-px w-8" style={{ backgroundColor: theme.border }} />
+        <div className="nr-section nr-footer mt-2 h-px w-8" style={{ backgroundColor: theme.border }} />
 
         {/* Settings + exit */}
-        <div className="mt-2 flex flex-col items-center gap-3">
+        <div className="nr-section nr-footer mt-2 flex flex-col items-center gap-3">
           <button
             type="button"
-            onClick={() => onNavigate('settings')}
+            onClick={() => handleNav('settings')}
             title="Settings"
             aria-current={activePage === 'settings' ? 'page' : undefined}
             style={{ color: activePage === 'settings' ? accent.hex : undefined }}

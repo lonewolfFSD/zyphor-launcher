@@ -1,7 +1,11 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import { Lock, Unlock, Trophy, AlertTriangle, RefreshCw, ExternalLink, ChevronDown } from 'lucide-react';
+
+gsap.registerPlugin(useGSAP);
 
 // ─── Video imports ────────────────────────────────────────────────────────────
 import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
@@ -142,8 +146,8 @@ function AchievementRow({ achievement, accent, theme, iconMap }) {
       {/* Text */}
       <div className="flex-1 min-w-0">
         <p
-          className="text-[13px] font-bold tracking-tight leading-snug truncate"
-          style={{ color: achieved ? theme.text : `${theme.text}55` }}
+          className="text-[15.5px] font-medium tracking-tight leading-snug truncate"
+          style={{ color: achieved ? theme.text : `${theme.text}55`, fontFamily: 'Apple Garamond' }}
         >
           {displayName}
         </p>
@@ -351,6 +355,9 @@ function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticP
   );
 }
 
+// Module-level: skip GSAP intro on revisits (same pattern as HomePage)
+let achievementsVisited = false;
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function AchievementsPage({ profile }) {
   const { settings } = useSettings();
@@ -393,6 +400,33 @@ export default function AchievementsPage({ profile }) {
 
   const steamId = profile?.steamId ?? profile?.raw?.steamId ?? null;
 
+  // GSAP intro state — skip on revisits
+  const pageRef  = useRef(null);
+  const didIntro = useRef(achievementsVisited);
+  const [pageReady, setPageReady] = useState(achievementsVisited);
+
+  // Delay page reveal on first visit so GSAP has DOM to animate
+  useEffect(() => {
+    if (achievementsVisited) return;
+    const id = setTimeout(() => setPageReady(true), 50);
+    return () => clearTimeout(id);
+  }, []);
+
+  // GSAP intro
+  useGSAP(() => {
+    if (!pageReady || !pageRef.current || didIntro.current) return;
+    didIntro.current    = true;
+    achievementsVisited = true;
+    const ctx = gsap.context(() => {
+      gsap.timeline({ defaults: { ease: 'power3.out' } })
+        .from('.ap-header',  { y: -16, opacity: 0, duration: 0.5 },  0)
+        .from('.ap-banner',  { y: 24,  opacity: 0, scale: 0.98, duration: 0.6 }, 0.08)
+        .from('.ap-filters', { y: 12,  opacity: 0, duration: 0.4 }, 0.22)
+        .from('.ap-row',     { y: 16,  opacity: 0, duration: 0.4, stagger: 0.05 }, 0.28);
+    }, pageRef);
+    return () => ctx.revert();
+  }, [pageReady]);
+
   const fetchSteam = async (id) => {
     if (!id) return;
     const reqId = ++fetchIdRef.current;
@@ -416,7 +450,17 @@ export default function AchievementsPage({ profile }) {
     }
   };
 
-  useEffect(() => { if (steamId) fetchSteam(steamId); }, [steamId]);
+  useEffect(() => {
+    if (!steamId) return;
+    // Defer until after the nav transition paint — keeps navigation snappy
+    const cb = () => fetchSteam(steamId);
+    if ('requestIdleCallback' in window) {
+      const id = requestIdleCallback(cb, { timeout: 400 });
+      return () => cancelIdleCallback(id);
+    }
+    const id = setTimeout(cb, 100);
+    return () => clearTimeout(id);
+  }, [steamId]);
 
   // Reset filter when game changes
   useEffect(() => { setFilter('all'); }, [selectedGameId]);
@@ -440,7 +484,7 @@ export default function AchievementsPage({ profile }) {
   const storeUrl = `https://store.steampowered.com/app/${game.appId}`;
 
   return (
-    <div className="relative h-full overflow-y-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <div ref={pageRef} className="relative h-full overflow-y-auto" style={{ fontFamily: 'Inter, sans-serif', opacity: pageReady ? 1 : 0 }}>
 
       {/* Background video */}
       <BackgroundVideo
@@ -459,15 +503,17 @@ export default function AchievementsPage({ profile }) {
       <div className="px-9 py-7">
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
-        <div className="flex items-start justify-between gap-4 flex-wrap mb-7">
+        <div className="ap-header flex items-start justify-between gap-4 flex-wrap mb-7">
           <div>
             <h2
-              className="font-['Manrope'] text-3xl font-bold tracking-tight"
-              style={{ color: theme.text }}
+              className="text-4xl font-medium tracking-tight"
+              style={{ color: theme.text, fontFamily: 'Apple Garamond' }}
             >
               Achievements
             </h2>
-            <p className="mt-1 text-sm opacity-40">Track your progress across Zyphor Studio games.</p>
+            <p className="mt-0 text-lg opacity-40"><span style={{
+              fontFamily: 'Apple Garamond'
+            }}>Track your progress across Zyphor Studio games.</span></p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -479,19 +525,6 @@ export default function AchievementsPage({ profile }) {
               accent={accent}
               theme={theme}
             />
-
-            {/* Steam page link — only for released games */}
-            {game.status === 'released' && (
-              <a
-                href={storeUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[12px] font-semibold transition hover:opacity-80"
-                style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }}
-              >
-                <ExternalLink size={13} /> Steam
-              </a>
-            )}
           </div>
         </div>
 
@@ -572,7 +605,7 @@ export default function AchievementsPage({ profile }) {
 
             {/* Game banner + progress */}
             <div
-              className="relative overflow-hidden rounded-[2rem] border"
+              className="ap-banner relative overflow-hidden rounded-[2rem] border"
               style={{ borderColor: `${accent.hex}28`, backgroundColor: theme.surface }}
             >
               <div className="relative h-24 overflow-hidden">
@@ -602,9 +635,13 @@ export default function AchievementsPage({ profile }) {
                   <>
                     <div className="flex items-end justify-between mt-2 mb-3 px-2.5 font-[Manrope]">
                       <div>
-                        <span className="text-6xl font-bold" style={{ color: accent.hex }}>{unlocked}</span>
-                        <span className="text-3xl opacity-30 ml-1">/ {total}</span>
-                        <span className="text-[14px] opacity-40 ml-2">achievements</span>
+                        <span className="text-6xl font-medium" style={{ color: accent.hex, fontFamily: 'Apple Garamond' }}>{unlocked}</span>
+                        <span className="text-3xl opacity-30 ml-1" style={{
+                          fontFamily: 'Apple Garamond'
+                        }}>/ {total}</span>
+                        <span className="text-[17px] opacity-40 ml-2" style={{
+                          fontFamily: 'Apple Garamond'
+                        }}>achievements</span>
                       </div>
                       <span className="text-[12px] font-bold rounded-full px-3 py-1"
                         style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>
@@ -627,7 +664,7 @@ export default function AchievementsPage({ profile }) {
 
             {/* Filter tabs */}
             {!loading && achievements.length > 0 && (
-              <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ backgroundColor: theme.surface }}>
+              <div className="ap-filters flex gap-1 px-1 py-1 rounded-xl w-fit" style={{ backgroundColor: theme.surface, fontFamily: 'Apple Garamond' }}>
                 {[
                   { id: 'all',      label: `All (${achievements.length})` },
                   { id: 'achieved', label: `Achieved (${unlocked})` },
@@ -636,7 +673,7 @@ export default function AchievementsPage({ profile }) {
                   <button
                     key={opt.id}
                     onClick={() => setFilter(opt.id)}
-                    className="px-4 py-1.5 rounded-lg text-[12px] font-medium transition-all"
+                    className="px-4 py-1.5 rounded-lg text-[12.5px] font-medium transition-all"
                     style={{
                       backgroundColor: filter === opt.id ? accent.hex  : 'transparent',
                       color:           filter === opt.id ? accent.on   : `${"#ffffff80"}`,
@@ -668,6 +705,7 @@ export default function AchievementsPage({ profile }) {
                   {sorted.map((a, i) => (
                     <motion.div
                       key={a.apiName}
+                      className="ap-row"
                       layout
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}

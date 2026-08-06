@@ -1,4 +1,7 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
+gsap.registerPlugin(useGSAP);
 import { AnimatePresence, motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
@@ -100,13 +103,27 @@ export default function NewsPage() {
     ? (PRESET_STATIC_MAP[backgroundVideoType] ?? null)
     : null;
 
-  const videoRef = useRef(null);
+  const videoRef   = useRef(null);
+  const headerRef  = useRef(null);
   useEffect(() => {
     const el = videoRef.current;
     if (!el || backgroundQuality === 'static') return;
     if (motionOn) el.play().catch(() => {});
     else el.pause();
   }, [motionOn, backgroundQuality]);
+
+  // ── GSAP header entrance ─────────────────────────────────────────────────────
+  useGSAP(() => {
+    if (!headerRef.current) return;
+    gsap.from(headerRef.current.children, {
+      opacity: 0,
+      y: 22,
+      duration: 0.55,
+      stagger: 0.12,
+      ease: 'power3.out',
+      delay: 0.1,
+    });
+  }, { scope: headerRef });
 
   // ── GitHub fetch state ───────────────────────────────────────────────────────
   const [releases, setReleases]   = useState([]);
@@ -144,7 +161,10 @@ const fetchReleases = useCallback(async () => {
   }
 }, []);
 
-  useEffect(() => { fetchReleases(); }, [fetchReleases]);
+  useEffect(() => {
+    const timer = setTimeout(() => { fetchReleases(); }, 1000);
+    return () => clearTimeout(timer);
+  }, [fetchReleases]);
 
   // ── Close modal on Escape ────────────────────────────────────────────────────
   useEffect(() => {
@@ -200,10 +220,15 @@ const fetchReleases = useCallback(async () => {
       ) : null}
 
       <div className="px-9 py-7">
+        <div ref={headerRef} className="flex flex-col">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-['Manrope'] text-3xl font-bold tracking-tight text-bone">Updates & Patch Notes</h2>
-            <p className="mt-1 text-sm text-ash/70">Fetched live from GitHub Releases.</p>
+            <h2 className=" text-4xl font-medium tracking-tight text-bone" style={{
+              fontFamily: 'Apple Garamond'
+            }}>Updates & Patch Notes</h2>
+            <p className="mt-1 text-base text-ash/70" style={{
+              fontFamily: 'Apple Garamond'
+            }}>Fetched live from GitHub Releases.</p>
           </div>
           <button
             type="button"
@@ -212,16 +237,16 @@ const fetchReleases = useCallback(async () => {
             className="flex items-center gap-1.5 backdrop-blur-glass rounded-xl border px-3 py-2 text-xs font-medium text-ash/60 transition-colors hover:text-bone"
             style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66` }}
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={18} />
           </button>
         </div>
 
         {/* Caution banner */}
         <div
-          className="mt-4 flex backdrop-blur-sm items-start gap-2.5 rounded-xl border px-4 py-3 text-xs leading-relaxed text-ash/80"
-          style={{ borderColor: `${accent.hex}40`, backgroundColor: `${theme.surface}66` }}
+          className="mt-4 flex backdrop-blur-sm items-start gap-2.5 rounded-2xl border px-4 py-3 text-[15px] leading-relaxed text-ash/80"
+          style={{ borderColor: `${accent.hex}40`, backgroundColor: `${theme.surface}66`, fontFamily: 'Apple Garamond' }}
         >
-          <AlertTriangle size={15} className="mt-0.5 shrink-0" style={{ color: accent.hex }} />
+          <AlertTriangle size={15} className="mt-1 shrink-0" style={{ color: accent.hex }} />
           <span>Patch notes are compiled after each release and may not reflect hotfixes pushed without a full client update.</span>
         </div>
 
@@ -230,7 +255,7 @@ const fetchReleases = useCallback(async () => {
           className="mt-5 flex backdrop-blur-sm items-center gap-0 overflow-hidden rounded-2xl border"
           style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99` }}
         >
-          <div className="flex w-[350px] shrink-0 items-center gap-2 border-r px-3 py-3" style={{ borderColor: theme.border }}>
+          <div className="flex w-[350px] shrink-0 items-center gap-2 border-r px-3 py-3.5" style={{ borderColor: theme.border }}>
             <FaSearch size={16} className="shrink-0 text-ash/40" />
             <input
               type="text"
@@ -253,7 +278,7 @@ const fetchReleases = useCallback(async () => {
                     ? { backgroundColor: accent.hex, color: accent.on, borderColor: accent.hex }
                     : { borderColor: theme.border }
                   }
-                  className="shrink-0 whitespace-nowrap rounded-lg border px-5 py-1 text-[11px] font-medium transition-colors"
+                  className="shrink-0 whitespace-nowrap rounded-lg border px-5 py-1.5 text-[11px] font-medium transition-colors"
                 >
                   {opt.label}
                 </button>
@@ -261,6 +286,8 @@ const fetchReleases = useCallback(async () => {
             })}
           </div>
         </div>
+
+        </div>{/* /headerRef */}
 
         {/* Cards grid */}
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5">
@@ -374,8 +401,12 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
 
       <div className="flex flex-1 flex-col px-5 py-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="font-['Manrope'] text-lg font-bold tracking-tight text-bone">v{entry.title}</h3>
-          <time className="text-[11px] font-medium text-ash/60">{entry.date}</time>
+          <h3 className="text-xl font-medium tracking-tight text-bone" style={{
+            fontFamily: 'Apple Garamond'
+          }}>v{entry.title}</h3>
+          <time className="text-[12px] font-medium text-ash/60" style={{
+            fontFamily: 'Apple Garamond'
+          }}>{entry.date}</time>
         </div>
 
         {entry.tags?.length > 0 && (
@@ -410,7 +441,9 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
     className="flex items-center justify-between border-b px-5 py-3"
     style={{ borderColor: theme.border, background: `${theme.surface}99` }}
   >
-    <h3 className="font-['Manrope'] text-xs font-semibold text-bone">
+    <h3 className="text-[15px] font-medium text-bone" style={{
+      fontFamily: 'Apple Garamond'
+    }}>
       Release Info
     </h3>
 
@@ -443,7 +476,9 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
     <div className="flex flex-col gap-y-2 text-xs">
       <span className="text-ash/50">Recommendation</span>
 
-<span className="text-bone/80 font-medium text-[12px] mb-2">
+<span className="text-bone/80 font-medium text-[15px] mb-1 -mt-1" style={{
+  fontFamily: 'Apple Garamond', lineHeight: '1.3'
+}}>
   {isLatest ? (
     'This is the latest release and is recommended for all users.'
   ) : entry.tags.includes('major') ? (
@@ -468,14 +503,15 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
       href={entry.url}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-[11px] font-semibold transition-all hover:scale-[1.02]"
+      className="inline-flex items-center gap-2 rounded-xl border px-5 py-2 text-[13px] font-medium transition-all hover:scale-[1.02]"
       style={{
         borderColor: `${accent.hex}55`,
         color: accent.hex,
+        fontFamily: 'Apple Garamond',
         backgroundColor: `${accent.hex}10`,
       }}
     >
-      Download this Version
+      <ExternalLink size={12} /> Download this Version
     </a>
   </div>
 </div>
@@ -483,8 +519,8 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
           <button
             type="button"
             onClick={onOpen}
-            className="w-full uppercase rounded-2xl border py-3 text-[11px] font-semibold tracking-wide transition-colors hover:text-bone"
-            style={{ borderColor: `${accent.hex}55`, color: accent.hex, backgroundColor: `${accent.hex}10` }}
+            className="w-full rounded-2xl border py-2.5 text-[14px] font-medium tracking-wide transition-colors hover:text-bone"
+            style={{ borderColor: `${accent.hex}55`, color: accent.hex, backgroundColor: `${accent.hex}10`, fontFamily: 'Apple Garamond' }}
           >
             View Full Notes
           </button>

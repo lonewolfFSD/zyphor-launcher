@@ -1,5 +1,6 @@
-import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import gsap from 'gsap';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import {
   Image, AlertTriangle, ChevronDown, X, ZoomIn, ZoomOut,
@@ -54,6 +55,72 @@ const TILE_SIZES = {
   md: 'grid-cols-2 md:grid-cols-3 xl:grid-cols-4',
   lg: 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3',
 };
+
+const SKELETON_COUNT = { sm: 10, md: 8, lg: 6 };
+
+/** Shared shimmer keyframes — injected once */
+const SHIMMER_CSS = `
+@keyframes ss-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.ss-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.06) 40%,
+    rgba(255,255,255,0.12) 50%,
+    rgba(255,255,255,0.06) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: ss-shimmer 1.4s ease-in-out infinite;
+}
+`;
+
+function SkeletonTile({ theme, delay = 0 }) {
+  return (
+    <div
+      className="relative aspect-video overflow-hidden rounded-2xl border"
+      style={{
+        borderColor: theme.border,
+        backgroundColor: theme.surface,
+        animationDelay: `${delay}ms`,
+      }}
+    >
+      {/* Image area shimmer */}
+      <div className="absolute inset-0 ss-shimmer opacity-80" />
+      {/* Fake bottom caption bar */}
+      <div
+        className="absolute bottom-0 left-0 right-0 flex items-center gap-2 px-3 py-2.5"
+        style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.35), transparent)' }}
+      >
+        <div
+          className="h-2 rounded-full ss-shimmer"
+          style={{ width: '55%', backgroundColor: `${theme.text}18` }}
+        />
+        <div
+          className="ml-auto h-3 w-3 rounded ss-shimmer"
+          style={{ backgroundColor: `${theme.text}12` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SkeletonGrid({ tileSize, theme }) {
+  const count = SKELETON_COUNT[tileSize] ?? 8;
+  return (
+    <>
+      <style>{SHIMMER_CSS}</style>
+      <div className={`grid ${TILE_SIZES[tileSize]} gap-3`}>
+        {Array.from({ length: count }).map((_, i) => (
+          <SkeletonTile key={i} theme={theme} delay={i * 40} />
+        ))}
+      </div>
+    </>
+  );
+}
 
 function formatBytes(n) {
   if (!n && n !== 0) return '—';
@@ -122,6 +189,40 @@ function GameSelector({ games, selected, onSelect, accent, theme }) {
   );
 }
 
+const ScreenshotTile = memo(function ScreenshotTile({ shot, index, isSel, selectMode, accent, theme, onOpen, onContextMenu }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(shot, index)}
+      onContextMenu={(e) => onContextMenu(shot, e)}
+      className="group relative aspect-video overflow-hidden rounded-2xl border text-left transition-all duration-200 hover:scale-[1.02] active:scale-[0.99]"
+      style={{
+        borderColor: isSel ? accent.hex : theme.border,
+        backgroundColor: theme.surface,
+        boxShadow: isSel ? `0 0 0 2px ${accent.hex}55` : undefined,
+      }}
+    >
+      <img src={shot.src} alt={shot.name}
+        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+        loading="lazy" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+      <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-2 opacity-0 transition-opacity group-hover:opacity-100">
+        <span className="text-[11px] font-medium text-white/90 truncate max-w-[70%]">{shot.name}</span>
+        <ZoomIn size={13} className="text-white/70 shrink-0" />
+      </div>
+      {selectMode && (
+        <div className="absolute top-2 left-2 flex h-5 w-5 items-center justify-center rounded-md border"
+          style={{
+            backgroundColor: isSel ? accent.hex : 'rgba(0,0,0,0.45)',
+            borderColor: isSel ? accent.hex : 'rgba(255,255,255,0.3)',
+          }}>
+          {isSel && <Check size={11} color={accent.on || '#000'} />}
+        </div>
+      )}
+    </button>
+  );
+});
+
 function ContextMenu({ x, y, onClose, actions, theme, accent }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -171,56 +272,79 @@ function ContextMenu({ x, y, onClose, actions, theme, accent }) {
 }
 
 function Lightbox({ shot, shots, index, onClose, onNavigate, onDelete, accent, theme }) {
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  // zoom/pan live in refs + gsap, not React state — dragging/wheel no longer
+  // re-renders the whole lightbox (toolbar, info panel, etc) on every pixel.
+  const imgRef = useRef(null);
+  const state = useRef({ zoom: 1, x: 0, y: 0 });
+  const [zoomLabel, setZoomLabel] = useState(1);
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, px: 0, py: 0 });
   const [meta, setMeta] = useState({ w: null, h: null });
   const [copied, setCopied] = useState(false);
   const [showInfo, setShowInfo] = useState(true);
 
+  const applyTransform = useCallback((animate) => {
+    const { zoom, x, y } = state.current;
+    if (!imgRef.current) return;
+    if (animate) gsap.to(imgRef.current, { x, y, scale: zoom, duration: 0.25, ease: 'power2.out', overwrite: true });
+    else gsap.set(imgRef.current, { x, y, scale: zoom });
+  }, []);
+
+  const setZoom = useCallback((next, animate = true) => {
+    state.current.zoom = Math.min(5, Math.max(0.5, +next.toFixed(2)));
+    if (state.current.zoom <= 1) { state.current.x = 0; state.current.y = 0; }
+    applyTransform(animate);
+    setZoomLabel(state.current.zoom);
+  }, [applyTransform]);
+
+  const resetView = useCallback(() => {
+    state.current = { zoom: 1, x: 0, y: 0 };
+    applyTransform(true);
+    setZoomLabel(1);
+  }, [applyTransform]);
+
   useEffect(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+    resetView();
     setMeta({ w: null, h: null });
-  }, [shot?.src]);
+  }, [shot?.src, resetView]);
 
   useEffect(() => {
     function onKey(e) {
       if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowLeft') onNavigate(-1);
       if (e.key === 'ArrowRight') onNavigate(1);
-      if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(5, z + 0.25));
-      if (e.key === '-') setZoom((z) => Math.max(0.5, z - 0.25));
-      if (e.key === '0') { setZoom(1); setPan({ x: 0, y: 0 }); }
+      if (e.key === '+' || e.key === '=') setZoom(state.current.zoom + 0.25);
+      if (e.key === '-') setZoom(state.current.zoom - 0.25);
+      if (e.key === '0') resetView();
       if (e.key === 'i' || e.key === 'I') setShowInfo((v) => !v);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, onNavigate]);
+  }, [onClose, onNavigate, setZoom, resetView]);
 
   function onImgLoad(e) {
     setMeta({ w: e.target.naturalWidth, h: e.target.naturalHeight });
+    // small entrance punch on every new image
+    gsap.fromTo(e.target, { opacity: 0, scale: state.current.zoom * 0.97 }, { opacity: 1, scale: state.current.zoom, duration: 0.3, ease: 'power2.out' });
   }
 
   function onWheel(e) {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    setZoom((z) => Math.min(5, Math.max(0.5, +(z + delta).toFixed(2))));
+    setZoom(state.current.zoom + delta, false);
   }
 
   function onPointerDown(e) {
-    if (zoom <= 1) return;
+    if (state.current.zoom <= 1) return;
     setDragging(true);
-    dragStart.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
+    dragStart.current = { x: e.clientX, y: e.clientY, px: state.current.x, py: state.current.y };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   }
   function onPointerMove(e) {
     if (!dragging) return;
-    setPan({
-      x: dragStart.current.px + (e.clientX - dragStart.current.x),
-      y: dragStart.current.py + (e.clientY - dragStart.current.y),
-    });
+    state.current.x = dragStart.current.px + (e.clientX - dragStart.current.x);
+    state.current.y = dragStart.current.py + (e.clientY - dragStart.current.y);
+    applyTransform(false);
   }
   function onPointerUp() { setDragging(false); }
 
@@ -282,10 +406,10 @@ function Lightbox({ shot, shots, index, onClose, onNavigate, onDelete, accent, t
         </div>
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {[
-            { icon: ZoomOut, label: 'Zoom out', action: () => setZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2))) },
-            { icon: null, label: `${Math.round(zoom * 100)}%`, action: () => { setZoom(1); setPan({ x: 0, y: 0 }); } },
-            { icon: ZoomIn, label: 'Zoom in', action: () => setZoom((z) => Math.min(5, +(z + 0.25).toFixed(2))) },
-            { icon: RotateCcw, label: 'Reset', action: () => { setZoom(1); setPan({ x: 0, y: 0 }); } },
+            { icon: ZoomOut, label: 'Zoom out', action: () => setZoom(state.current.zoom - 0.25) },
+            { icon: null, label: `${Math.round(zoomLabel * 100)}%`, action: resetView },
+            { icon: ZoomIn, label: 'Zoom in', action: () => setZoom(state.current.zoom + 0.25) },
+            { icon: RotateCcw, label: 'Reset', action: resetView },
             { icon: Info, label: 'Info', action: () => setShowInfo((v) => !v), active: showInfo },
             { icon: copied ? Check : Copy, label: 'Copy', action: copyImage },
             { icon: Download, label: 'Save', action: saveImage },
@@ -326,6 +450,7 @@ function Lightbox({ shot, shots, index, onClose, onNavigate, onDelete, accent, t
 
         <img
           key={shot.src}
+          ref={imgRef}
           src={shot.src}
           alt={shot.name}
           onLoad={onImgLoad}
@@ -334,11 +459,7 @@ function Lightbox({ shot, shots, index, onClose, onNavigate, onDelete, accent, t
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           className="max-h-[calc(80vh-140px)] max-w-[90vw] rounded-3xl object-contain shadow-2xl will-change-transform"
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            cursor: zoom > 1 ? (dragging ? 'grabbing' : 'grab') : 'default',
-            transition: dragging ? 'none' : 'transform 0.15s ease-out',
-          }}
+          style={{ cursor: zoomLabel > 1 ? (dragging ? 'grabbing' : 'grab') : 'default' }}
         />
       </div>
 
@@ -482,6 +603,7 @@ export default function ScreenshotsPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
   const [ctxMenu, setCtxMenu] = useState(null);
+  const gridRef = useRef(null);
 
   const game = GAMES.find((g) => g.id === selectedGameId) ?? GAMES[0];
 
@@ -516,14 +638,35 @@ export default function ScreenshotsPage() {
     }
   }, [shots, sortBy]);
 
-  function toggleSelect(fileName) {
+  const toggleSelect = useCallback((fileName) => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(fileName)) next.delete(fileName);
       else next.add(fileName);
       return next;
     });
-  }
+  }, []);
+
+  // stable identities so ScreenshotTile's memo actually skips re-renders
+  const handleTileOpen = useCallback((shot, i) => {
+    if (selectMode) toggleSelect(shot.fileName);
+    else setLightboxIndex(i);
+  }, [selectMode, toggleSelect]);
+
+  const handleTileContext = useCallback((shot, e) => {
+    setCtxMenu({ x: e.clientX, y: e.clientY, shot });
+  }, []);
+
+  // gsap stagger-in whenever the visible set changes (sort/filter/game switch)
+  useLayoutEffect(() => {
+    if (!gridRef.current) return;
+    const tiles = gridRef.current.children;
+    if (!tiles.length) return;
+    gsap.fromTo(tiles, { opacity: 0, y: 8 }, {
+      opacity: 1, y: 0, duration: 0.25, ease: 'power2.out',
+      stagger: { each: 0.02, from: 'start' },
+    });
+  }, [sorted, tileSize]);
 
   async function deleteShots(fileNames) {
     const list = Array.isArray(fileNames) ? fileNames : [fileNames];
@@ -607,18 +750,18 @@ export default function ScreenshotsPage() {
       <div className="px-9 py-7">
         <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
           <div>
-            <h2 className="font-['Manrope'] text-3xl font-bold tracking-tight" style={{ color: theme.text }}>Screenshots</h2>
-            <p className="mt-1 text-sm opacity-40">Official captures from Zyphor Studio titles.</p>
+            <h2 className="text-4xl font-medium tracking-tight" style={{ color: theme.text, fontFamily: 'Apple Garamond' }}>Screenshots</h2>
+            <p className="mt-1 text-lg opacity-40" style={{ fontFamily: 'Apple Garamond'}}>Official captures from Zyphor Studio titles.</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <GameSelector games={GAMES} selected={selectedGameId} onSelect={setSelectedGameId} accent={accent} theme={theme} />
             <button type="button" onClick={loadShots} title="Refresh" className="flex h-10 w-10 items-center justify-center rounded-xl transition hover:opacity-80"
               style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }}>
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
             </button>
             <button type="button" onClick={openFolder} title="Open folder" className="flex h-10 w-10 items-center justify-center rounded-xl transition hover:opacity-80"
               style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }}>
-              <FolderOpen size={14} />
+              <FolderOpen size={17} />
             </button>
           </div>
         </div>
@@ -627,7 +770,7 @@ export default function ScreenshotsPage() {
           <>
             <div className="flex flex-wrap items-center gap-2 rounded-2xl border px-3 py-2.5 mb-4"
               style={{ backgroundColor: theme.surface, borderColor: theme.border }}>
-              <span className="text-[11px] opacity-40 px-1">Sort</span>
+              <span className="text-[12px] opacity-40 px-1">Sort</span>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
                 className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium outline-none"
                 style={{ backgroundColor: theme.bg, color: theme.text, border: `1px solid ${theme.border}` }}>
@@ -638,7 +781,7 @@ export default function ScreenshotsPage() {
               </select>
 
               <div className="h-5 w-px mx-1" style={{ backgroundColor: theme.border }} />
-              <span className="text-[11px] opacity-40 px-1">Size</span>
+              <span className="text-[12px] opacity-40 px-1">Size</span>
               {[
                 { id: 'sm', icon: Minimize2, label: 'Small' },
                 { id: 'md', icon: Image, label: 'Medium' },
@@ -650,14 +793,14 @@ export default function ScreenshotsPage() {
                     backgroundColor: tileSize === t.id ? `${accent.hex}22` : 'transparent',
                     color: tileSize === t.id ? accent.hex : `${theme.text}66`,
                   }}>
-                  <t.icon size={14} />
+                  <t.icon size={15} />
                 </button>
               ))}
 
               <div className="h-5 w-px mx-1" style={{ backgroundColor: theme.border }} />
               <button type="button"
                 onClick={() => { setSelectMode((v) => !v); if (selectMode) setSelected(new Set()); }}
-                className="rounded-lg px-3 py-1.5 text-[12px] font-semibold transition"
+                className="rounded-lg px-5 py-1.5 text-[12px] font-semibold transition"
                 style={{
                   backgroundColor: selectMode ? `${accent.hex}22` : 'transparent',
                   color: selectMode ? accent.hex : theme.text,
@@ -691,77 +834,39 @@ export default function ScreenshotsPage() {
             </div>
 
             {!loading && sorted.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-20 rounded-[2.5rem] border opacity-80 gap-1"
+              <div className="flex flex-col items-center justify-center py-14 rounded-[2.5rem] border opacity-80 gap-1"
                 style={{ borderColor: theme.border, backgroundColor: theme.surface }}>
-                <AlertTriangle size={40} className="mb-3 opacity-20" />
-                <p className="text-[15px] font-semibold" style={{ color: theme.text }}>No screenshots found</p>
+                <AlertTriangle size={40} className="mb-2 opacity-20" />
+                <p className="text-[20px] font-medium" style={{ color: theme.text, fontFamily: 'Apple Garamond' }}>No screenshots found</p>
                 <p className="text-[13px] opacity-40 mt-1.5 text-center max-w-sm">
                   Press <code className="px-1.5 py-0.5 rounded text-[11px] font-mono"
                     style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>F2</code> in-game to capture a moment. Your screenshots will appear here automatically.
                 </p>
                 <button type="button" onClick={openFolder}
-                  className="mt-4 flex items-center gap-2 rounded-xl px-4 py-2 text-[12px] font-semibold"
+                  className="mt-4 flex items-center gap-2 rounded-xl px-6 py-3 text-[12px] font-semibold"
                   style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>
-                  <FolderOpen size={13} /> Open screenshots folder
+                  <FolderOpen size={15} /> Open screenshots folder
                 </button>
               </div>
             )}
 
-            {loading && (
-              <div className={`grid ${TILE_SIZES[tileSize]} gap-3`}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="aspect-video rounded-2xl animate-pulse"
-                    style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}` }} />
-                ))}
-              </div>
-            )}
+            {loading && <SkeletonGrid tileSize={tileSize} theme={theme} />}
 
             {!loading && sorted.length > 0 && (
-              <div className={`grid ${TILE_SIZES[tileSize]} gap-3`}>
-                {sorted.map((shot, i) => {
-                  const isSel = selected.has(shot.fileName);
-                  return (
-                    <motion.button
-                      key={shot.fileName || shot.src}
-                      type="button"
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(i * 0.02, 0.25), duration: 0.18 }}
-                      onClick={() => {
-                        if (selectMode) toggleSelect(shot.fileName);
-                        else setLightboxIndex(i);
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setCtxMenu({ x: e.clientX, y: e.clientY, shot });
-                      }}
-                      className="group relative aspect-video overflow-hidden rounded-2xl border text-left transition-all duration-200 hover:scale-[1.02] active:scale-[0.99]"
-                      style={{
-                        borderColor: isSel ? accent.hex : theme.border,
-                        backgroundColor: theme.surface,
-                        boxShadow: isSel ? `0 0 0 2px ${accent.hex}55` : undefined,
-                      }}
-                    >
-                      <img src={shot.src} alt={shot.name}
-                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        loading="lazy" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-                      <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-2 opacity-0 transition-opacity group-hover:opacity-100">
-                        <span className="text-[11px] font-medium text-white/90 truncate max-w-[70%]">{shot.name}</span>
-                        <ZoomIn size={13} className="text-white/70 shrink-0" />
-                      </div>
-                      {selectMode && (
-                        <div className="absolute top-2 left-2 flex h-5 w-5 items-center justify-center rounded-md border"
-                          style={{
-                            backgroundColor: isSel ? accent.hex : 'rgba(0,0,0,0.45)',
-                            borderColor: isSel ? accent.hex : 'rgba(255,255,255,0.3)',
-                          }}>
-                          {isSel && <Check size={11} color={accent.on || '#000'} />}
-                        </div>
-                      )}
-                    </motion.button>
-                  );
-                })}
+              <div ref={gridRef} className={`grid ${TILE_SIZES[tileSize]} gap-3`}>
+                {sorted.map((shot, i) => (
+                  <ScreenshotTile
+                    key={shot.fileName || shot.src}
+                    shot={shot}
+                    index={i}
+                    isSel={selected.has(shot.fileName)}
+                    selectMode={selectMode}
+                    accent={accent}
+                    theme={theme}
+                    onOpen={handleTileOpen}
+                    onContextMenu={handleTileContext}
+                  />
+                ))}
               </div>
             )}
           </>
