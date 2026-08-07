@@ -11,6 +11,10 @@
     user-select: none;
   }
 
+  img {
+    pointer-events: none;
+  }
+
   body {
     @apply bg-void text-bone font-body antialiased;
     overflow: hidden;

@@ -50,6 +50,10 @@ export function useHotkeys({
   onCycleAccent,
   onToggleLiquidGlass,
   onToggleDevInfo,
+  onQuitApp,
+  onCheckForUpdates,
+  onGoHome,
+  onCycleQuality,
 }) {
   const handle = useCallback((e) => {
     const ctrl  = e.ctrlKey || e.metaKey;
@@ -179,6 +183,11 @@ export function useHotkeys({
       return;
     }
 
+    if (ctrl && shift && key === 'X') { e.preventDefault(); onQuitApp?.(); return; }
+    if (ctrl && shift && key === 'U') { e.preventDefault(); onCheckForUpdates?.(); return; }
+    if (ctrl && !shift && key === 'h') { e.preventDefault(); onGoHome?.(); return; }
+    if (ctrl && shift && key === 'Q') { e.preventDefault(); onCycleQuality?.(); return; }
+
     // ── Ctrl+` → toggle dev info overlay ────────────────────────────────────
     if (ctrl && (key === '`' || key === 'Dead')) {
       e.preventDefault();
@@ -189,6 +198,7 @@ export function useHotkeys({
     activePage, navigateTo, onPlay, onRefresh, onOpenFolder,
     onSelectAll, onDeselectAll, onDeleteSelected,
     onToggleAccount, onCopyUid, onCycleTheme, onCycleAccent, onToggleLiquidGlass, onToggleDevInfo,
+    onQuitApp, onCheckForUpdates, onGoHome, onCycleQuality
   ]);
 
   useEffect(() => {

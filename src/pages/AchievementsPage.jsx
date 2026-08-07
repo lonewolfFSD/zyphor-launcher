@@ -183,9 +183,9 @@ function AchievementRow({ achievement, accent, theme, iconMap }) {
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
       <GlassLayer
         borderRadius={16}
-        distortionScale={-30}
-        blur={10}
-        className="flex items-center gap-4 px-4 py-2 transition-all duration-200"
+        distortionScale={-180}
+        blur={20}
+        className="flex items-center gap-4 px-4 py-3 transition-all duration-200"
         style={{
           border: `1px solid ${achieved ? `${accent.hex}28` : theme.border}`,
           backgroundColor: achieved ? `${accent.hex}0d` : `${theme.surface}88`,  // ← this was missing
@@ -587,10 +587,7 @@ export default function AchievementsPage({ profile }) {
 
             {/* Filter tabs */}
             {!loading && achievements.length > 0 && (
-              <GlassLayer
-                borderRadius={16}
-                distortionScale={-180}
-                blur={40}
+              <div
                 className="ap-filters flex gap-1 px-1 py-1 w-fit"
                 style={{ fontFamily: 'Apple Garamond' }}
               >
@@ -602,7 +599,7 @@ export default function AchievementsPage({ profile }) {
                   <button
                     key={opt.id}
                     onClick={() => setFilter(opt.id)}
-                    className="px-4 py-1.5 rounded-lg text-[12.5px] font-medium transition-all"
+                    className="px-6 py-1.5 rounded-lg text-[13px] font-medium transition-all"
                     style={{
                       backgroundColor: filter === opt.id ? accent.hex  : 'transparent',
                       color:           filter === opt.id ? accent.on   : `${"#ffffff80"}`,
@@ -612,7 +609,7 @@ export default function AchievementsPage({ profile }) {
                     {opt.label}
                   </button>
                 ))}
-              </GlassLayer>
+              </div>
             )}
 
             {/* Achievement list */}

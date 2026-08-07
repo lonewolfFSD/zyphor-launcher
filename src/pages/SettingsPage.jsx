@@ -1316,19 +1316,15 @@ async function handleCheckUpdate() {
                 { keys: ['Ctrl', ','],           desc: 'Open Settings' },
                 { keys: ['Ctrl', 'Tab'],         desc: 'Cycle pages forward' },
                 { keys: ['Ctrl', 'Shift', 'Tab'], desc: 'Cycle pages backward' },
-                { keys: ['F11'],                 desc: 'Toggle fullscreen' },
               ]} />
 
               {/* Launcher actions */}
               <HotkeyGroup label="Launcher" accent={accent} theme={theme} rows={[
-                { keys: ['Ctrl', 'P'],           desc: 'Play / stop game' },
-                { keys: ['Ctrl', 'R'],           desc: 'Refresh current page' },
+                { keys: ['Ctrl', 'R'],           desc: 'Reload Launcher' },
                 { keys: ['Ctrl', 'Shift', 'S'],  desc: 'Open screenshots folder' },
-              ]} />
-
-              {/* Friends */}
-              <HotkeyGroup label="Friends page" accent={accent} theme={theme} rows={[
-                { keys: ['Ctrl', 'F'],           desc: 'Focus friend search input' },
+                { keys: ['Ctrl', 'H'],           desc: 'Go home from anywhere' },
+                { keys: ['Ctrl', 'Shift', 'U'],  desc: 'Check for updates' },
+                { keys: ['Ctrl', 'Shift', 'X'],  desc: 'Quit launcher' },
               ]} />
 
               {/* Screenshots */}
@@ -1348,6 +1344,7 @@ async function handleCheckUpdate() {
               <HotkeyGroup label="Appearance" accent={accent} theme={theme} rows={[
                 { keys: ['Ctrl', 'Shift', 'D'],  desc: 'Cycle theme (OLED → Dark → More)' },
                 { keys: ['Ctrl', 'Shift', 'E'], desc: 'Cycle accent color' },
+                { keys: ['Ctrl', 'Shift', 'Q'],  desc: 'Cycle background quality (HD → SD → Static)' },
               ]} />
 
             </div>

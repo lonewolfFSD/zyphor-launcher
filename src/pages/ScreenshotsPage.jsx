@@ -20,11 +20,11 @@ function GlassLayer({ children, className = '', style = {}, borderRadius = 16, d
       <GlassSurface
         width="100%"
         height="auto"
-        borderRadius={borderRadius}
+        borderRadius={60}
         brightness={50}
         opacity={0.93}
-        blur={20}
-        distortionScale={-200}
+        blur={40}
+        distortionScale={-180}
         className={className}
         style={style}
       >

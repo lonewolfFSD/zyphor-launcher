@@ -17,6 +17,7 @@ import Logo from './Logo/icon.png';
 import { useHotkeys } from './hooks/useHotkeys.js';
 
 import DEFAULT_BACKGROUND_VIDEO from './pages/videos/test_video.mp4';
+import SplashScreen from './components/SplashScreen.jsx';
 
 import VIDEO_ROSSI from './pages/videos/rossi.mp4';
 import VIDEO_GAMING from './pages/videos/gaming.mp4';
@@ -46,15 +47,6 @@ const PRESET_STATIC_MAP = {
   'preset-rossi':            new URL(ROSSI_FRAME,    import.meta.url).href,
 };
 
-// ─── Splash screen ────────────────────────────────────────────────────────────
-const SPLASH_MESSAGES = [
-  'Initializing launcher',
-  'Checking for updates',
-  'Connecting to servers',
-  'Syncing your library',
-  'Almost ready',
-];
-
 const PAGE_ORDER = {
   home: 0,
   news: 1,
@@ -64,116 +56,9 @@ const PAGE_ORDER = {
   settings: 5,
 };
 
-function SplashScreen() {
-  const videoRef = useRef(null);
-  const [msgIndex, setMsgIndex] = useState(0);
-  const [msgVisible, setMsgVisible] = useState(true);
 
-  useEffect(() => {
-    videoRef.current?.play().catch(() => {});
-  }, []);
 
-  useEffect(() => {
-    const cycle = () => {
-      setMsgVisible(false);
-      setTimeout(() => {
-        setMsgIndex((i) => (i + 1) % SPLASH_MESSAGES.length);
-        setMsgVisible(true);
-      }, 200);
-    };
-    const id = setInterval(cycle, 1800);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <motion.div
-      key="splash"
-      className="fixed inset-0 z-[999] flex flex-col items-center justify-center overflow-hidden bg-black"
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.7, ease: 'easeInOut' }}
-    >
-      <video
-        ref={videoRef}
-        src={DEFAULT_BACKGROUND_VIDEO}
-        muted
-        loop
-        playsInline
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-30"
-      />
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(ellipse 70% 70% at 50% 50%, transparent 30%, rgba(0,0,0,0.85) 100%)',
-        }}
-      />
-      <div className="relative flex flex-col items-center gap-8">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="flex h-24 w-24 mt-28 items-center justify-center rounded-3xl"
-          style={{
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.1)',
-          }}
-        >
-          <img
-            src={Logo}
-            alt="Zyphor"
-            className="h-full w-full object-contain"
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          />
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="flex flex-col items-center gap-1 -mt-3 mb-24"
-        >
-          <p
-            className="text-[40px] font-medium tracking-wide text-white"
-            style={{ letterSpacing: '-0.01em', fontFamily: 'Apple Garamond' }}
-          >
-            Zyphor Launcher
-          </p>
-          <p className="text-[14px] uppercase tracking-[0.25em] -mt-1 text-white/30" style={{
-            fontFamily: 'Apple Garamond'
-          }}>
-            v1.1.6
-          </p>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.45, duration: 0.4 }}
-          className="flex flex-col items-center gap-4"
-        >
-          <svg
-            width="40" height="40" viewBox="0 0 22 22" fill="none"
-            className="animate-spin"
-            style={{ animationDuration: '0.9s' }}
-          >
-            <circle cx="11" cy="11" r="9" stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
-            <path d="M11 2a9 9 0 0 1 9 9" stroke="white" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-          <p
-            className="text-[10px] uppercase tracking-[0.22em] transition-opacity duration-300"
-            style={{
-              color: 'rgba(255,255,255,0.3)',
-              opacity: msgVisible ? 1 : 0,
-              minWidth: '220px',
-              textAlign: 'center',
-            }}
-          >
-            {SPLASH_MESSAGES[msgIndex]}
-          </p>
-        </motion.div>
-      </div>
-    </motion.div>
-  );
-}
-
+  
 // ─── Global background video ──────────────────────────────────────────────────
 function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticPoster = null }) {
   const ref = useRef(null);
@@ -323,6 +208,25 @@ function handleCycleAccent() {
     if (profile?.uid) navigator.clipboard.writeText(profile.uid).catch(() => {});
   }
 
+  function handleQuitApp() {
+    window.launcherAPI?.quitApp?.();
+  }
+
+  function handleCheckForUpdates() {
+    window.launcherAPI?.checkForUpdates?.();
+  }
+
+  function handleGoHome() {
+    navigateTo('home');
+  }
+
+  function handleCycleQuality() {
+    const order = ['hd', 'sd', 'static'];
+    const current = settings?.backgroundQuality ?? 'hd';
+    const next = order[(order.indexOf(current) + 1) % order.length];
+    updateSettings?.({ backgroundQuality: next });
+  }
+
   useHotkeys({
     activePage,
     navigateTo,
@@ -335,9 +239,13 @@ function handleCycleAccent() {
     onToggleAccount:     () => document.dispatchEvent(new CustomEvent('zyphor:toggleAccount')),
     onCopyUid:           handleCopyUid,
     onCycleTheme:        handleCycleTheme,
-    onCycleAccent: handleCycleAccent,
+    onCycleAccent:       handleCycleAccent,
     onToggleLiquidGlass: handleToggleLiquidGlass,
     onToggleDevInfo:     () => setShowDevInfo(v => !v),
+    onQuitApp:           handleQuitApp,
+    onCheckForUpdates:   handleCheckForUpdates,
+    onGoHome:            handleGoHome,
+    onCycleQuality:      handleCycleQuality,
   });
 
   // ── Derive background video source from settings ──────────────────────────
@@ -430,22 +338,25 @@ function handleCycleAccent() {
   }, [settings]);
 
   // ── Splash ────────────────────────────────────────────────────────────────
-  if (checking || !settings || !minSplashDone) {
-    return (
-      <AnimatePresence>
-        <SplashScreen />
-      </AnimatePresence>
-    );
-  }
+  
 
-  if (!profile) {
-    return <AuthGate onAuthSuccess={setProfile} />;
-  }
+  
 
   const ActivePageComponent = PAGES[activePage];
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-black/70">
+
+      <AnimatePresence>
+      {(checking || !settings || !minSplashDone) && <SplashScreen key="splash" />}
+    </AnimatePresence>
+
+    {/* Auth or app — splash covers this until ready */}
+    {!profile ? (
+      <AuthGate onAuthSuccess={setProfile} />
+    ) : (
+      <>
+
       {/* ── Global background — rendered once, persists across page transitions ── */}
       <BackgroundVideo
         key={backgroundVideoSrc + backgroundQuality}
@@ -454,19 +365,19 @@ function handleCycleAccent() {
         quality={backgroundQuality}
         videoStyle={bgVideoStyle}
         staticPoster={bgStaticPoster}
-      />
+        />
       <AnimatedGrid accent={accent} active={motionOn} />
 
       {/* ── Dev info overlay (Ctrl+`) ─────────────────────────────────────── */}
       <AnimatePresence>
         {showDevInfo && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18 }}
-            className="fixed top-10 left-1/2 z-[200] -translate-x-1/2 rounded-2xl border px-5 py-3 text-[11px] font-mono shadow-2xl"
-            style={{ backgroundColor: `${theme.surface}ee`, borderColor: theme.border, color: theme.text }}
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.18 }}
+          className="fixed top-10 left-1/2 z-[200] -translate-x-1/2 rounded-2xl border px-5 py-3 text-[11px] font-mono shadow-2xl"
+          style={{ backgroundColor: `${theme.surface}ee`, borderColor: theme.border, color: theme.text }}
           >
             <div className="flex items-center gap-6">
               <span className="opacity-40 uppercase tracking-widest text-[9px]">Zyphor Dev</span>
@@ -502,12 +413,14 @@ function handleCycleAccent() {
               exit={{ opacity: 0, y: -20 * directionRef.current }}
               transition={{ duration: 0.2 }}
               className="h-full w-full"
-            >
+              >
               <ActivePageComponent profile={profile} />
             </motion.div>
           </AnimatePresence>
         </main>
       </div>
+      </>
+    )}
     </div>
   );
 }

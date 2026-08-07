@@ -360,7 +360,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
       <GlassLayer
         borderRadius={40}
         distortionScale={-180}
-        blur={25}
+        blur={40}
         className="flex flex-col overflow-hidden h-full"
         style={{
           border: isLatest ? '1px solid rgba(255,255,255,0.8)' : '1px solid rgba(255,255,255,0.1)',

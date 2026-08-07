@@ -484,7 +484,7 @@ export default function HomePage({ profile }) {
             </motion.div>
 
             <div className="absolute inset-0 -z-10">
-  <GlassLayer borderRadius={40} distortionScale={-180} blur={40} />
+  <GlassLayer borderRadius={40} distortionScale={-240} blur={60} />
 </div>
             
           </AnimatePresence>
@@ -603,7 +603,7 @@ export default function HomePage({ profile }) {
         style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99`, opacity: pageReady ? 1 : 0 }}
       >
         <div className="absolute inset-0 -z-10">
-  <GlassLayer borderRadius={20} distortionScale={-200} blur={40} />
+  <GlassLayer borderRadius={20} distortionScale={-180} blur={60} />
 </div>
         <div className="flex shrink-0 items-center gap-2.5 border-b px-6 py-3.5" style={{ borderColor: theme.border }}>
           <h2 className="text-[18.5px] mt-0.5 font-medium tracking-tight text-bone" style={{ fontFamily: 'Apple Garamond' }}>
