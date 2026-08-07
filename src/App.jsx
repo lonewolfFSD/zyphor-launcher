@@ -16,6 +16,8 @@ import ScreenshotsPage from './pages/ScreenshotsPage.jsx';
 import Logo from './Logo/icon.png';
 import { useHotkeys } from './hooks/useHotkeys.js';
 
+import OnboardingPage, { useOnboardingCheck } from './pages/OnboardingPage.jsx';
+
 import DEFAULT_BACKGROUND_VIDEO from './pages/videos/test_video.mp4';
 import SplashScreen from './components/SplashScreen.jsx';
 
@@ -171,6 +173,9 @@ export default function App() {
   const [activePage, setActivePage] = useState('home');
   const [pageDirection, setPageDirection] = useState(1);
   const directionRef = useRef(1);
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+const { shouldShowOnboarding, markOnboardingComplete } = useOnboardingCheck();
 
   function navigateTo(newPage) {
     const dir = (PAGE_ORDER[newPage] ?? 0) > (PAGE_ORDER[activePage] ?? 0) ? 1 : -1;
@@ -339,7 +344,13 @@ function handleCycleAccent() {
 
   // ── Splash ────────────────────────────────────────────────────────────────
   
-
+  useEffect(() => {
+  if (minSplashDone && !checking && settings && profile && shouldShowOnboarding()) {
+    // Small delay so the transition from splash isn't jarring
+    const timer = setTimeout(() => setShowOnboarding(true), 400);
+    return () => clearTimeout(timer);
+  }
+}, [minSplashDone, checking, settings, profile]);
   
 
   const ActivePageComponent = PAGES[activePage];
@@ -353,9 +364,17 @@ function handleCycleAccent() {
 
     {/* Auth or app — splash covers this until ready */}
     {!profile ? (
-      <AuthGate onAuthSuccess={setProfile} />
-    ) : (
-      <>
+  <AuthGate onAuthSuccess={setProfile} />
+) : showOnboarding ? (
+  <OnboardingPage 
+    profile={profile}
+    onComplete={() => {
+      markOnboardingComplete();
+      setShowOnboarding(false);
+    }}
+  />
+) : (
+  <>
 
       {/* ── Global background — rendered once, persists across page transitions ── */}
       <BackgroundVideo
