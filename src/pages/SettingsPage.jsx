@@ -25,6 +25,7 @@ const SECTIONS = [
   { id: 'privacy',    label: 'Privacy',     icon: IconPrivacy },
   { id: 'storage',    label: 'Storage',     icon: IconStorage },
   { id: 'advanced',   label: 'Advanced',    icon: IconAdvanced },
+  { id: 'hotkeys',    label: 'Hotkeys',     icon: IconKeyboard },
   { id: 'about',      label: 'About',       icon: IconAbout },
 ];
 
@@ -102,6 +103,40 @@ function LauncherPathRow({ theme }) {
   );
 }
 
+const shimmerStyle = {
+  background: 'linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%)',
+  backgroundSize: '200% 100%',
+  animation: 'shimmer 1.6s infinite',
+};
+
+if (typeof document !== 'undefined' && !document.getElementById('skeleton-shimmer-kf')) {
+  const style = document.createElement('style');
+  style.id = 'skeleton-shimmer-kf';
+  style.textContent = `@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`;
+  document.head.appendChild(style);
+}
+
+function StorageItemSkeleton({ theme }) {
+  return (
+    <div
+      className="flex items-center justify-between rounded-xl border px-4 py-3"
+      style={{ borderColor: theme.border, backgroundColor: `${theme.bg}55` }}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="h-10 w-10 shrink-0 rounded-lg" style={shimmerStyle} />
+        <div className="space-y-2">
+          <div className="h-3 w-36 rounded-md" style={shimmerStyle} />
+          <div className="h-2 w-56 rounded-md" style={shimmerStyle} />
+        </div>
+      </div>
+      <div className="flex items-center gap-4 ml-4">
+        <div className="h-3 w-14 rounded-md" style={shimmerStyle} />
+        <div className="h-4 w-4 rounded" style={shimmerStyle} />
+      </div>
+    </div>
+  );
+}
+
 
 export default function SettingsPage() {
   const {
@@ -150,6 +185,14 @@ export default function SettingsPage() {
   const accent = ACCENTS[settings.accent] || ACCENTS.bulb;
   const motionOn = settings.animations && !settings.reduceMotion;
 
+  const previewSrc =
+  settings.backgroundVideoType === 'none' ? null
+  : settings.backgroundVideoType === 'custom'
+    ? (settings.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : customVideoUrl)
+  : settings.backgroundVideoType?.startsWith('preset-')
+    ? PRESET_VIDEO_MAP[settings.backgroundVideoType]
+  : DEFAULT_BACKGROUND_VIDEO;
+
   const items = diskItems ?? [];
   const sortedItems = [...items].sort((a, b) =>
     sortBy === 'size' ? b.sizeMB - a.sizeMB : a.name.localeCompare(b.name)
@@ -161,6 +204,8 @@ export default function SettingsPage() {
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [videoSearch, setVideoSearch] = useState('');
   const [videoTag, setVideoTag] = useState('all');
+
+  const previewVideoRef = useRef(null);
 
   function clearCache() {
     setCacheSize(0);
@@ -208,6 +253,13 @@ export default function SettingsPage() {
   });
 }, []);
 
+useEffect(() => {
+  const el = previewVideoRef.current;
+  if (!el) return;
+  el.src = previewSrc ?? '';
+  if (previewSrc) el.play().catch(() => {});
+}, [previewSrc]);
+
 async function handleCheckUpdate() {
   setUpdateState('checking');
   try {
@@ -239,14 +291,6 @@ async function handleCheckUpdate() {
     update({ backgroundVideoType: 'none', backgroundVideoPath: null, backgroundVideoName: null });
     setToast('Background video disabled');
   }
-
-    const previewSrc =
-    settings.backgroundVideoType === 'none' ? null
-    : settings.backgroundVideoType === 'custom'
-      ? (settings.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : customVideoUrl)
-    : settings.backgroundVideoType?.startsWith('preset-')
-      ? PRESET_VIDEO_MAP[settings.backgroundVideoType]
-    : DEFAULT_BACKGROUND_VIDEO;
 
 
   async function openLogsFolder() {
@@ -359,7 +403,7 @@ async function handleCheckUpdate() {
 
             <SettingRow label="Theme" hint="OLED Black is the default and recommended.">
               <div className="flex flex-col items-end gap-2">
-                <div className="flex flex-wrap justify-end gap-2" style={{ maxWidth: '100%' }}>
+                <div className="grid grid-cols-6 justify-end gap-2" style={{ maxWidth: '100%' }}>
                   {Object.entries(THEMES).map(([key, t]) => (
                     <button
                       key={key}
@@ -376,7 +420,7 @@ async function handleCheckUpdate() {
                     />
                   ))}
                 </div>
-                <span className="text-[11px] text-ash/60">{THEMES[settings.theme]?.label ?? settings.theme}</span>
+                <span className="text-[11px] text-ash/60 -mt-6">{THEMES[settings.theme]?.label ?? settings.theme}</span>
               </div>
             </SettingRow>
 
@@ -438,6 +482,57 @@ async function handleCheckUpdate() {
             <SettingRow label="Reduce motion" hint="Minimizes transitions for motion sensitivity.">
               <Toggle checked={settings.reduceMotion} onChange={(checked) => update({ reduceMotion: checked })} />
             </SettingRow>
+
+            <SettingRow
+  label="Interface Style"
+  hint={
+    <>
+      Choose the visual appearance of the launcher interface. <br />
+      {(settings.navStyle ?? 'glass') === 'liquid-glass' && (
+        <>
+          <br />
+          <span className='mt-1' style={{ color: '#fbbf24' }}>
+            ⚠️ Liquid Glass may increase GPU usage and reduce performance on lower-end hardware.
+          </span>
+        </>
+      )}
+    </>
+  }
+>
+  <div className="flex gap-1.5">
+    {[
+      { id: 'glass', label: 'Glass' },
+      { id: 'liquid-glass', label: 'Liquid Glass' },
+    ].map((opt) => {
+      const isActive = (settings.navStyle ?? 'glass') === opt.id;
+
+      return (
+        <button
+          key={opt.id}
+          type="button"
+          onClick={() => {
+            update({ navStyle: opt.id });
+            setToast(`Interface style: ${opt.label} — reloading…`);
+            setTimeout(() => window.location.reload(), 900);
+          }}
+          style={{
+            padding: '4px 14px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: 'none',
+            transition: 'all 150ms',
+            background: isActive ? accent.hex : 'rgba(255,255,255,0.07)',
+            color: isActive ? accent.on : 'rgba(255,255,255,0.5)',
+          }}
+        >
+          {opt.label}
+        </button>
+      );
+    })}
+  </div>
+</SettingRow>
 
             <SettingRow label="Background quality" hint="SD compresses the video to a lower resolution. Static shows only a still frame.">
               <div className="flex gap-1.5">
@@ -751,7 +846,7 @@ async function handleCheckUpdate() {
 
             {/* RIGHT — preview panel, fixed width, aspect-ratio locked */}
             <div
-              className="w-[55%] shrink-0 overflow-hidden rounded-xl border"
+              className="w-[48%] shrink-0 overflow-hidden rounded-xl border"
               style={{ borderColor: theme.border, backgroundColor: theme.bg }}
             >
               <div className="flex items-center justify-between border-b px-3 py-2" style={{ borderColor: theme.border }}>
@@ -764,7 +859,7 @@ async function handleCheckUpdate() {
               <div className="relative w-full bg-black" style={{ aspectRatio: '16/9' }}>
                 {previewSrc ? (
                   <video
-                    key={previewSrc}
+                    ref={previewVideoRef}
                     src={previewSrc}
                     autoPlay
                     muted
@@ -1089,64 +1184,68 @@ async function handleCheckUpdate() {
                   )}
 
                   <div className="flex flex-col gap-2">
-                    {sortedItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between rounded-xl border px-4 py-3 transition-colors hover:border-white/10"
-                        style={{ borderColor: theme.border, backgroundColor: `${theme.bg}55` }}
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          {/* Icon — use game thumbnail if available, else box icon */}
+                    {diskStatus === 'loading'
+                      ? Array.from({ length: 5 }).map((_, i) => (
+                          <StorageItemSkeleton key={i} theme={theme} />
+                        ))
+                      : sortedItems.map((item) => (
                           <div
-                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg overflow-hidden"
-                            style={{ backgroundColor: theme.border }}
+                            key={item.id}
+                            className="flex items-center justify-between rounded-xl border px-4 py-3 transition-colors hover:border-white/10"
+                            style={{ borderColor: theme.border, backgroundColor: `${theme.bg}55` }}
                           >
-                            {item.thumbnail ? (
-                              <img src={item.thumbnail} alt={item.name} className="h-full w-full object-cover" />
-                            ) : (
-                              <IconBox className="h-4 w-4 text-ash" />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="text-[13px] font-medium text-bone/90 truncate">{item.name}</p>
-                              {item.required && (
-                                <span className="flex shrink-0 items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ash/50">
-                                  <IconLock className="h-2.5 w-2.5" /> Required
-                                </span>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg overflow-hidden"
+                                style={{ backgroundColor: theme.border }}
+                              >
+                                {item.thumbnail ? (
+                                  <img src={item.thumbnail} alt={item.name} className="h-full w-full object-cover" />
+                                ) : (
+                                  <IconBox className="h-4 w-4 text-ash" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-[13px] font-medium text-bone/90 truncate">{item.name}</p>
+                                  {item.required && (
+                                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ash/50">
+                                      <IconLock className="h-2.5 w-2.5" /> Required
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="mt-0.5 text-[11px] text-ash/40 truncate">
+                                  {item.path}
+                                  {item.lastPlayed && (
+                                    <span className="ml-2">Last played {item.lastPlayed}</span>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-4 ml-4">
+                              <span className="text-[13px] font-medium text-bone/70 tabular-nums">
+                                {item.sizeMB >= 1000
+                                  ? `${(item.sizeMB / 1024).toFixed(1)} GB`
+                                  : item.sizeMB === 0
+                                  ? '0 KB'
+                                  : `${item.sizeMB.toFixed(1)} MB`}
+                              </span>
+                              {!item.required ? (
+                                <input
+                                  type="checkbox"
+                                  checked={!!item.selected}
+                                  onChange={() => toggleItemSelected(item.id)}
+                                  className="h-4 w-4 rounded"
+                                  style={{ accentColor: accent.hex }}
+                                />
+                              ) : (
+                                <div className="w-4" />
                               )}
                             </div>
-                            <p className="mt-0.5 text-[11px] text-ash/40 truncate">
-                              {item.path}
-                              {item.lastPlayed && (
-                                <span className="ml-2">Last played {item.lastPlayed}</span>
-                              )}
-                            </p>
                           </div>
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-4 ml-4">
-                          <span className="text-[13px] font-medium text-bone/70 tabular-nums">
-                            {item.sizeMB >= 1000
-                              ? `${(item.sizeMB / 1024).toFixed(1)} GB`
-                              : item.sizeMB === 0
-                              ? '0 KB'
-                              : `${item.sizeMB.toFixed(1)} MB`}
-                          </span>
-                          {!item.required ? (
-                            <input
-                              type="checkbox"
-                              checked={!!item.selected}
-                              onChange={() => toggleItemSelected(item.id)}
-                              className="h-4 w-4 rounded"
-                              style={{ accentColor: accent.hex }}
-                            />
-                          ) : (
-                            <div className="w-4" />
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                        ))
+                    }
+                
                   </div>
                 </div>
               </>
@@ -1204,6 +1303,54 @@ async function handleCheckUpdate() {
                 {confirmingReset ? 'Click again to confirm' : 'Reset to defaults'}
               </button>
             </SettingRow>
+          </Section>
+        )}
+
+        {activeSection === 'hotkeys' && (
+          <Section title="Hotkeys" description="Keyboard shortcuts available throughout the launcher.">
+            <div className="col-span-full flex flex-col gap-6">
+
+              {/* Navigation */}
+              <HotkeyGroup label="Navigation" accent={accent} theme={theme} rows={[
+                { keys: ['Ctrl', '1–5'],        desc: 'Go to Home / News / Friends / Achievements / Screenshots' },
+                { keys: ['Ctrl', ','],           desc: 'Open Settings' },
+                { keys: ['Ctrl', 'Tab'],         desc: 'Cycle pages forward' },
+                { keys: ['Ctrl', 'Shift', 'Tab'], desc: 'Cycle pages backward' },
+                { keys: ['F11'],                 desc: 'Toggle fullscreen' },
+              ]} />
+
+              {/* Launcher actions */}
+              <HotkeyGroup label="Launcher" accent={accent} theme={theme} rows={[
+                { keys: ['Ctrl', 'P'],           desc: 'Play / stop game' },
+                { keys: ['Ctrl', 'R'],           desc: 'Refresh current page' },
+                { keys: ['Ctrl', 'Shift', 'S'],  desc: 'Open screenshots folder' },
+              ]} />
+
+              {/* Friends */}
+              <HotkeyGroup label="Friends page" accent={accent} theme={theme} rows={[
+                { keys: ['Ctrl', 'F'],           desc: 'Focus friend search input' },
+              ]} />
+
+              {/* Screenshots */}
+              <HotkeyGroup label="Screenshots page" accent={accent} theme={theme} rows={[
+                { keys: ['Ctrl', 'A'],           desc: 'Select all screenshots' },
+                { keys: ['Ctrl', 'D'],           desc: 'Deselect all' },
+                { keys: ['Delete'],              desc: 'Delete selected screenshots' },
+              ]} />
+
+              {/* Account */}
+              <HotkeyGroup label="Account" accent={accent} theme={theme} rows={[
+                { keys: ['Ctrl', 'Shift', 'A'],  desc: 'Toggle account popover' },
+                { keys: ['Ctrl', 'Shift', 'C'],  desc: 'Copy UID to clipboard' },
+              ]} />
+
+              {/* Appearance */}
+              <HotkeyGroup label="Appearance" accent={accent} theme={theme} rows={[
+                { keys: ['Ctrl', 'Shift', 'D'],  desc: 'Cycle theme (OLED → Dark → More)' },
+                { keys: ['Ctrl', 'Shift', 'E'], desc: 'Cycle accent color' },
+              ]} />
+
+            </div>
           </Section>
         )}
 
@@ -1725,5 +1872,73 @@ function IconAbout({ className }) {
       <path d="M12 11v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       <circle cx="12" cy="8" r="0.8" fill="currentColor" />
     </svg>
+  );
+}
+
+function IconKeyboard({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M10 14h4M18 14h.01"
+        stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function Kbd({ children, accent }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: '28px',
+        padding: '2px 7px',
+        borderRadius: '6px',
+        fontSize: '11px',
+        fontWeight: 600,
+        fontFamily: 'Inter, sans-serif',
+        letterSpacing: '0.01em',
+        background: `${accent.hex}18`,
+        color: accent.hex,
+        border: `1px solid ${accent.hex}33`,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function HotkeyGroup({ label, rows, accent, theme }) {
+  return (
+    <div>
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>
+        {label}
+      </p>
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: theme.border }}>
+        {rows.map((row, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between gap-6 px-5 py-3"
+            style={{
+              borderBottom: i < rows.length - 1 ? `1px solid ${theme.border}` : 'none',
+            }}
+          >
+            <span className="text-[13px] text-ash/70">{row.desc}</span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {row.keys.map((k, ki) => (
+                <span key={ki} className="flex items-center gap-1.5">
+                  <Kbd accent={accent}>{k}</Kbd>
+                  {ki < row.keys.length - 1 && (
+                    <span className="text-[10px] text-ash/30">+</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

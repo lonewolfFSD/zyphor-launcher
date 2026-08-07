@@ -14,6 +14,8 @@ import { auth, db } from '../firebase.js';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import { clearSession } from '../lib/authSession.js';
 
+import GlassSurface from '../effects/GlassSurface.tsx';
+
 gsap.registerPlugin(useGSAP);
 
 const NAV_ITEMS = [
@@ -54,6 +56,135 @@ function CopyUID({ uid }) {
   );
 }
 
+const ITEM_H = 44; // h-11
+const ITEM_GAP = 12; // gap-3
+
+function NavItems({ items, activePage, onNavigate, accent, isLiquidGlass }) {
+  const listRef    = useRef(null);
+  const dragState  = useRef({ dragging: false, startY: 0, holdTimer: null });
+  const [dragIndex, setDragIndex] = useState(null); // highlighted during drag
+
+  // index of the current active item
+  const activeIndex = items.findIndex(i => i.id === activePage);
+
+  function itemIndexAtY(clientY) {
+    const rect = listRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const rel = clientY - rect.top;
+    const idx = Math.round(rel / (ITEM_H + ITEM_GAP));
+    return Math.max(0, Math.min(items.length - 1, idx));
+  }
+
+  function onPointerDown(e) {
+    // only main button / single touch
+    if (e.button !== undefined && e.button !== 0) return;
+    dragState.current.startY = e.clientY;
+    dragState.current.dragging = false;
+
+    dragState.current.holdTimer = setTimeout(() => {
+      dragState.current.dragging = true;
+      listRef.current?.setPointerCapture?.(e.pointerId);
+      setDragIndex(itemIndexAtY(e.clientY));
+    }, 150);
+  }
+
+  function onPointerMove(e) {
+    if (!dragState.current.dragging) return;
+    setDragIndex(itemIndexAtY(e.clientY));
+  }
+
+  function onPointerUp(e) {
+    clearTimeout(dragState.current.holdTimer);
+    if (dragState.current.dragging) {
+      const idx = itemIndexAtY(e.clientY);
+      if (idx !== null) onNavigate(items[idx].id);
+    }
+    dragState.current.dragging = false;
+    setDragIndex(null);
+  }
+
+  function onPointerCancel() {
+    clearTimeout(dragState.current.holdTimer);
+    dragState.current.dragging = false;
+    setDragIndex(null);
+  }
+
+  return (
+    <ul
+      ref={listRef}
+      className="flex flex-1 flex-col items-center gap-3 touch-none select-none"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+    >
+      {items.map((item, i) => {
+        const isActive  = activePage === item.id;
+        const isDragHit = dragIndex === i;
+        const highlight = isActive || isDragHit;
+
+        return (
+          <li key={item.id} className="nr-item relative">
+            {/* Active / drag-hover pill */}
+            {highlight && (
+              <motion.span
+                layoutId="nav-active"
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute inset-0 rounded-2xl overflow-hidden"
+              >
+                {isLiquidGlass ? (
+                  <span className="absolute inset-0 rounded-2xl overflow-hidden">
+                    {/* Accent tint so the pill is visibly active */}
+                    <span
+                      className="absolute inset-0"
+                      style={{ backgroundColor: accent.hex, opacity: 0.25 }}
+                    />
+                    <GlassSurface
+                      width={44}
+                      height={44}
+                      borderRadius={14}
+                      brightness={60}
+                      opacity={0.95}
+                      blur={10}
+                      distortionScale={-80}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+                    />
+                  </span>
+                ) : (
+                  <span
+                    className="absolute inset-0 rounded-2xl"
+                    style={{ backgroundColor: accent.hex }}
+                  />
+                )}
+              </motion.span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => !dragState.current.dragging && onNavigate(item.id)}
+              aria-current={isActive ? 'page' : undefined}
+              title={item.label}
+              style={{
+                color: highlight
+                  ? isLiquidGlass ? accent.hex : accent.on
+                  : undefined,
+                filter: highlight && isLiquidGlass
+                  ? `drop-shadow(0 0 6px ${accent.hex}cc)`
+                  : undefined,
+              }}
+              className={`relative flex h-11 w-11 items-center justify-center rounded-xl transition-colors duration-150 ${
+                highlight ? '' : 'text-ash hover:bg-white/[0.05] hover:text-bone'
+              }`}
+            >
+              <FontAwesomeIcon icon={item.icon} style={{ fontSize: 20 }} />
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export default function NavRail({ activePage, onNavigate, onExit, profile, onLogout }) {
   const { settings } = useSettings();
   const [launchState, setLaunchState] = useState('idle');
@@ -66,6 +197,7 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
   const theme  = THEMES[settings?.theme]  || THEMES.oled;
   const accent = ACCENTS[settings?.accent] || ACCENTS.bulb;
   const motionOn = settings ? settings.animations !== false && !settings.reduceMotion : true;
+const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
 
   // GSAP intro — section-wise stagger (avatar → play → items → footer)
   useGSAP(() => {
@@ -193,17 +325,19 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: -8, scale: 0.96 }}
             transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-            className="fixed z-50 ml-4 overflow-hidden rounded-3xl border shadow-2xl"
-            style={{
-              left: 92,
-              top: 56,
-              width: 260,
-              backgroundColor: `${theme.surface}f5`,
-              borderColor: isVip ? `${vipGold}40` : theme.border,
-              backdropFilter: 'blur(16px)',
-              color: theme.text,
-            }}
+            className={`fixed z-50 ml-4 overflow-hidden rounded-3xl border shadow-2xl`}
+           className="fixed z-50 ml-4 overflow-hidden rounded-3xl border shadow-2xl"
+style={{
+  left: 92,
+  top: 56,
+  width: 260,
+  backgroundColor: `${theme.surface}aa`,
+  borderColor: isVip ? `${vipGold}40` : theme.border,
+  backdropFilter: 'blur(16px)',
+  color: theme.text,
+}}
           >
+            
             <div className="flex items-center gap-3 px-4 py-3">
               <div
                 className="relative h-12 w-12 mt-1 shrink-0 overflow-hidden rounded-2xl border"
@@ -262,7 +396,7 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
 
             <div className="mx-3 h-px" style={{ backgroundColor: theme.border }} />
 
-            <div className="py-1.5">
+            <div className="py-2">
               {[
                 {
                   icon: faGear,
@@ -334,9 +468,35 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
       {/* ── NAV RAIL ──────────────────────────────────────────────────────── */}
       <nav
         ref={railRef}
-        className="relative flex w-[80px] shrink-0 flex-col items-center gap-1 overflow-hidden rounded-3xl border py-4 backdrop-blur-glass"
-        style={{ backgroundColor: `${theme.surface}cc`, borderColor: theme.border }}
+        className="relative flex w-[80px] shrink-0 flex-col items-center gap-1 overflow-hidden rounded-3xl border py-4"
+        style={{ borderColor: theme.border }}
       >
+
+        {/* Glass background — purely visual */}
+<div className="absolute inset-0 z-0">
+  {isLiquidGlass ? (
+    <GlassSurface
+      width={80}
+      height="100%"
+      borderRadius={24}
+      brightness={50}
+      opacity={0.93}
+      blur={11}
+      distortionScale={-180}
+      style={{ width: '100%', height: '100%' }}
+    />
+  ) : (
+    <div
+      className="absolute inset-0 rounded-3xl"
+      style={{
+        backdropFilter: 'blur(12px) saturate(1.4)',
+        WebkitBackdropFilter: 'blur(12px) saturate(1.4)',
+        background: `${theme.surface}cc`,
+        border: `1px solid ${theme.border}`,
+      }}
+    />
+  )}
+</div>
         {/* Avatar */}
         <div className="nr-section nr-avatar flex flex-col items-center">
           <button
@@ -408,36 +568,14 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
 
         <div className="nr-section nr-launch my-3 h-px w-8" style={{ backgroundColor: theme.border }} />
 
-        {/* Nav items */}
-        <ul className="flex flex-1 flex-col items-center gap-3">
-          {NAV_ITEMS.map((item) => {
-            const isActive = activePage === item.id;
-            return (
-              <li key={item.id} className="nr-item relative">
-                {isActive && (
-                  <motion.span
-                    layoutId="nav-active"
-                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                    className="absolute inset-0 rounded-2xl"
-                    style={{ backgroundColor: accent.hex }}
-                  />
-                )}
-                <button
-                  type="button"
-                  onClick={() => handleNav(item.id)}
-                  aria-current={isActive ? 'page' : undefined}
-                  title={item.label}
-                  style={{ color: isActive ? accent.on : undefined }}
-                  className={`relative flex h-11 w-11 items-center justify-center rounded-xl transition-colors duration-150 ${
-                    isActive ? '' : 'text-ash hover:bg-white/[0.05] hover:text-bone'
-                  }`}
-                >
-                  <FontAwesomeIcon icon={item.icon} style={{ fontSize: 20 }} />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        {/* Nav items — drag-to-slide */}
+        <NavItems
+          items={NAV_ITEMS}
+          activePage={activePage}
+          onNavigate={handleNav}
+          accent={accent}
+          isLiquidGlass={isLiquidGlass}
+        />
 
         <div className="nr-section nr-footer mt-2 h-px w-8" style={{ backgroundColor: theme.border }} />
 

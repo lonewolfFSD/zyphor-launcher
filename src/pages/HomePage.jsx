@@ -16,71 +16,81 @@ import {
   faDiscord, faXTwitter, faYoutube, faRedditAlien, faTiktok, faInstagram,
 } from '@fortawesome/free-brands-svg-icons';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
-import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
 import { doc, getDoc, collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import Logo from '../../build-resources/logo.png';
-import VIDEO_ROSSI from './videos/rossi.mp4';
-
-import ROSSI_FRAME from './videos/frames/rossi frame.png';
-import KALTSIT_FRAME from './videos/frames/kaltsit frame.png';
-import XUANWU_FRAME from './videos/frames/xuanwu frame.png';
-import FIREFLY_FRAME from './videos/frames/firefly frame.png';
-import LUCY_FRAME from './videos/frames/lucy frame.png';
-
-// ── Preset background videos ──────────────────────────────────────────────────
-// Drop your video files in the same ./videos/ folder and update the paths here.
-// import VIDEO_AURORA    from '';
-import VIDEO_GAMING    from './videos/gaming.mp4';
-import VIDEO_DRAGON_TRAVELLER from './videos/Xuanwu - Dragon Traveler.mp4';
-import VIDEO_LUCY from './videos/Lucy Cyberpunk.mp4';
-import VIDEO_KALTSIT from './videos/Kaltsit.mp4';
-
-const PRESET_VIDEO_MAP = {
-  // 'preset-aurora':    VIDEO_AURORA,
-  'preset-gaming':    VIDEO_GAMING,
-  'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
-  'preset-lucy':      VIDEO_LUCY,
-  'preset-kaltsit':   VIDEO_KALTSIT,
-  'preset-rossi': VIDEO_ROSSI,
-};
-
-const PRESET_STATIC_MAP = {
-  'preset-gaming':           new URL(FIREFLY_FRAME,           import.meta.url).href,
-  'preset-dragon-traveller': new URL(XUANWU_FRAME, import.meta.url).href,
-  'preset-lucy':             new URL(LUCY_FRAME,   import.meta.url).href,
-  'preset-kaltsit':          new URL(KALTSIT_FRAME,          import.meta.url).href,
-  'preset-rossi':            new URL(ROSSI_FRAME,            import.meta.url).href,
-};
+import GlassSurface from '../effects/GlassSurface.tsx';
 
 // ── Status check endpoints ─────────────────────────────────────────────────────
-// Set these in your .env (VITE_SERVER_STATUS_URL, VITE_VERSION_MANIFEST_URL,
-// VITE_APP_VERSION). The component tries window.launcherAPI IPC first; if it isn't
-// wired up yet, falls back to a direct HTTP fetch against these URLs.
-const SERVER_STATUS_URL   = import.meta.env.VITE_SERVER_STATUS_URL   ?? null;
+const SERVER_STATUS_URL    = import.meta.env.VITE_SERVER_STATUS_URL    ?? null;
 const VERSION_MANIFEST_URL = import.meta.env.VITE_VERSION_MANIFEST_URL ?? null;
-const CURRENT_VERSION     = import.meta.env.VITE_APP_VERSION          ?? '0.0.0';
+const CURRENT_VERSION      = import.meta.env.VITE_APP_VERSION          ?? '0.0.0';
 
 // ── Game identity ──────────────────────────────────────────────────────────────
-const STAY_STEAM_APP_ID  = '4956550';
+const STAY_STEAM_APP_ID    = '4956550';
 const STAY_STEAM_STORE_URL = `https://store.steampowered.com/app/${STAY_STEAM_APP_ID}`;
-const STAY_POSTER_URL    = `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${STAY_STEAM_APP_ID}/5987fca53a2c7e7bc87bc460bbe59b761dc02251/capsule_616x353.jpg?t=1784562601`;
-const STAY_GAME_NAME     = 'STAY: Possession • Obsession • Permanence';
+const STAY_GAME_NAME       = 'STAY: Possession • Obsession • Permanence';
 
 const fadeUp = {
   initial: { opacity: 0, y: 10 },
   animate: { opacity: 1, y: 0 },
 };
 
-// Module-level: survives remounts so the skeleton + GSAP intro only run
-// once per app session, not every time the user navigates back to Home.
+// ── Dynamic greeting ───────────────────────────────────────────────────────────
+const GREETINGS = {
+  // 5am–11:59am
+  morning: [
+    (n) => `Good morning, ${n}.`,
+    (n) => `Rise and shine, ${n}.`,
+    (n) => `Morning, ${n}. Ready to play?`,
+    (n) => `Early bird, ${n}.`,
+    (n) => `Hey ${n}, morning.`,
+    (n) => `Good morning, operative ${n}.`,
+  ],
+  // 12pm–4:59pm
+  afternoon: [
+    (n) => `Good afternoon, ${n}.`,
+    (n) => `Hey ${n}, afternoon already.`,
+    (n) => `What's up, ${n}?`,
+    (n) => `Afternoon, ${n}. Loading up?`,
+    (n) => `Welcome back, ${n}.`,
+    (n) => `Good to see you, ${n}.`,
+  ],
+  // 5pm–8:59pm
+  evening: [
+    (n) => `Good evening, ${n}.`,
+    (n) => `Evening, ${n}. Time to play?`,
+    (n) => `Hey ${n}, evening session?`,
+    (n) => `Welcome back, ${n}.`,
+    (n) => `Evening, operative ${n}.`,
+    (n) => `Good evening, ${n}. Ready?`,
+  ],
+  // 9pm–4:59am
+  night: [
+    (n) => `Still up, ${n}?`,
+    (n) => `Late night session, ${n}?`,
+    (n) => `Night owl mode, ${n}.`,
+    (n) => `Hey ${n}, burning the midnight oil?`,
+    (n) => `Dark hours, ${n}. Let's go.`,
+    (n) => `Late night, ${n}. Welcome.`,
+  ],
+};
+
+function getGreeting(displayName) {
+  const name = (displayName ?? 'Operative').split(' ')[0];
+  const h = new Date().getHours();
+  const bucket =
+    h >= 5  && h < 12 ? 'morning'   :
+    h >= 12 && h < 17 ? 'afternoon' :
+    h >= 17 && h < 21 ? 'evening'   : 'night';
+  const pool = GREETINGS[bucket];
+  return pool[Math.floor(Math.random() * pool.length)](name);
+}
+
 let homeVisited = false;
 
-const placeholderNews = [
-      
-];
+const placeholderNews = [];
 
-/** Shared shimmer keyframes for home skeleton */
 const HP_SHIMMER_CSS = `
 @keyframes hp-shimmer {
   0%   { background-position: -200% 0; }
@@ -100,25 +110,17 @@ const HP_SHIMMER_CSS = `
 }
 `;
 
-function Bone({ className = '', style = {}, theme, accent }) {
+function Bone({ className = '', style = {}, theme }) {
   return (
     <div
       className={`hp-skel relative overflow-hidden ${className}`}
-      style={{
-        backgroundColor: theme.surface,
-        borderColor: theme.border,
-        ...style,
-      }}
+      style={{ backgroundColor: theme.surface, borderColor: theme.border, ...style }}
     >
       <div className="absolute inset-0 hp-shimmer" />
     </div>
   );
 }
 
-/**
- * Full-page skeleton that mirrors the Home layout.
- * GSAP staggers blocks in on mount; Framer handles the fade-out when ready.
- */
 function HomeSkeleton({ theme, accent }) {
   const skelRef = useRef(null);
 
@@ -128,13 +130,7 @@ function HomeSkeleton({ theme, accent }) {
       gsap.fromTo(
         '.hp-skel',
         { opacity: 0, y: 14 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.4,
-          stagger: 0.06,
-          ease: 'power3.out',
-        }
+        { opacity: 1, y: 0, duration: 0.4, stagger: 0.06, ease: 'power3.out' }
       );
     }, skelRef);
     return () => ctx.revert();
@@ -149,67 +145,25 @@ function HomeSkeleton({ theme, accent }) {
       className="absolute inset-0 z-30 flex gap-4 px-8 pointer-events-none"
     >
       <style>{HP_SHIMMER_CSS}</style>
-
-      {/* Left / center column */}
       <div className="flex min-w-0 flex-1 flex-col gap-4 py-0">
-        {/* Status strip */}
-        <Bone
-          className="h-[52px] rounded-2xl border"
-          theme={theme}
-          style={{ backgroundColor: `${theme.surface}99` }}
-        />
-
-        {/* Banner */}
-        <Bone
-          className="h-64 rounded-[2.5em] border"
-          theme={theme}
-          style={{ backgroundColor: `${theme.surface}aa` }}
-        />
-
-        {/* Section title bar */}
-        <Bone
-          className="h-6 mt-4 rounded-lg"
-          theme={theme}
-          style={{ width: '55%', border: 'none' }}
-        />
-
-        {/* Game cards */}
+        <Bone className="h-[52px] rounded-2xl border" theme={theme} style={{ backgroundColor: `${theme.surface}99` }} />
+        <Bone className="h-64 rounded-[2.5em] border" theme={theme} style={{ backgroundColor: `${theme.surface}aa` }} />
+        <Bone className="h-6 mt-4 rounded-lg" theme={theme} style={{ width: '55%', border: 'none' }} />
         <div className="flex gap-3 mt-1">
-          <Bone
-            className="h-[177px] w-[308px] rounded-3xl border"
-            theme={theme}
-          />
+          <Bone className="h-[177px] w-[308px] rounded-3xl border" theme={theme} />
           <Bone
             className="h-[177px] w-[308px] rounded-3xl border border-dashed"
             theme={theme}
-            style={{
-              borderColor: `${accent.hex}55`,
-              backgroundColor: `${theme.surface}80`,
-            }}
+            style={{ borderColor: `${accent.hex}55`, backgroundColor: `${theme.surface}80` }}
           />
         </div>
       </div>
-
-      {/* Right sidebar */}
       <div className="flex w-80 shrink-0 flex-col gap-3">
-        <Bone
-          className="h-12 rounded-[1.8em] border"
-          theme={theme}
-          style={{ backgroundColor: `${theme.surface}88` }}
-        />
+        <Bone className="h-12 rounded-[1.8em] border" theme={theme} style={{ backgroundColor: `${theme.surface}88` }} />
         {[0, 1, 2].map((i) => (
-          <Bone
-            key={i}
-            className="h-36 rounded-2xl border"
-            theme={theme}
-            style={{ backgroundColor: `${theme.surface}66` }}
-          />
+          <Bone key={i} className="h-36 rounded-2xl border" theme={theme} style={{ backgroundColor: `${theme.surface}66` }} />
         ))}
-        <Bone
-          className="mt-auto h-16 rounded-2xl border"
-          theme={theme}
-          style={{ backgroundColor: `${theme.surface}55` }}
-        />
+        <Bone className="mt-auto h-16 rounded-2xl border" theme={theme} style={{ backgroundColor: `${theme.surface}55` }} />
       </div>
     </motion.div>
   );
@@ -217,105 +171,74 @@ function HomeSkeleton({ theme, accent }) {
 
 export default function HomePage({ profile }) {
   const { settings } = useSettings();
-  const theme = THEMES[settings?.theme] || THEMES.oled;
-  const accent = ACCENTS[settings?.accent] || ACCENTS.bulb;
+  const theme   = THEMES[settings?.theme]   || THEMES.oled;
+  const accent  = ACCENTS[settings?.accent] || ACCENTS.bulb;
   const motionOn = settings ? settings.animations && !settings.reduceMotion : true;
 
-  // Same logic as NavRail — true only when Steam ownership is verified
   const hasGame = Boolean(profile?.hasGame || profile?.steamOwnsGame);
 
-  const backgroundVideoType = settings?.backgroundVideoType ?? 'default';
-  const backgroundQuality = settings?.backgroundQuality ?? 'hd';
-  const backgroundVideoSrc =
-    backgroundVideoType === 'none' || backgroundQuality === 'static'
-      ? null
-      : backgroundVideoType === 'custom'
-      ? settings?.backgroundVideoPath
-        ? `file://${settings.backgroundVideoPath}`
-        : null
-      : backgroundVideoType?.startsWith('preset-')
-      ? PRESET_VIDEO_MAP[backgroundVideoType] ?? DEFAULT_BACKGROUND_VIDEO
-      : DEFAULT_BACKGROUND_VIDEO;
-  // SD: render video at lower resolution via CSS (scale down then up)
-  const bgVideoStyle = backgroundQuality === 'sd'
-    ? { filter: 'blur(0px)', imageRendering: 'auto', transform: 'scale(1.05)', opacity: 1 }
-    : {};
-  // Static fallback poster (first frame shown as bg image when quality=static)
-  const bgStaticPoster = backgroundQuality === 'static'
-  ? (PRESET_STATIC_MAP[backgroundVideoType] ?? null)
-  : null;
-
-  const [launchState, setLaunchState] = useState('idle'); // 'idle' | 'launching' | 'running'
+  const [launchState, setLaunchState]       = useState('idle');
   const [showLaunchModal, setShowLaunchModal] = useState(false);
-  const [news, setNews] = useState([]);
-  const [bannerIndex, setBannerIndex] = useState(0);
-  const [serverStatus, setServerStatus] = useState('checking');
-  const [updateStatus, setUpdateStatus] = useState('checking');
-  const [playtime, setPlaytime] = useState(null);
-  const [updateInfo, setUpdateInfo] = useState(null);
+  const [news, setNews]                     = useState([]);
+  const [bannerIndex, setBannerIndex]       = useState(0);
+  const [serverStatus, setServerStatus]     = useState('checking');
+  const [updateStatus, setUpdateStatus]     = useState('checking');
+  const [playtime, setPlaytime]             = useState(null);
+  const [updateInfo, setUpdateInfo]         = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
-  const [updateDlState, setUpdateDlState] = useState('idle');
-  // Skip skeleton on revisits — show content immediately
-  const [pageReady, setPageReady] = useState(homeVisited);
-  const pageRef = useRef(null);
+  const [updateDlState, setUpdateDlState]   = useState('idle');
+  const [pageReady, setPageReady]           = useState(homeVisited);
+
+  const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
+  const [greeting] = useState(() => getGreeting(profile?.displayName));
+
+  const pageRef  = useRef(null);
   const didIntro = useRef(homeVisited);
 
   const fadeMask = {
-  WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 100%)',
-  maskImage: 'linear-gradient(to right, transparent 0%, black 100%)',
-  opacity: 1,
-};
+    WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 100%)',
+    maskImage: 'linear-gradient(to right, transparent 0%, black 100%)',
+    opacity: 1,
+  };
 
-
- useEffect(() => { (async () => {
-  // News
-  try {
-    const q = query(collection(db, 'news'), orderBy('date', 'desc'), limit(5));
-    const snap = await getDocs(q);
-    setNews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-  } catch {
-    setNews([]);
-  }
-
-  // Playtime
-  window.launcherAPI?.getPlaytime?.().then((p) => setPlaytime(p ?? null)).catch(() => {});
-
-  // Server status
-  try {
-    const snap = await getDoc(doc(db, 'meta', 'status'));
-    setServerStatus(snap.exists() ? 'online' : 'offline');
-  } catch {
-    setServerStatus('offline');
-  }
-
-  // Update check
-  try {
-    if (window.launcherAPI?.checkForUpdates) {
-      await window.launcherAPI.checkForUpdates();
-    } else {
-      const snap = await getDoc(doc(db, 'meta', 'version'));
-      const latest = snap.data()?.version ?? CURRENT_VERSION;
-      setUpdateStatus(latest !== CURRENT_VERSION ? 'available' : 'current');
+  useEffect(() => { (async () => {
+    try {
+      const q = query(collection(db, 'news'), orderBy('date', 'desc'), limit(5));
+      const snap = await getDocs(q);
+      setNews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch {
+      setNews([]);
     }
-  } catch {
-    setUpdateStatus('current');
-  }
-})(); }, []);
 
-  // Only delay on the very first visit so the GSAP intro can play.
-  // On revisits pageReady is already true (homeVisited=true), so this is a no-op.
+    window.launcherAPI?.getPlaytime?.().then((p) => setPlaytime(p ?? null)).catch(() => {});
+
+    try {
+      const snap = await getDoc(doc(db, 'meta', 'status'));
+      setServerStatus(snap.exists() ? 'online' : 'offline');
+    } catch {
+      setServerStatus('offline');
+    }
+
+    try {
+      if (window.launcherAPI?.checkForUpdates) {
+        await window.launcherAPI.checkForUpdates();
+      } else {
+        const snap = await getDoc(doc(db, 'meta', 'version'));
+        const latest = snap.data()?.version ?? CURRENT_VERSION;
+        setUpdateStatus(latest !== CURRENT_VERSION ? 'available' : 'current');
+      }
+    } catch {
+      setUpdateStatus('current');
+    }
+  })(); }, []);
+
   useEffect(() => {
     if (homeVisited) return;
-    const minMs = 700;
-    const t0 = Date.now();
-    let cancelled = false;
-    const left = Math.max(0, minMs - (Date.now() - t0));
-    const id = setTimeout(() => { if (!cancelled) setPageReady(true); }, left);
-    return () => { cancelled = true; clearTimeout(id); };
+    const id = setTimeout(() => setPageReady(true), 700);
+    return () => clearTimeout(id);
   }, []);
 
-  // Wire electron-updater events
   useEffect(() => {
     window.launcherAPI?.onUpdateAvailable?.((info) => {
       setUpdateInfo(info);
@@ -338,6 +261,39 @@ export default function HomePage({ profile }) {
   }, [banners.length, motionOn]);
   const banner = banners[bannerIndex];
 
+  function GlassLayer({ borderRadius, distortionScale = -180, blur = 11 }) {
+  const { settings } = useSettings();
+  const theme = THEMES[settings?.theme] || THEMES.oled;
+  const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
+
+  if (isLiquidGlass) {
+    return (
+      <GlassSurface
+        width="100%"
+        height="100%"
+        borderRadius={borderRadius}
+        brightness={50}
+        opacity={0.93}
+        blur={blur}
+        distortionScale={distortionScale}
+        style={{ width: '100%', height: '100%' }}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="absolute inset-0"
+      style={{
+        borderRadius,
+        backdropFilter: 'blur(12px) saturate(1.4)',
+        WebkitBackdropFilter: 'blur(12px) saturate(1.4)',
+        background: `${theme.surface}55`,
+      }}
+    />
+  );
+}
+
   function handlePurchase() {
     if (window.launcherAPI?.openExternal) {
       window.launcherAPI.openExternal(STAY_STEAM_STORE_URL);
@@ -346,50 +302,35 @@ export default function HomePage({ profile }) {
     }
   }
 
-  // Poll interval ref — cleared when game closes or component unmounts
   const pollRef = useRef(null);
-
-  // Clean up polling on unmount
   useEffect(() => () => clearInterval(pollRef.current), []);
 
   function startGamePolling() {
     clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
-        // window.launcherAPI.isGameRunning() should return true/false
-        // Falls back to checking via steam://  — if not available, poll stops after 30s
         const running = await window.launcherAPI?.isGameRunning?.();
         if (running === false) {
           clearInterval(pollRef.current);
           setLaunchState('idle');
         }
-      } catch {
-        // If IPC isn't wired, silently ignore — button stays as Stop
-      }
-    }, 3000); // check every 3 seconds
+      } catch {}
+    }, 3000);
   }
 
   async function handlePlay() {
     setLaunchState('launching');
     setShowLaunchModal(true);
-
     try {
       if (window.launcherAPI?.openExternal) {
         await window.launcherAPI.openExternal(`steam://run/${STAY_STEAM_APP_ID}`);
       } else {
         window.location.href = `steam://run/${STAY_STEAM_APP_ID}`;
       }
-      // Give Steam ~3s to start, then flip to running, begin polling,
-      // and minimize the launcher to tray so it gets out of the way.
       setTimeout(() => {
         setLaunchState('running');
         setShowLaunchModal(false);
         startGamePolling();
-        // Minimize to tray AND keep the taskbar button visible.
-        // minimizeToTray  → tells main process to show the tray icon (window.hide() equivalent)
-        // minimize        → also calls window.minimize() so the taskbar entry stays present
-        // Both are called together so the launcher disappears from screen but remains
-        // accessible from both the system tray and the taskbar.
         if (window.launcherAPI?.minimizeToTray) window.launcherAPI.minimizeToTray();
         if (window.launcherAPI?.minimize) window.launcherAPI.minimize();
       }, 3000);
@@ -402,7 +343,6 @@ export default function HomePage({ profile }) {
   async function handleStop() {
     clearInterval(pollRef.current);
     try {
-      // Try IPC kill first, then fallback to steam://exit
       if (window.launcherAPI?.stopGame) {
         await window.launcherAPI.stopGame();
       } else {
@@ -417,33 +357,29 @@ export default function HomePage({ profile }) {
     else if (launchState === 'idle') handlePlay();
   }
 
-  // GSAP intro when skeleton lifts — skipped on revisits
   useGSAP(() => {
     if (!pageReady || !pageRef.current || didIntro.current) return;
     didIntro.current = true;
-    homeVisited = true; // persist across future remounts
+    homeVisited = true;
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
-      tl.from('.hp-status', { y: -16, opacity: 0, duration: 0.55 }, 0)
-        .from('.hp-banner', { y: 28, opacity: 0, scale: 0.98, duration: 0.7 }, 0.08)
-        .from('.hp-section-title', { y: 12, opacity: 0, duration: 0.45 }, 0.22)
-        .from('.hp-game-card', { y: 24, opacity: 0, duration: 0.5, stagger: 0.1 }, 0.28)
-        .from('.hp-aside', { x: 32, opacity: 0, duration: 0.6 }, 0.12);
+      tl.from('.hp-status',       { y: -16, opacity: 0, duration: 0.55 }, 0)
+        .from('.hp-banner',       { y: 28,  opacity: 0, scale: 0.98, duration: 0.7 }, 0.08)
+        .from('.hp-section-title',{ y: 12,  opacity: 0, duration: 0.45 }, 0.22)
+        .from('.hp-game-card',    { y: 24,  opacity: 0, duration: 0.5, stagger: 0.1 }, 0.28)
+        .from('.hp-aside',        { x: 32,  opacity: 0, duration: 0.6 }, 0.12);
     }, pageRef);
     return () => ctx.revert();
   }, [pageReady]);
 
   return (
-    <div ref={pageRef} className="relative flex h-full gap-4" style={{ color: 'inherit',fontFamily: 'Apple Garamond' }}>
-      <BackgroundVideo key={backgroundVideoSrc + backgroundQuality} src={backgroundVideoSrc} active={motionOn} quality={backgroundQuality} videoStyle={bgVideoStyle} staticPoster={bgStaticPoster} />
-      <AnimatedGrid accent={accent} theme={theme} active={motionOn} />
+    <div ref={pageRef} className="relative flex h-full gap-4" style={{ color: 'inherit', fontFamily: 'Apple Garamond' }}>
+      {/* Background and grid are now rendered globally in App.jsx */}
 
-      {/* Skeleton loading layer — GSAP stagger-in + shimmer; fades out when ready */}
       <AnimatePresence>
         {!pageReady && <HomeSkeleton theme={theme} accent={accent} />}
       </AnimatePresence>
 
-      {/* ── Update modal ── */}
       <UpdateModal
         visible={showUpdateModal}
         info={updateInfo}
@@ -460,7 +396,6 @@ export default function HomePage({ profile }) {
         onInstall={() => window.launcherAPI?.installUpdate?.()}
       />
 
-      {/* ── Launch modal ── */}
       <LaunchModal
         visible={showLaunchModal}
         gameName={STAY_GAME_NAME}
@@ -474,15 +409,19 @@ export default function HomePage({ profile }) {
       />
 
       {/* ── LEFT / CENTER ── */}
-      <div className="relative flex min-w-0 flex-1 flex-col gap-4 px-8 overflow-y-auto transition-opacity duration-300"
-        style={{ opacity: pageReady ? 1 : 0 }}>
-        {/* Status strip: version / update / server — the stuff a launcher actually needs up top */}
+      <div
+        className="relative flex min-w-0 flex-1 flex-col gap-4 px-8 overflow-y-auto transition-opacity duration-300"
+        style={{ opacity: pageReady ? 1 : 0 }}
+      >
         <motion.div
           {...fadeUp}
           transition={{ duration: 0.35 }}
-          className="hp-status flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-4 backdrop-blur-lg"
-          style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99` }}
+          className="hp-status flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-4 backdrop-blur-sm"
+          style={{ borderColor: theme.border, backgroundColor: `${theme.surface}22`, }}
         >
+          <div className="absolute inset-0 z-0">
+  <GlassLayer borderRadius={16} distortionScale={-10} />
+</div>
           <StatusChip
             icon={updateStatus === 'available' ? faCircleArrowUp : faCircleCheck}
             label={updateStatus === 'available' ? `Update available — v${updateInfo?.version ?? ''}` : updateStatus === 'checking' ? 'Checking for updates…' : 'Up to date'}
@@ -507,10 +446,11 @@ export default function HomePage({ profile }) {
         <motion.div
           {...fadeUp}
           transition={{ duration: 0.4, delay: 0.05 }}
-          className="hp-banner relative h-64 3xl:h-70 shrink-0 overflow-hidden rounded-[2.5em] border backdrop-blur-md"
-          style={{ borderColor: theme.border }}
+          className="hp-banner relative h-64 3xl:h-70 shrink-0 overflow-hidden rounded-[2.5em] border"
+          style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66`, }}
         >
           <AnimatePresence mode="wait">
+            
             <motion.div
               key={bannerIndex}
               initial={{ opacity: 0 }}
@@ -520,12 +460,7 @@ export default function HomePage({ profile }) {
               className="absolute inset-0"
             >
               {banner?.video ? (
-                <BannerVideo
-                  src={banner.video}
-                  poster={banner.image}
-                  active={motionOn}
-                  fadeMask={fadeMask}
-                />
+                <BannerVideo src={banner.video} poster={banner.image} active={motionOn} fadeMask={fadeMask} />
               ) : banner?.image ? (
                 <motion.img
                   src={banner.image}
@@ -536,7 +471,7 @@ export default function HomePage({ profile }) {
                   transition={{ duration: 7, ease: 'linear' }}
                 />
               ) : (
-                  <motion.img
+                <motion.img
                   src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/4956550/76bc20881fac10578131cd62da809d70aef8ffa3/library_hero.jpg?t=1784562601"
                   alt=""
                   className="h-full w-full object-cover"
@@ -544,89 +479,78 @@ export default function HomePage({ profile }) {
                   animate={motionOn ? { scale: [1, 1.05] } : {}}
                   transition={{ duration: 7, ease: 'linear' }}
                 />
+                
               )}
             </motion.div>
+
+            <div className="absolute inset-0 -z-10">
+  <GlassLayer borderRadius={40} distortionScale={-180} blur={40} />
+</div>
+            
           </AnimatePresence>
 
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-
           <div className="absolute bottom-0 left-0 right-0 py-10 px-12">
-
             <h2 className="mt-1 text-[2.1em] font-medium text-bone">
-              {banner?.title ?? 'Welcome To Zyphor Launcher'}
+              {banner?.title ?? greeting}
             </h2>
             {banner?.date && <p className="mt-1 text-[13px] text-ash/60">{banner.date}</p>}
           </div>
 
           {banners.length > 1 && (
-    <div className="absolute bottom-8 right-10 flex gap-2">
-      {banners.map((_, i) => (
-        <button
-          key={i}
-          onClick={() => setBannerIndex(i)}
-          className="h-3 rounded-full transition-all"
-          style={{
-            width: i === bannerIndex ? 80 : 12,
-            backgroundColor:
-              i === bannerIndex
-                ? accent.hex
-                : "rgba(255,255,255,0.3)",
-          }}
-        />
-      ))}
-    </div>
-  )}
+            <div className="absolute bottom-8 right-10 flex gap-2">
+              {banners.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setBannerIndex(i)}
+                  className="h-3 rounded-full transition-all"
+                  style={{
+                    width: i === bannerIndex ? 80 : 12,
+                    backgroundColor: i === bannerIndex ? accent.hex : 'rgba(255,255,255,0.3)',
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </motion.div>
+
         <hr className="mt-4 border-ash/20" />
 
-        <h3 className='hp-section-title text-2xl font-medium mt-4 font-["Apple Garamond"]'>STAY: Possession • Obsession • Permanence <span className="text-ash/40 px-0.5">|</span> <span className="text-xs font-extrabold font-[Manrope]" style={{ color: accent.hex }}>SERIES</span></h3>
+        <h3 className='hp-section-title text-2xl font-medium mt-4 font-["Apple Garamond"]'>
+          STAY: Possession • Obsession • Permanence{' '}
+          <span className="text-ash/40 px-0.5">|</span>{' '}
+          <span className="text-xs font-extrabold font-[Manrope]" style={{ color: accent.hex }}>SERIES</span>
+        </h3>
 
-        {/* Games */}
         <motion.div {...fadeUp} transition={{ delay: 0.1, duration: 0.4 }}>
           <div className="flex flex-wrap gap-3">
-            {/* STAY card — poster + play or purchase on hover */}
-<div
-  className="hp-game-card group relative overflow-hidden rounded-3xl border-2  transition-colors duration-200"
-  style={{
-width: 308,
-height: 177,
-    borderColor: "rgba(255,255,255,0.1)",
-  }}
-  onMouseEnter={(e) => {
-    e.currentTarget.style.borderColor = accent.hex;
-  }}
-  onMouseLeave={(e) => {
-    e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-  }}
->
-              {/* Poster image — Steam portrait capsule ratio (600×900) */}
+            <div
+              className="hp-game-card group relative overflow-hidden rounded-3xl border-2 transition-colors duration-200"
+              style={{ width: 262, height: 151, borderColor: 'rgba(255,255,255,0.1)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = accent.hex; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+            >
               <img
                 src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/4956550/5987fca53a2c7e7bc87bc460bbe59b761dc02251/capsule_616x353.jpg?t=1784562601"
                 alt="STAY"
                 className="absolute inset-0 h-full w-full object-cover"
-                onError={(e) => {
-                  // fallback gradient if image 404s (placeholder App ID)
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-              {/* Fallback gradient shown behind image */}
-              <div
-                className="absolute inset-0 -z-10"
-                style={{ background: 'linear-gradient(160deg, #1a1510 0%, #0a0908 100%)' }}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
 
-              {/* Hover overlay */}
+              <div className="absolute inset-0 -z-10">
+  <GlassLayer borderRadius={20} distortionScale={40} />
+</div>
+              <div className="absolute inset-0 -z-10" style={{ background: 'linear-gradient(160deg, #1a1510 0%, #0a0908 100%)' }} />
               <div className="absolute inset-0 bg-black/0 transition-all duration-300 group-hover:bg-black/60" />
 
-              {/* Action button — hidden until hover */}
+              
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-0 transition-all duration-300 group-hover:opacity-100">
                 {hasGame ? (
-                  /* ── OWNED: Play / Stop button ── */
                   <button
                     type="button"
                     onClick={handlePlayToggle}
                     disabled={launchState === 'launching' || launchState === 'error'}
-                    className="flex h-[70px] w-[70px] items-center justify-center rounded-3xl shadow-lg transition-transform duration-200 scale-90 group-hover:scale-100 disabled:cursor-wait bg-transparent backdrop-blur-sm"
+                    className="flex h-[60px] w-[60px] items-center justify-center rounded-2xl shadow-lg transition-transform duration-200 scale-90 group-hover:scale-100 disabled:cursor-wait bg-transparent backdrop-blur-sm"
                     style={{ border: `3px solid ${accent.hex}88`, backgroundColor: `${accent.hex}22` }}
                   >
                     {launchState === 'launching' ? (
@@ -635,13 +559,12 @@ height: 177,
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                       </svg>
                     ) : launchState === 'running' ? (
-                      <img src={SquareButton} className="w-8" style={{ color: '#fff' }} />
+                      <img src={SquareButton} className="w-7" />
                     ) : (
-                      <img src={PlayButton} className="w-8 translate-x-0.5" style={{ color: '#fff' }} />
+                      <img src={PlayButton} className="w-7 translate-x-0.5" />
                     )}
                   </button>
                 ) : (
-                  /* ── NOT OWNED: Purchase on Steam ── */
                   <button
                     type="button"
                     onClick={handlePurchase}
@@ -652,154 +575,146 @@ height: 177,
                     Buy on Steam
                   </button>
                 )}
-
-                {/* Game title label */}
                 <span className="text-[10px] font-black uppercase tracking-widest text-white/70">
                   {hasGame ? '' : 'Not owned'}
                 </span>
               </div>
+
+              
             </div>
 
-            {/* Coming-soon slot */}
+
+
             <div
-              className="hp-game-card flex h-[177px] w-[308px] flex-col items-center justify-center rounded-3xl border border-dashed backdrop-blur-glass text-ash/40 transition-colors hover:text-ash/60"
+              className="hp-game-card flex h-[151px] w-[262px] flex-col items-center justify-center rounded-3xl border border-dashed backdrop-blur-glass text-ash/40 transition-colors hover:text-ash/60"
               style={{ backgroundColor: `${theme.surface}90`, border: `2px dashed ${accent.hex}95` }}
             >
-              <p className="text-sm font-['Manrope'] text-ash/40">More titles coming soon</p>
+              <p className="text-xs font-['Manrope'] text-ash/40">More titles coming soon</p>
+              
             </div>
+            
           </div>
         </motion.div>
       </div>
 
       {/* ── RIGHT: News sidebar ── */}
       <motion.aside
-  className="hp-aside relative flex w-80 shrink-0 flex-col overflow-hidden rounded-[1.8em] border  backdrop-blur-lg transition-opacity duration-300"
-  style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99`, opacity: pageReady ? 1 : 0 }}
->
-  {/* Header */}
-  <div className="flex shrink-0 items-center gap-2.5 border-b px-6 py-3.5" style={{ borderColor: theme.border }}>
-    <FontAwesomeIcon icon={faNewspaper} className="text-[20px] hidden" style={{ color: accent.hex }} />
-    <h2 className="text-[18.5px] mt-0.5 font-medium tracking-tight text-bone" style={{
-      fontFamily: 'Apple Garamond'
-    }}>What's New?</h2>
-    <span
-      className="ml-auto rounded-lg px-2 py-1 text-[10px] font-bold"
-      style={{ backgroundColor: `${accent.hex}22`, color: `#${accent.hex}99`, border: `2px solid ${accent.hex}66` }}
-    >
-      {banners.length}
-    </span>
-  </div>
-
-  {/* News list */}
-  <div className="flex-1 overflow-y-auto">
-    <div className="flex flex-col font-[Manrope]">
-      {banners.map((item, i) => (
-        <a
-          key={item.id ?? i}
-          href={item.url ?? '#'}
-          className="group flex flex-col items-center gap-3 border-b px-4 py-3.5 transition-colors hover:bg-white/[0.05]"
-          style={{ borderColor: theme.border }}
-        >
-          <div className="h-32 w-full shrink-0 overflow-hidden rounded-xl bg-white/5">
-            {item.image ? (
-              <img src={item.image} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-            ) : (
-              <div
-                className="flex h-full w-full items-center justify-center"
-                style={{ background: `linear-gradient(135deg, ${theme.surface}, ${theme.bg})` }}
-              >
-                <FontAwesomeIcon icon={faNewspaper} className="text-[16px] text-ash/20" />
-              </div>
-            )}
-          </div>
-
-          <div className="flex w-full items-center gap-3">
-            <div className="min-w-0 flex-1">
-            <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-bone/80 transition-colors group-hover:text-bone">
-              {item.title} <FontAwesomeIcon
-            icon={faChevronRight}
-            className="shrink-0 text-[9px] text-ash/80 transition-all group-hover:text-ash/60 group-hover:translate-x-0.5"
-          />
-            </p>
-            <p className="mt-1.5 text-[11px] font-medium text-ash/40">{item.date}</p>
-          </div>
-
-          
-          </div>
-        </a>
-      ))}
-    </div>
-
-    {/* Promo card */}
-    <div className="p-3">
-      <div
-        className="overflow-hidden rounded-2xl border font-[Manrope]"
-        style={{ borderColor: theme.border, backgroundColor: `${theme.surface}60` }}
+        className="hp-aside relative flex w-80 shrink-0 flex-col overflow-hidden rounded-[1.8em] border transition-opacity duration-300"
+        style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99`, opacity: pageReady ? 1 : 0 }}
       >
-        <div className="relative h-ful overflow-hidden">
-          
-        </div>
-        <p className="px-3 py-2.5 text-[11px] leading-relaxed text-ash/50">
-          Follow development, report bugs, and stay up to date with everything STAY. <br />
-          <hr className="my-1.5 border-ash/20" />
-          <a
-            href="https://store.steampowered.com/app/4956550"
-            className="underline font-semibold text-[10px]"
-            style={{ color: accent.hex }}
-          >
-            Click here to join the Steam community hub <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="ml-1 text-[9px]" />
-          </a>
-        </p>
-        
-      </div>
-    </div>
-  </div>
-
-  {/* Socials bar */}
-  <div
-  className="flex shrink-0 items-center justify-around border-t px-3 py-3"
-  style={{ borderColor: theme.border }}
->
-  {[
-    { icon: faDiscord,     href: '#', color: '#5865F2', label: 'Discord'   },
-    { icon: faXTwitter,    href: '#', color: '#e7e7e7', label: 'X'         },
-    { icon: faYoutube,     href: '#', color: '#FF0000', label: 'YouTube'   },
-    { icon: faInstagram,   href: '#', color: '#FF4500', label: 'Instagram' },
-    { icon: faRedditAlien, href: '#', color: '#FF4500', label: 'Reddit'    },
-    { image: Logo, href: 'https://zyphorstudios.com', label: 'Website', type: 'image' },
-  ].map(({ icon, image, href, color, label, type }) => (
-    <a 
-      key={label}
-      href={href}
-      title={label}
-      className="group flex flex-col items-center gap-1"
-      onMouseEnter={(e) => {
-        const svg = e.currentTarget.querySelector('svg');
-        const span = e.currentTarget.querySelector('span');
-        if (svg) svg.style.color = color;
-        if (span) span.style.color = color;
-      }}
-      onMouseLeave={(e) => {
-        const svg = e.currentTarget.querySelector('svg');
-        const span = e.currentTarget.querySelector('span');
-        if (svg) svg.style.color = '';
-        if (span) span.style.color = '';
-      }}
-    >
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl transition-colors hover:bg-white/[0.06]">
-        {type === 'image' ? (
-          <img src={image} alt={label} className="h-[28px] w-[28px] object-contain opacity-20 transition-opacity group-hover:opacity-100" />
-        ) : (
-          <FontAwesomeIcon icon={icon} className="text-[22px] text-ash/40 transition-colors" />
-        )}
-      </div>
-    </a>
-  ))}
+        <div className="absolute inset-0 -z-10">
+  <GlassLayer borderRadius={20} distortionScale={-200} blur={40} />
 </div>
-</motion.aside>
+        <div className="flex shrink-0 items-center gap-2.5 border-b px-6 py-3.5" style={{ borderColor: theme.border }}>
+          <h2 className="text-[18.5px] mt-0.5 font-medium tracking-tight text-bone" style={{ fontFamily: 'Apple Garamond' }}>
+            What's New?
+          </h2>
+          <span
+            className="ml-auto rounded-lg px-2 py-1 text-[10px] font-bold"
+            style={{ backgroundColor: `${accent.hex}22`, color: `#${accent.hex}99`, border: `2px solid ${accent.hex}66` }}
+          >
+            {banners.length}
+          </span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="flex flex-col font-[Manrope]">
+            {banners.map((item, i) => (
+              <a
+                key={item.id ?? i}
+                href={item.url ?? '#'}
+                className="group flex flex-col items-center gap-3 border-b px-4 py-3.5 transition-colors hover:bg-white/[0.05]"
+                style={{ borderColor: theme.border }}
+              >
+                <div className="h-32 w-full shrink-0 overflow-hidden rounded-xl bg-white/5">
+                  {item.image ? (
+                    <img src={item.image} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                  ) : (
+                    <div
+                      className="flex h-full w-full items-center justify-center"
+                      style={{ background: `linear-gradient(135deg, ${theme.surface}, ${theme.bg})` }}
+                    >
+                      <FontAwesomeIcon icon={faNewspaper} className="text-[16px] text-ash/20" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex w-full items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-bone/80 transition-colors group-hover:text-bone">
+                      {item.title}{' '}
+                      <FontAwesomeIcon icon={faChevronRight} className="shrink-0 text-[9px] text-ash/80 transition-all group-hover:text-ash/60 group-hover:translate-x-0.5" />
+                    </p>
+                    <p className="mt-1.5 text-[11px] font-medium text-ash/40">{item.date}</p>
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+
+          <div className="p-3">
+            <div
+              className="overflow-hidden rounded-2xl border font-[Manrope]"
+              style={{ borderColor: theme.border, backgroundColor: `${theme.surface}60` }}
+            >
+              <p className="px-3 py-2.5 text-[11px] leading-relaxed text-ash/50">
+                Follow development, report bugs, and stay up to date with everything STAY. <br />
+                <hr className="my-1.5 border-ash/20" />
+                <a
+                  href="https://store.steampowered.com/app/4956550"
+                  className="underline font-semibold text-[10px]"
+                  style={{ color: accent.hex }}
+                >
+                  Click here to join the Steam community hub{' '}
+                  <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="ml-1 text-[9px]" />
+                </a>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center justify-around border-t px-3 py-3" style={{ borderColor: theme.border }}>
+          {[
+            { icon: faDiscord,     href: '#', color: '#5865F2', label: 'Discord'   },
+            { icon: faXTwitter,    href: '#', color: '#e7e7e7', label: 'X'         },
+            { icon: faYoutube,     href: '#', color: '#FF0000', label: 'YouTube'   },
+            { icon: faInstagram,   href: '#', color: '#FF4500', label: 'Instagram' },
+            { icon: faRedditAlien, href: '#', color: '#FF4500', label: 'Reddit'    },
+            { image: Logo, href: 'https://zyphorstudios.com', label: 'Website', type: 'image' },
+          ].map(({ icon, image, href, color, label, type }) => (
+            <a
+              key={label}
+              href={href}
+              title={label}
+              className="group flex flex-col items-center gap-1"
+              onMouseEnter={(e) => {
+                const svg  = e.currentTarget.querySelector('svg');
+                const span = e.currentTarget.querySelector('span');
+                if (svg)  svg.style.color  = color;
+                if (span) span.style.color = color;
+              }}
+              onMouseLeave={(e) => {
+                const svg  = e.currentTarget.querySelector('svg');
+                const span = e.currentTarget.querySelector('span');
+                if (svg)  svg.style.color  = '';
+                if (span) span.style.color = '';
+              }}
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl transition-colors hover:bg-white/[0.06]">
+                {type === 'image' ? (
+                  <img src={image} alt={label} className="h-[28px] w-[28px] object-contain opacity-20 transition-opacity group-hover:opacity-100" />
+                ) : (
+                  <FontAwesomeIcon icon={icon} className="text-[22px] text-ash/40 transition-colors" />
+                )}
+              </div>
+            </a>
+          ))}
+        </div>
+      </motion.aside>
     </div>
   );
 }
+
+// ── Sub-components ────────────────────────────────────────────────────────────
 
 function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
   return (
@@ -821,7 +736,6 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
             className="relative flex overflow-hidden rounded-[2rem] border shadow-2xl"
             style={{ width: 680, backgroundColor: `${theme.surface}f0`, borderColor: theme.border }}
           >
-            {/* Left — portrait capsule */}
             <div className="overflow-hidden" style={{ width: 220, aspectRatio: '2 / 3' }}>
               <img
                 src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/4956550/cf73f970e8df35997b1dd12bcb5e0c6e9cc78255/library_capsule.jpg?t=1784562601"
@@ -829,14 +743,10 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
                 className="h-full w-full object-cover"
               />
             </div>
-
-            {/* Right */}
             <div className="flex flex-1 flex-col justify-between p-7">
               <div>
                 <h2 className="text-2xl font-medium text-bone mt-3">{gameName}</h2>
-                <p className="mt-1 text-base text-ash/60 ">Preparing to launch via Steam…</p>
-
-                {/* Clean spinner — no error state here */}
+                <p className="mt-1 text-base text-ash/60">Preparing to launch via Steam…</p>
                 <div className="mt-6 flex items-center gap-3 font-[Manrope] text-xs text-ash/70">
                   <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
@@ -845,7 +755,6 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
                   <span>Handing off to Steam…</span>
                 </div>
               </div>
-
               <button
                 onClick={onCancel}
                 className="self-end rounded-xl font-[Manrope] px-5 py-3 text-xs font-semibold text-ash/60 transition hover:bg-white/5 hover:text-bone"
@@ -853,7 +762,6 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
                 Cancel Launch
               </button>
             </div>
-
             <div
               className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full blur-3xl opacity-20"
               style={{ backgroundColor: accent.hex }}
@@ -866,11 +774,7 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
 }
 
 function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose, onDownload, onInstall }) {
-  const hero = info?.banner || info?.image || info?.hero || null;
-
-  const highlights = Array.isArray(info?.highlights) && info.highlights.length
-    ? info.highlights
-    : null;
+  const highlights = Array.isArray(info?.highlights) && info.highlights.length ? info.highlights : null;
 
   const notesText = !info?.releaseNotes
     ? ''
@@ -883,265 +787,175 @@ function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose,
     : null;
 
   const statusLabel =
-    dlState === 'downloaded' ? 'Ready to install'
+    dlState === 'downloaded'  ? 'Ready to install'
     : dlState === 'downloading' ? 'Downloading'
     : 'Update Available';
 
   return (
     <AnimatePresence>
-  {visible && (
-    <motion.div
-      key="update-fs-backdrop"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-[200] flex items-center justify-center p-6"
-      style={{
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        backgroundColor: 'rgba(0,0,0,0.75)',
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && dlState !== 'downloading') onClose();
-      }}
-    >
-      <motion.div
-        key="update-fs-card"
-        initial={{ scale: 0.95, opacity: 0, y: 20 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.97, opacity: 0, y: 12 }}
-        transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-        className="relative z-10 flex w-full max-w-[560px] max-h-[min(90vh,780px)] flex-col overflow-hidden rounded-2xl border shadow-2xl"
-        style={{
-          backgroundColor: theme.surface,
-          borderColor: theme.border,
-        }}
-        role="dialog"
-        aria-modal="true"
-      >
-        {/* Header */}
-        <div
-          className="flex items-start justify-between gap-4 p-6 pb-5"
-          style={{ borderBottom: `0.5px solid ${theme.border}` }}
+      {visible && (
+        <motion.div
+          key="update-fs-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center p-6"
+          style={{ backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.75)' }}
+          onClick={(e) => { if (e.target === e.currentTarget && dlState !== 'downloading') onClose(); }}
         >
-          <div className="flex items-start gap-3.5">
-            <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-              style={{ backgroundColor: `${accent.hex}18` }}
-            >
-              <FontAwesomeIcon
-                icon={dlState === 'downloaded' ? faCircleCheck : faCircleArrowUp}
-                style={{ color: accent.hex, fontSize: 18 }}
-              />
+          <motion.div
+            key="update-fs-card"
+            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.97, opacity: 0, y: 12 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+            className="relative z-10 flex w-full max-w-[560px] max-h-[min(90vh,780px)] flex-col overflow-hidden rounded-2xl border shadow-2xl"
+            style={{ backgroundColor: theme.surface, borderColor: theme.border }}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="flex items-start justify-between gap-4 p-6 pb-5" style={{ borderBottom: `0.5px solid ${theme.border}` }}>
+              <div className="flex items-start gap-3.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${accent.hex}18` }}>
+                  <FontAwesomeIcon
+                    icon={dlState === 'downloaded' ? faCircleCheck : faCircleArrowUp}
+                    style={{ color: accent.hex, fontSize: 18 }}
+                  />
+                </div>
+                <div className="min-w-0 pt-0.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-1" style={{ color: accent.hex }}>
+                    {statusLabel}
+                  </p>
+                  <h2 className="text-[18px] font-semibold leading-tight truncate" style={{ color: theme.text }}>
+                    Zyphor Launcher{info?.version ? ` v${info.version}` : ''}
+                  </h2>
+                  {info?.tagline ? (
+                    <p className="text-[13px] mt-0.5 truncate" style={{ color: `${theme.text}60` }}>{info.tagline}</p>
+                  ) : (
+                    <p className="text-[13px] mt-0.5" style={{ color: `${theme.text}55` }}>A newer build is ready for your launcher.</p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={dlState === 'downloading'}
+                className="rounded-lg p-1.5 transition hover:bg-white/8 disabled:opacity-30"
+                style={{ color: `${theme.text}55` }}
+              >
+                <FontAwesomeIcon icon={faXmark} style={{ fontSize: 15 }} />
+              </button>
             </div>
-            <div className="min-w-0 pt-0.5">
-              <p
-                className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-1"
-                style={{ color: accent.hex }}
-              >
-                {statusLabel}
-              </p>
-              <h2
-                className="text-[18px] font-semibold leading-tight truncate"
-                style={{ color: theme.text }}
-              >
-                Zyphor Launcher{info?.version ? ` v${info.version}` : ''}
-              </h2>
-              {info?.tagline ? (
-                <p className="text-[13px] mt-0.5 truncate" style={{ color: `${theme.text}60` }}>
-                  {info.tagline}
-                </p>
-              ) : (
-                <p className="text-[13px] mt-0.5" style={{ color: `${theme.text}55` }}>
-                  A newer build is ready for your launcher.
-                </p>
+
+            {(info?.version || fileSizeMb) && (
+              <div className="flex items-center gap-2 px-6 py-3.5" style={{ borderBottom: `0.5px solid ${theme.border}` }}>
+                {info?.currentVersion && (
+                  <span className="rounded-md px-2 py-0.5 text-[11px] font-mono" style={{ backgroundColor: `${theme.text}0e`, color: `${theme.text}55` }}>
+                    v{info.currentVersion}
+                  </span>
+                )}
+                {info?.currentVersion && info?.version && (
+                  <span className="text-[11px]" style={{ color: `${theme.text}30` }}>→</span>
+                )}
+                {info?.version && (
+                  <span className="rounded-md px-2 py-0.5 text-[11px] font-mono font-semibold" style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>
+                    v{info.version}
+                  </span>
+                )}
+                {fileSizeMb && (
+                  <span className="text-[11px] ml-1" style={{ color: `${theme.text}40` }}>{fileSizeMb} MB</span>
+                )}
+              </div>
+            )}
+
+            <div className="relative min-h-0 flex-1 overflow-y-auto p-6">
+              {highlights && dlState === 'idle' && (
+                <div className="mb-5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-3" style={{ color: `${theme.text}40` }}>What's new</p>
+                  <ul className="flex flex-col gap-2.5">
+                    {highlights.slice(0, 5).map((h, i) => (
+                      <li key={i} className="flex items-start gap-2.5 text-[13px]" style={{ color: `${theme.text}80` }}>
+                        <span className="mt-[3px] shrink-0 text-[10px]" style={{ color: `${theme.text}30` }}>—</span>
+                        {h}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {notesText && !highlights && (
+                <div className="mb-5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-3" style={{ color: `${theme.text}40` }}>What's new</p>
+                  <p className="text-[13px] leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto" style={{ color: `${theme.text}70` }}>
+                    {notesText}
+                  </p>
+                </div>
+              )}
+
+              {dlState === 'downloading' && (
+                <div className="mb-5">
+                  <div className="flex justify-between text-[12px] mb-2" style={{ color: `${theme.text}55` }}>
+                    <span>Downloading update…</span>
+                    <span className="font-mono font-semibold" style={{ color: accent.hex }}>{Math.round(progress)}%</span>
+                  </div>
+                  <div className="h-[3px] w-full overflow-hidden rounded-full" style={{ backgroundColor: `${theme.text}12` }}>
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ backgroundColor: accent.hex }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${progress}%` }}
+                      transition={{ ease: 'linear', duration: 0.3 }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {dlState === 'downloaded' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-5 flex items-center gap-2.5 rounded-xl px-4 py-3 text-[13px]"
+                  style={{ backgroundColor: `${accent.hex}12`, border: `0.5px solid ${accent.hex}33`, color: accent.hex }}
+                >
+                  <FontAwesomeIcon icon={faCircleCheck} style={{ fontSize: 14, flexShrink: 0 }} />
+                  Download complete — ready to install.
+                </motion.div>
               )}
             </div>
-          </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={dlState === 'downloading'}
-            className="rounded-lg p-1.5 transition hover:bg-white/8 disabled:opacity-30"
-            style={{ color: `${theme.text}55` }}
-          >
-            <FontAwesomeIcon icon={faXmark} style={{ fontSize: 15 }} />
-          </button>
-        </div>
-
-        {/* Version chips + file size */}
-        {(info?.version || fileSizeMb) && (
-          <div
-            className="flex items-center gap-2 px-6 py-3.5"
-            style={{ borderBottom: `0.5px solid ${theme.border}` }}
-          >
-            {info?.currentVersion && (
-              <span
-                className="rounded-md px-2 py-0.5 text-[11px] font-mono"
-                style={{ backgroundColor: `${theme.text}0e`, color: `${theme.text}55` }}
+            <div className="flex items-center justify-end gap-2 px-6 py-4" style={{ borderTop: `0.5px solid ${theme.border}` }}>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={dlState === 'downloading'}
+                className="rounded-xl px-4 py-2 text-[13px] font-medium transition hover:bg-white/6 disabled:opacity-30"
+                style={{ color: `${theme.text}60` }}
               >
-                v{info.currentVersion}
-              </span>
-            )}
-            {info?.currentVersion && info?.version && (
-              <span className="text-[11px]" style={{ color: `${theme.text}30` }}>→</span>
-            )}
-            {info?.version && (
-              <span
-                className="rounded-md px-2 py-0.5 text-[11px] font-mono font-semibold"
-                style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}
-              >
-                v{info.version}
-              </span>
-            )}
-            {fileSizeMb && (
-              <span className="text-[11px] ml-1" style={{ color: `${theme.text}40` }}>
-                {fileSizeMb} MB
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Scrollable body */}
-        <div className="relative min-h-0 flex-1 overflow-y-auto p-6">
-
-          {/* Highlights */}
-          {highlights && dlState === 'idle' && (
-            <div className="mb-5">
-              <p
-                className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-3"
-                style={{ color: `${theme.text}40` }}
-              >
-                What's new
-              </p>
-              <ul className="flex flex-col gap-2.5">
-                {highlights.slice(0, 5).map((h, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-[13px]" style={{ color: `${theme.text}80` }}>
-                    <span className="mt-[3px] shrink-0 text-[10px]" style={{ color: `${theme.text}30` }}>—</span>
-                    {h}
-                  </li>
-                ))}
-              </ul>
+                {dlState === 'idle' ? 'Remind me later' : 'Close'}
+              </button>
+              {dlState === 'idle' && (
+                <button type="button" onClick={onDownload} className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]" style={{ backgroundColor: accent.hex, color: accent.on }}>
+                  Download update
+                </button>
+              )}
+              {dlState === 'downloading' && (
+                <button type="button" disabled className="rounded-xl px-5 py-2 text-[13px] font-semibold opacity-45 cursor-not-allowed" style={{ backgroundColor: accent.hex, color: accent.on }}>
+                  Downloading… {Math.round(progress)}%
+                </button>
+              )}
+              {dlState === 'downloaded' && (
+                <button type="button" onClick={onInstall} className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]" style={{ backgroundColor: accent.hex, color: accent.on }}>
+                  Restart &amp; install
+                </button>
+              )}
             </div>
-          )}
-
-          {/* Notes fallback */}
-          {notesText && !highlights && (
-            <div className="mb-5">
-              <p
-                className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-3"
-                style={{ color: `${theme.text}40` }}
-              >
-                What's new
-              </p>
-              <p
-                className="text-[13px] leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto"
-                style={{ color: `${theme.text}70` }}
-              >
-                {notesText}
-              </p>
-            </div>
-          )}
-
-          {/* Download progress */}
-          {dlState === 'downloading' && (
-            <div className="mb-5">
-              <div className="flex justify-between text-[12px] mb-2" style={{ color: `${theme.text}55` }}>
-                <span>Downloading update…</span>
-                <span className="font-mono font-semibold" style={{ color: accent.hex }}>
-                  {Math.round(progress)}%
-                </span>
-              </div>
-              <div
-                className="h-[3px] w-full overflow-hidden rounded-full"
-                style={{ backgroundColor: `${theme.text}12` }}
-              >
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ backgroundColor: accent.hex }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ ease: 'linear', duration: 0.3 }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Downloaded banner */}
-          {dlState === 'downloaded' && (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-5 flex items-center gap-2.5 rounded-xl px-4 py-3 text-[13px]"
-              style={{
-                backgroundColor: `${accent.hex}12`,
-                border: `0.5px solid ${accent.hex}33`,
-                color: accent.hex,
-              }}
-            >
-              <FontAwesomeIcon icon={faCircleCheck} style={{ fontSize: 14, flexShrink: 0 }} />
-              Download complete — ready to install.
-            </motion.div>
-          )}
-        </div>
-
-        {/* Footer actions */}
-        <div
-          className="flex items-center justify-end gap-2 px-6 py-4"
-          style={{ borderTop: `0.5px solid ${theme.border}` }}
-        >
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={dlState === 'downloading'}
-            className="rounded-xl px-4 py-2 text-[13px] font-medium transition hover:bg-white/6 disabled:opacity-30"
-            style={{ color: `${theme.text}60` }}
-          >
-            {dlState === 'idle' ? 'Remind me later' : 'Close'}
-          </button>
-
-          {dlState === 'idle' && (
-            <button
-              type="button"
-              onClick={onDownload}
-              className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]"
-              style={{ backgroundColor: accent.hex, color: accent.on }}
-            >
-              Download update
-            </button>
-          )}
-
-          {dlState === 'downloading' && (
-            <button
-              type="button"
-              disabled
-              className="rounded-xl px-5 py-2 text-[13px] font-semibold opacity-45 cursor-not-allowed"
-              style={{ backgroundColor: accent.hex, color: accent.on }}
-            >
-              Downloading… {Math.round(progress)}%
-            </button>
-          )}
-
-          {dlState === 'downloaded' && (
-            <button
-              type="button"
-              onClick={onInstall}
-              className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]"
-              style={{ backgroundColor: accent.hex, color: accent.on }}
-            >
-              Restart &amp; install
-            </button>
-          )}
-        </div>
-      </motion.div>
-    </motion.div>
-  )}
-</AnimatePresence>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
-
 
 function StatusChip({ icon, label, tone, onClick }) {
   return (
@@ -1160,11 +974,6 @@ function Divider({ theme }) {
   return <span className="h-3.5 w-px" style={{ backgroundColor: theme.border }} />;
 }
 
-
-/**
- * Inline video used inside the rotating news banner.
- * Respects the Page Visibility API — pauses when the tab is hidden.
- */
 function BannerVideo({ src, poster, active, fadeMask }) {
   const ref = useRef(null);
 
@@ -1179,12 +988,10 @@ function BannerVideo({ src, poster, active, fadeMask }) {
     if (!active) return;
     const el = ref.current;
     if (!el) return;
-
     function handleVisibilityChange() {
       if (document.hidden) el.pause();
       else el.play().catch(() => {});
     }
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [active]);
@@ -1194,104 +1001,9 @@ function BannerVideo({ src, poster, active, fadeMask }) {
       ref={ref}
       src={src}
       poster={poster}
-      autoPlay
-      muted
-      loop
-      playsInline
+      autoPlay muted loop playsInline
       className="h-full w-full object-cover"
       style={fadeMask}
-    />
-  );
-}
-
-/**
- * Full-page ambient video background, sitting behind the grid and all
- * content at low opacity. Logs load/error state so a bad path is obvious
- * in the console instead of just silently showing nothing.
- *
- * Automatically pauses when the tab/window is hidden (Page Visibility API)
- * and resumes when it becomes visible again — saves GPU/CPU while the user
- * is on a different tab or the launcher is in the background.
- */
-function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticPoster = null }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || quality === 'static') return;
-    if (active) el.play().catch(() => {});
-    else el.pause();
-  }, [active, quality]);
-
-  useEffect(() => {
-    if (!active || quality === 'static') return;
-    const el = ref.current;
-    if (!el) return;
-    function handleVisibilityChange() {
-      if (document.hidden) el.pause();
-      else el.play().catch(() => {});
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [active, quality]);
-
-  if (quality === 'static') {
-    if (!staticPoster) return null;
-    return (
-      <div
-        className="pointer-events-none fixed inset-0 -z-20 h-full w-full"
-        style={{
-          backgroundImage: `url(${staticPoster})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-    );
-  }
-
-  if (!src) return null;
-
-  if (quality === 'sd') {
-    return (
-      <div style={{ position: 'fixed', inset: 0, zIndex: -20, overflow: 'hidden', pointerEvents: 'none' }}>
-        <video
-          ref={ref}
-          src={src}
-          autoPlay muted loop playsInline
-          onError={(e) => console.error('[BackgroundVideo] failed to load:', src, e.target.error)}
-          style={{ width: '40%', height: '40%', objectFit: 'cover', transform: 'scale(2.6)', transformOrigin: 'top left', filter: 'blur(0.5px)' }}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <video
-      ref={ref}
-      src={src}
-      autoPlay muted loop playsInline
-      onError={(e) => console.error('[BackgroundVideo] failed to load:', src, e.target.error)}
-      onLoadedData={() => console.log('[BackgroundVideo] loaded ok:', src)}
-      className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover opacity-1"
-      style={videoStyle}
-    />
-  );
-}
-
-function AnimatedGrid({ accent, active }) {
-  const size = 42;
-  return (
-    <motion.div
-      aria-hidden
-      className="pointer-events-none absolute inset-0 -z-10 opacity-[0.12]"
-      style={{
-        backgroundImage: `linear-gradient(${accent.hex}66 1px, transparent 1px), linear-gradient(90deg, ${accent.hex}66 1px, transparent 1px)`,
-        backgroundSize: `${size}px ${size}px`,
-        maskImage: 'radial-gradient(ellipse at 30% 20%, black 0%, transparent 70%)',
-        WebkitMaskImage: 'radial-gradient(ellipse at 30% 20%, black 0%, transparent 70%)',
-      }}
-      animate={active ? { backgroundPosition: [`0px 0px`, `${size}px ${size}px`] } : {}}
-      transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
     />
   );
 }

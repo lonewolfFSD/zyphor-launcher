@@ -7,35 +7,47 @@ import {
   Download, FolderOpen, RefreshCw, Trash2, Copy, Share2,
   Check, Maximize2, Minimize2, Info, RotateCcw,
 } from 'lucide-react';
+import GlassSurface from '../effects/GlassSurface.tsx';
 
-import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
-import VIDEO_GAMING             from './videos/gaming.mp4';
-import VIDEO_DRAGON_TRAVELLER   from './videos/Xuanwu - Dragon Traveler.mp4';
-import VIDEO_LUCY               from './videos/Lucy Cyberpunk.mp4';
-import VIDEO_KALTSIT            from './videos/Kaltsit.mp4';
-import VIDEO_ROSSI from './videos/rossi.mp4';
+// ── GlassLayer — IS the container, not a layer behind it ──────────────────────
+function GlassLayer({ children, className = '', style = {}, borderRadius = 16, distortionScale = -60, blur = 11 }) {
+  const { settings } = useSettings();
+  const theme = THEMES[settings?.theme] || THEMES.oled;
+  const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
 
-import ROSSI_FRAME    from './videos/frames/rossi frame.png';
-import KALTSIT_FRAME  from './videos/frames/kaltsit frame.png';
-import XUANWU_FRAME   from './videos/frames/xuanwu frame.png';
-import FIREFLY_FRAME  from './videos/frames/firefly frame.png';
-import LUCY_FRAME     from './videos/frames/lucy frame.png';
+  if (isLiquidGlass) {
+    return (
+      <GlassSurface
+        width="100%"
+        height="auto"
+        borderRadius={borderRadius}
+        brightness={50}
+        opacity={0.93}
+        blur={20}
+        distortionScale={-200}
+        className={className}
+        style={style}
+      >
+        {children}
+      </GlassSurface>
+    );
+  }
 
-const PRESET_VIDEO_MAP = {
-  'preset-gaming':           VIDEO_GAMING,
-  'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
-  'preset-lucy':             VIDEO_LUCY,
-  'preset-kaltsit':          VIDEO_KALTSIT,
-  'preset-rossi':            VIDEO_ROSSI,
-};
-
-const PRESET_STATIC_MAP = {
-  'preset-gaming':           new URL(FIREFLY_FRAME,  import.meta.url).href,
-  'preset-dragon-traveller': new URL(XUANWU_FRAME,   import.meta.url).href,
-  'preset-lucy':             new URL(LUCY_FRAME,     import.meta.url).href,
-  'preset-kaltsit':          new URL(KALTSIT_FRAME,  import.meta.url).href,
-  'preset-rossi':            new URL(ROSSI_FRAME,    import.meta.url).href,
-};
+  return (
+    <div
+      className={className}
+      style={{
+        borderRadius,
+        backdropFilter: 'blur(12px) saturate(1.4)',
+        WebkitBackdropFilter: 'blur(12px) saturate(1.4)',
+        background: `${theme.surface}88`,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 const GAMES = [
   {
@@ -151,7 +163,7 @@ function GameSelector({ games, selected, onSelect, accent, theme }) {
         <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-black/40">
           <img src={current.url} alt="" className="w-full h-full object-cover" />
         </div>
-        <p className="text-[13px] font-semibold leading-none truncate max-w-[180px]" style={{ color: theme.text }}>
+        <p className="text-[13px] font-semibold leading-none max-w-[380px]" style={{ color: theme.text }}>
           {current.name}
         </p>
         <ChevronDown size={14} style={{ color: `${theme.text}55`, transform: open ? 'rotate(180deg)' : undefined }} className="shrink-0 transition-transform" />
@@ -163,7 +175,7 @@ function GameSelector({ games, selected, onSelect, accent, theme }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.97 }}
             transition={{ duration: 0.14 }}
-            className="absolute top-full mt-1.5 left-0 z-50 min-w-[240px] rounded-2xl overflow-hidden shadow-2xl"
+            className="absolute top-full mt-1.5 left-0 z-50 min-w-[380px] rounded-2xl overflow-hidden shadow-2xl"
             style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}` }}
           >
             {games.map((g) => (
@@ -177,7 +189,7 @@ function GameSelector({ games, selected, onSelect, accent, theme }) {
                   <img src={g.url} alt="" className="w-full h-full object-cover" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-semibold truncate" style={{ color: g.id === selected ? accent.hex : theme.text }}>{g.name}</p>
+                  <p className="text-[13px] font-semibold" style={{ color: g.id === selected ? accent.hex : theme.text }}>{g.name}</p>
                   <p className="text-[10px] opacity-40 mt-0.5">{g.developer}</p>
                 </div>
               </button>
@@ -469,10 +481,14 @@ function Lightbox({ shot, shots, index, onClose, onNavigate, onDelete, accent, t
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
-            className="relative z-10 mx-auto mb-20 w-full max-w-lg rounded-2xl border px-5 py-5"
-            style={{ backgroundColor: `${theme.surface}ee`, borderColor: theme.border, color: theme.text }}
+            className="relative z-10 mx-auto mb-20 w-full max-w-lg"
           >
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-[13px]">
+          <GlassLayer
+            className="rounded-2xl border"
+            style={{ borderColor: theme.border, color: theme.text }}
+            borderRadius={16}
+          >
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-[13px] px-5 py-5">
               <div>
                 <p className="text-[10px] uppercase tracking-wider opacity-40">Filename</p>
                 <p className="font-medium truncate">{shot.fileName || shot.name}</p>
@@ -490,6 +506,7 @@ function Lightbox({ shot, shots, index, onClose, onNavigate, onDelete, accent, t
                 <p className="font-medium">{formatBytes(shot.size)}</p>
               </div>
             </div>
+          </GlassLayer>
           </motion.div>
         )}
       </AnimatePresence>
@@ -573,27 +590,6 @@ export default function ScreenshotsPage() {
   const accent   = ACCENTS[settings?.accent] || ACCENTS.bulb;
   const motionOn = settings ? settings.animations && !settings.reduceMotion : true;
 
-  const backgroundVideoType    = settings?.backgroundVideoType ?? 'default';
-  const backgroundQuality      = settings?.backgroundQuality   ?? 'hd';
-  const backgroundVideoSrc =
-    backgroundVideoType === 'none' || backgroundQuality === 'static'
-      ? null
-      : backgroundVideoType === 'custom'
-        ? settings?.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : null
-        : backgroundVideoType?.startsWith('preset-')
-          ? PRESET_VIDEO_MAP[backgroundVideoType] ?? DEFAULT_BACKGROUND_VIDEO
-          : DEFAULT_BACKGROUND_VIDEO;
-
-  // SD: render video at lower resolution via CSS scale trick (same as HomePage)
-  const bgVideoStyle = backgroundQuality === 'sd'
-    ? { filter: 'blur(0px)', imageRendering: 'auto', transform: 'scale(1.05)', opacity: 1 }
-    : {};
-
-  // Static fallback: first-frame PNG shown as a background image
-  const bgStaticPoster = backgroundQuality === 'static'
-    ? (PRESET_STATIC_MAP[backgroundVideoType] ?? null)
-    : null;
-
   const [selectedGameId, setSelectedGameId] = useState(GAMES[0].id);
   const [shots, setShots] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -668,6 +664,30 @@ export default function ScreenshotsPage() {
     });
   }, [sorted, tileSize]);
 
+  // ScreenshotsPage.jsx — add this useEffect
+useEffect(() => {
+  function onSelectAll() {
+    setSelectMode(true);
+    setSelected(new Set(sorted.map((s) => s.fileName)));
+  }
+  function onDeselectAll() {
+    setSelected(new Set());
+  }
+  function onDeleteSelected() {
+    if (selected.size > 0) deleteShots([...selected]);
+  }
+
+  document.addEventListener('zyphor:selectAll',      onSelectAll);
+  document.addEventListener('zyphor:deselectAll',    onDeselectAll);
+  document.addEventListener('zyphor:deleteSelected', onDeleteSelected);
+
+  return () => {
+    document.removeEventListener('zyphor:selectAll',      onSelectAll);
+    document.removeEventListener('zyphor:deselectAll',    onDeselectAll);
+    document.removeEventListener('zyphor:deleteSelected', onDeleteSelected);
+  };
+}, [sorted, selected, deleteShots]); // sorted + selected needed so closures are fresh
+
   async function deleteShots(fileNames) {
     const list = Array.isArray(fileNames) ? fileNames : [fileNames];
     if (!list.length) return;
@@ -736,16 +756,8 @@ export default function ScreenshotsPage() {
 
   return (
     <div className="relative h-full overflow-y-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
-      <BackgroundVideo
-        key={backgroundVideoSrc + backgroundQuality}
-        src={backgroundVideoSrc}
-        active={motionOn}
-        quality={backgroundQuality}
-        videoStyle={bgVideoStyle}
-        staticPoster={bgStaticPoster}
-      />
       <div className="pointer-events-none fixed inset-0 -z-10"
-        style={{ background: `linear-gradient(to bottom, ${theme.bg}cc 0%, ${theme.bg}88 40%, ${theme.bg}cc 100%)` }} />
+        style={{ background: `linear-gradient(to bottom, ${theme.bg}cc 0%, ${theme.bg}88 40%, ${theme.bg}cc 100%)`, opacity: 0.2, }} />
 
       <div className="px-9 py-7">
         <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
@@ -768,8 +780,8 @@ export default function ScreenshotsPage() {
 
         {game.status === 'released' && (
           <>
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border px-3 py-2.5 mb-4"
-              style={{ backgroundColor: theme.surface, borderColor: theme.border }}>
+            <GlassLayer className="rounded-2xl border mb-4" style={{ borderColor: theme.border }} borderRadius={20}>
+              <div className="flex flex-wrap items-center gap-2 px-14 py-3">
               <span className="text-[12px] opacity-40 px-1">Sort</span>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
                 className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium outline-none"
@@ -831,23 +843,25 @@ export default function ScreenshotsPage() {
               <span className="ml-auto text-[11px] opacity-30 font-mono">
                 {loading ? '…' : `${sorted.length} shot${sorted.length === 1 ? '' : 's'}`}
               </span>
-            </div>
+              </div>
+            </GlassLayer>
 
             {!loading && sorted.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-14 rounded-[2.5rem] border opacity-80 gap-1"
-                style={{ borderColor: theme.border, backgroundColor: theme.surface }}>
-                <AlertTriangle size={40} className="mb-2 opacity-20" />
-                <p className="text-[20px] font-medium" style={{ color: theme.text, fontFamily: 'Apple Garamond' }}>No screenshots found</p>
-                <p className="text-[13px] opacity-40 mt-1.5 text-center max-w-sm">
-                  Press <code className="px-1.5 py-0.5 rounded text-[11px] font-mono"
-                    style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>F2</code> in-game to capture a moment. Your screenshots will appear here automatically.
-                </p>
-                <button type="button" onClick={openFolder}
-                  className="mt-4 flex items-center gap-2 rounded-xl px-6 py-3 text-[12px] font-semibold"
-                  style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>
-                  <FolderOpen size={15} /> Open screenshots folder
-                </button>
-              </div>
+              <GlassLayer className="rounded-[2.5rem] border opacity-80" style={{ borderColor: theme.border }} borderRadius={54}>
+                <div className="flex flex-col items-center justify-center py-14 gap-1">
+                  <AlertTriangle size={40} className="mb-2 opacity-20" />
+                  <p className="text-[20px] font-medium" style={{ color: theme.text, fontFamily: 'Apple Garamond' }}>No screenshots found</p>
+                  <p className="text-[13px] opacity-40 mt-1.5 text-center max-w-sm">
+                    Press <code className="px-1.5 py-0.5 rounded text-[11px] font-mono"
+                      style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>F2</code> in-game to capture a moment. Your screenshots will appear here automatically.
+                  </p>
+                  <button type="button" onClick={openFolder}
+                    className="mt-4 flex items-center gap-2 rounded-xl px-6 py-3 text-[12px] font-semibold"
+                    style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>
+                    <FolderOpen size={15} /> Open screenshots folder
+                  </button>
+                </div>
+              </GlassLayer>
             )}
 
             {loading && <SkeletonGrid tileSize={tileSize} theme={theme} />}

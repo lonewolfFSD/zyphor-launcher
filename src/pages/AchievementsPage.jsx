@@ -5,37 +5,51 @@ import { useGSAP } from '@gsap/react';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import { Lock, Unlock, Trophy, AlertTriangle, RefreshCw, ExternalLink, ChevronDown } from 'lucide-react';
 
+import GlassSurface from '../effects/GlassSurface.tsx';
+
+// GlassLayer IS the container — it renders as the element itself, not behind it.
+// Pass all layout classes, style, and children just like you would a <div>.
+function GlassLayer({ children, className = '', style = {}, borderRadius = 16, distortionScale = -60, blur = 11 }) {
+  const { settings } = useSettings();
+  const theme = THEMES[settings?.theme] || THEMES.oled;
+  const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
+
+  if (isLiquidGlass) {
+    return (
+      <GlassSurface
+        width="100%"
+        height="auto"
+        borderRadius={borderRadius}
+        brightness={50}
+        opacity={0.93}
+        blur={blur}
+        distortionScale={distortionScale}
+        className={className}
+        style={style}
+      >
+        {children}
+      </GlassSurface>
+    );
+  }
+
+  return (
+    <div
+      className={className}
+      style={{
+        borderRadius,
+        backdropFilter: 'blur(12px) saturate(1.4)',
+        WebkitBackdropFilter: 'blur(12px) saturate(1.4)',
+        background: `${theme.surface}88`,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 gsap.registerPlugin(useGSAP);
 
-// ─── Video imports ────────────────────────────────────────────────────────────
-import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
-import VIDEO_GAMING             from './videos/gaming.mp4';
-import VIDEO_DRAGON_TRAVELLER   from './videos/Xuanwu - Dragon Traveler.mp4';
-import VIDEO_LUCY               from './videos/Lucy Cyberpunk.mp4';
-import VIDEO_KALTSIT            from './videos/Kaltsit.mp4';
-import VIDEO_ROSSI from './videos/rossi.mp4';
-
-import ROSSI_FRAME   from './videos/frames/rossi frame.png';
-import KALTSIT_FRAME from './videos/frames/kaltsit frame.png';
-import XUANWU_FRAME  from './videos/frames/xuanwu frame.png';
-import FIREFLY_FRAME from './videos/frames/firefly frame.png';
-import LUCY_FRAME    from './videos/frames/lucy frame.png';
-
-const PRESET_VIDEO_MAP = {
-  'preset-gaming':           VIDEO_GAMING,
-  'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
-  'preset-lucy':             VIDEO_LUCY,
-  'preset-kaltsit':          VIDEO_KALTSIT,
-  'preset-rossi':            VIDEO_ROSSI,
-};
-
-const PRESET_STATIC_MAP = {
-  'preset-gaming':           new URL(FIREFLY_FRAME,  import.meta.url).href,
-  'preset-dragon-traveller': new URL(XUANWU_FRAME,   import.meta.url).href,
-  'preset-lucy':             new URL(LUCY_FRAME,     import.meta.url).href,
-  'preset-kaltsit':          new URL(KALTSIT_FRAME,  import.meta.url).href,
-  'preset-rossi':            new URL(ROSSI_FRAME,    import.meta.url).href,
-};
 
 // ─── Game registry ────────────────────────────────────────────────────────────
 // To add a new game later: add an entry here. That's it.
@@ -87,7 +101,7 @@ const GAMES = [
 function AchievementSkeleton({ theme }) {
   return (
     <div
-      className="flex items-center gap-4 rounded-2xl px-4 py-4 animate-pulse"
+      className="flex items-center gap-3 rounded-2xl px-4 py-3 animate-pulse"
       style={{ backgroundColor: theme.surface }}
     >
       <div className="w-14 h-14 rounded-xl shrink-0" style={{ backgroundColor: theme.border }} />
@@ -111,20 +125,11 @@ function AchievementRow({ achievement, accent, theme, iconMap }) {
     ? new Date(unlockTime * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     : null;
 
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-4 rounded-2xl px-4 py-4 transition-all duration-200 backdrop-blur-glass"
-      style={{
-        backgroundColor: achieved ? `${accent.hex}0d` : theme.surface,
-        border: `1px solid ${achieved ? `${accent.hex}28` : theme.border}`,
-      }}
-    >
+  const rowContent = (
+    <>
       {/* Icon */}
       <div
-        className="w-14 h-14 shrink-0 overflow-hidden border flex items-center justify-center"
+        className="w-14 h-14 rounded-xl mr-2.5 shrink-0 overflow-hidden border flex items-center justify-center"
         style={{
           borderColor:       achieved ? `${accent.hex}44` : theme.border,
           backgroundColor:   theme.bg,
@@ -146,7 +151,7 @@ function AchievementRow({ achievement, accent, theme, iconMap }) {
       {/* Text */}
       <div className="flex-1 min-w-0">
         <p
-          className="text-[15.5px] font-medium tracking-tight leading-snug truncate"
+          className="text-[15px] font-medium tracking-tight leading-snug truncate"
           style={{ color: achieved ? theme.text : `${theme.text}55`, fontFamily: 'Apple Garamond' }}
         >
           {displayName}
@@ -155,7 +160,7 @@ function AchievementRow({ achievement, accent, theme, iconMap }) {
           <p className="text-[11px] mt-0.5 leading-snug opacity-40 truncate">{description}</p>
         )}
         {achieved && unlockDate && (
-          <p className="text-[10px] mt-1 font-mono" style={{ color: `${accent.hex}88` }}>
+          <p className="text-[9px] mt-0.5 font-mono" style={{ color: `${accent.hex}88` }}>
             Unlocked {unlockDate}
           </p>
         )}
@@ -163,14 +168,31 @@ function AchievementRow({ achievement, accent, theme, iconMap }) {
 
       {/* Status pill */}
       <div
-        className="shrink-0 flex items-center gap-1.5 rounded-xl px-4 py-2 text-[9px] font-bold uppercase tracking-widest"
+        className="shrink-0 flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[9px] font-bold uppercase tracking-widest"
         style={{
           backgroundColor: achieved ? `${accent.hex}18` : 'rgba(255,255,255,0.04)',
           color:           achieved ? accent.hex         : 'rgba(255,255,255,0.2)',
         }}
       >
-        {achieved ? <><Unlock size={9} /> Achieved</> : <><Lock size={9} /> Locked</>}
+        {achieved ? <><Unlock size={10} /> <span className='mt-0.5'>Achieved</span></> : <><Lock size={10} /> <span className='mt-0.5'>Locked</span></>}
       </div>
+    </>
+  );
+
+  return (
+    <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+      <GlassLayer
+        borderRadius={16}
+        distortionScale={-30}
+        blur={10}
+        className="flex items-center gap-4 px-4 py-2 transition-all duration-200"
+        style={{
+          border: `1px solid ${achieved ? `${accent.hex}28` : theme.border}`,
+          backgroundColor: achieved ? `${accent.hex}0d` : `${theme.surface}88`,  // ← this was missing
+        }}
+      >
+        {rowContent}
+      </GlassLayer>
     </motion.div>
   );
 }
@@ -184,7 +206,7 @@ function GameSelector({ games, selected, onSelect, accent, theme }) {
     <div className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-3 rounded-2xl px-4 py-2.5 transition hover:opacity-80"
+        className="flex items-center gap-3 rounded-2xl px-4 py-2.5 transition hover:opacity-80 z-100"
         style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}` }}
       >
         {/* Mini poster */}
@@ -287,74 +309,6 @@ function GameSelector({ games, selected, onSelect, accent, theme }) {
   );
 }
 
-// ─── Background video ─────────────────────────────────────────────────────────
-// Matches HomePage/ScreenshotsPage exactly — HD, SD (scale trick), and static modes.
-// Pauses automatically via the Page Visibility API when the window is hidden.
-function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticPoster = null }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || quality === 'static') return;
-    if (active) el.play().catch(() => {});
-    else el.pause();
-  }, [active, quality]);
-
-  useEffect(() => {
-    if (!active || quality === 'static') return;
-    const el = ref.current;
-    if (!el) return;
-    function handleVisibilityChange() {
-      if (document.hidden) el.pause();
-      else el.play().catch(() => {});
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [active, quality]);
-
-  if (quality === 'static') {
-    if (!staticPoster) return null;
-    return (
-      <div
-        className="pointer-events-none fixed inset-0 -z-20 h-full w-full"
-        style={{
-          backgroundImage: `url(${staticPoster})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-    );
-  }
-
-  if (!src) return null;
-
-  if (quality === 'sd') {
-    return (
-      <div style={{ position: 'fixed', inset: 0, zIndex: -20, overflow: 'hidden', pointerEvents: 'none' }}>
-        <video
-          ref={ref}
-          src={src}
-          autoPlay muted loop playsInline
-          onError={(e) => console.error('[BackgroundVideo] failed to load:', src, e.target.error)}
-          style={{ width: '40%', height: '40%', objectFit: 'cover', transform: 'scale(2.6)', transformOrigin: 'top left', filter: 'blur(0.5px)' }}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <video
-      ref={ref}
-      src={src}
-      autoPlay muted loop playsInline
-      onError={(e) => console.error('[BackgroundVideo] failed to load:', src, e.target.error)}
-      onLoadedData={() => console.log('[BackgroundVideo] loaded ok:', src)}
-      className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover opacity-[0.8]"
-      style={videoStyle}
-    />
-  );
-}
-
 // Module-level: skip GSAP intro on revisits (same pattern as HomePage)
 let achievementsVisited = false;
 
@@ -364,28 +318,6 @@ export default function AchievementsPage({ profile }) {
   const theme    = THEMES[settings?.theme]   || THEMES.oled;
   const accent   = ACCENTS[settings?.accent] || ACCENTS.bulb;
   const motionOn = settings ? settings.animations && !settings.reduceMotion : true;
-
-  // Background video
-  const backgroundVideoType = settings?.backgroundVideoType ?? 'default';
-  const backgroundQuality   = settings?.backgroundQuality   ?? 'hd';
-  const backgroundVideoSrc =
-    backgroundVideoType === 'none' || backgroundQuality === 'static'
-      ? null
-      : backgroundVideoType === 'custom'
-        ? settings?.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : null
-        : backgroundVideoType?.startsWith('preset-')
-          ? PRESET_VIDEO_MAP[backgroundVideoType] ?? DEFAULT_BACKGROUND_VIDEO
-          : DEFAULT_BACKGROUND_VIDEO;
-
-  // SD: render video at lower resolution via CSS scale trick
-  const bgVideoStyle = backgroundQuality === 'sd'
-    ? { filter: 'blur(0px)', imageRendering: 'auto', transform: 'scale(1.05)', opacity: 1 }
-    : {};
-
-  // Static fallback: first-frame PNG shown as a background image
-  const bgStaticPoster = backgroundQuality === 'static'
-    ? (PRESET_STATIC_MAP[backgroundVideoType] ?? null)
-    : null;
 
   // Selected game
   const [selectedGameId, setSelectedGameId] = useState(GAMES[0].id);
@@ -486,18 +418,9 @@ export default function AchievementsPage({ profile }) {
   return (
     <div ref={pageRef} className="relative h-full overflow-y-auto" style={{ fontFamily: 'Inter, sans-serif', opacity: pageReady ? 1 : 0 }}>
 
-      {/* Background video */}
-      <BackgroundVideo
-        key={backgroundVideoSrc + backgroundQuality}
-        src={backgroundVideoSrc}
-        active={motionOn}
-        quality={backgroundQuality}
-        videoStyle={bgVideoStyle}
-        staticPoster={bgStaticPoster}
-      />
       <div
         className="pointer-events-none fixed inset-0 -z-10"
-        style={{ background: `linear-gradient(to bottom, ${theme.bg}cc 0%, ${theme.bg}88 40%, ${theme.bg}cc 100%)` }}
+        style={{ background: `linear-gradient(to bottom, ${theme.bg}cc 0%, ${theme.bg}88 40%, ${theme.bg}cc 100%)`, opacity: 0.2 }}
       />
 
       <div className="px-9 py-7">
@@ -608,14 +531,12 @@ export default function AchievementsPage({ profile }) {
               className="ap-banner relative overflow-hidden rounded-[2rem] border"
               style={{ borderColor: `${accent.hex}28`, backgroundColor: theme.surface }}
             >
-              <div className="relative h-24 overflow-hidden">
+              <div className="relative h-16 -z-5">
                 <img
                   src={`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${game.appId}/76bc20881fac10578131cd62da809d70aef8ffa3/library_hero.jpg?t=1784562601`}
                   alt={game.name}
-                  className="w-full h-full object-cover opacity-60"
+                  className="w-full h-[180px] object-cover opacity-60"
                 />
-                <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${theme.surface} 0%, transparent 40%, ${theme.surface} 100%)` }} />
-                <div className="absolute inset-0" style={{ background: `linear-gradient(to top, ${theme.surface} 0%, transparent 60%)` }} />
               </div>
 
               <div className="px-5 pb-5 -mt-4">
@@ -635,11 +556,11 @@ export default function AchievementsPage({ profile }) {
                   <>
                     <div className="flex items-end justify-between mt-2 mb-3 px-2.5 font-[Manrope]">
                       <div>
-                        <span className="text-6xl font-medium" style={{ color: accent.hex, fontFamily: 'Apple Garamond' }}>{unlocked}</span>
-                        <span className="text-3xl opacity-30 ml-1" style={{
+                        <span className="text-7xl font-medium z-[100]" style={{ color: accent.hex, fontFamily: 'Apple Garamond' }}>{unlocked}</span>
+                        <span className="text-4xl opacity-30 ml-1" style={{
                           fontFamily: 'Apple Garamond'
                         }}>/ {total}</span>
-                        <span className="text-[17px] opacity-40 ml-2" style={{
+                        <span className="text-[18px] opacity-40 ml-2" style={{
                           fontFamily: 'Apple Garamond'
                         }}>achievements</span>
                       </div>
@@ -648,7 +569,7 @@ export default function AchievementsPage({ profile }) {
                         {progress}%
                       </span>
                     </div>
-                    <div className="w-full h-3 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${progress}%` }}
@@ -662,9 +583,17 @@ export default function AchievementsPage({ profile }) {
               </div>
             </div>
 
+
+
             {/* Filter tabs */}
             {!loading && achievements.length > 0 && (
-              <div className="ap-filters flex gap-1 px-1 py-1 rounded-xl w-fit" style={{ backgroundColor: theme.surface, fontFamily: 'Apple Garamond' }}>
+              <GlassLayer
+                borderRadius={16}
+                distortionScale={-180}
+                blur={40}
+                className="ap-filters flex gap-1 px-1 py-1 w-fit"
+                style={{ fontFamily: 'Apple Garamond' }}
+              >
                 {[
                   { id: 'all',      label: `All (${achievements.length})` },
                   { id: 'achieved', label: `Achieved (${unlocked})` },
@@ -683,25 +612,25 @@ export default function AchievementsPage({ profile }) {
                     {opt.label}
                   </button>
                 ))}
-              </div>
+              </GlassLayer>
             )}
 
             {/* Achievement list */}
             {loading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 5 }).map((a, i) => <AchievementSkeleton key={i} theme={theme} />)}
+              <div className="grid grid-cols-3 gap-2">
+                {Array.from({ length: 12 }).map((a, i) => <AchievementSkeleton key={i} theme={theme} />)}
               </div>
             ) : achievements.length === 0 && !error ? (
               <div
                 className="flex flex-col items-center justify-center py-16 rounded-2xl border"
                 style={{ borderColor: theme.border, backgroundColor: theme.surface }}
               >
-                <Trophy size={28} className="opacity-15 mb-3" />
+                <Trophy size={28} className="opacity-15 mb-2" />
                 <p className="text-[13px] opacity-30">No achievement data yet — play the game first.</p>
               </div>
             ) : (
               <AnimatePresence mode="popLayout">
-                <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
                   {sorted.map((a, i) => (
                     <motion.div
                       key={a.apiName}
