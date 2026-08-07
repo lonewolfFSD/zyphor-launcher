@@ -372,7 +372,7 @@ export default function AuthGate({ onAuthSuccess }) {
             color: M,
             marginBottom: 6,
           }}>
-            v.1.1.6
+            v.1.2.2
           </p>
 
           </span>
@@ -690,7 +690,7 @@ export default function AuthGate({ onAuthSuccess }) {
             fontFamily: 'monospace',
             letterSpacing: '0.04em',
           }}>
-            v1.1.6
+            v1.2.2
           </span>
         </motion.div>
       </motion.div>

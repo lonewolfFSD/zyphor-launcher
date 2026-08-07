@@ -13,7 +13,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 
-const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.1.6';
+const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.2.2';
 
 function getWeatherMeta(code, isNight = false) {
   if (code === 0) return isNight ? { icon: faMoon, color: '#a5b4fc', label: 'Clear' } : { icon: faSun, color: '#fbbf24', label: 'Clear' };

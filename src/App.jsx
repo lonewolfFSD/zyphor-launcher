@@ -400,7 +400,7 @@ function handleCycleAccent() {
           >
             <div className="flex items-center gap-6">
               <span className="opacity-40 uppercase tracking-widest text-[9px]">Zyphor Dev</span>
-              <span>v{import.meta.env.VITE_APP_VERSION ?? '1.1.6'}</span>
+              <span>v{import.meta.env.VITE_APP_VERSION ?? '1.2.2'}</span>
               <span style={{ color: accent.hex }}>theme: {settings?.theme ?? 'oled'}</span>
               <span style={{ color: accent.hex }}>glass: {settings?.navStyle ?? 'glass'}</span>
               <span>page: {activePage}</span>

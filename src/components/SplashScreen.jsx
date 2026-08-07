@@ -234,7 +234,7 @@ useEffect(() => {
             className="text-[16px] uppercase tracking-[0.25em] -mt-1"
             style={{ fontFamily: 'Apple Garamond', color: 'rgba(255,255,255,0.22)' }}
           >
-            v1.1.6
+            v1.2.2
           </p>
         </motion.div>
 
