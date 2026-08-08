@@ -24,6 +24,26 @@ contextBridge.exposeInMainWorld('launcherAPI', {  // was 'api'
   chat:           (messages, playerName, playtime) => ipcRenderer.invoke('faye:chat', messages, playerName, playtime),
 },
 
+  takeScreenshot: (gameId) => ipcRenderer.invoke('screenshots:take', gameId),
+  fayeCommand:    (command, args) => ipcRenderer.invoke('faye:command', command, args),
+
+// ── Overlay ────────────────────────────────────────────────────────
+  hideOverlay: () => ipcRenderer.send('overlay:hide'),
+  onOverlayShow: (cb) => {
+    const l = () => cb();
+    ipcRenderer.on('overlay:show', l);
+    return () => ipcRenderer.removeListener('overlay:show', l);
+  },
+
+  // ── Ollama install ─────────────────────────────────────────────────
+  installOllama: () => ipcRenderer.invoke('ollama:install'),
+  onOllamaInstallProgress: (cb) => {
+    const l = (_e, msg) => cb(msg);
+    ipcRenderer.on('ollama:installProgress', l);
+    return () => ipcRenderer.removeListener('ollama:installProgress', l);
+  },
+
+ytmSearch: (query) => ipcRenderer.invoke('ytm-search', query),
 pullModel: () => ipcRenderer.invoke('faye:pullModel'),
 onPullProgress: (cb) => ipcRenderer.on('faye:pullProgress', (_e, msg) => cb(msg)),
 

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, Tray, Menu, nativeImage, globalShortcut, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -36,6 +36,33 @@ autoUpdater.on('checking-for-update', () => {
   mainWindow?.webContents.send('updater:checking');
 });
 
+ipcMain.handle('ytm-search', async (_event, query) => {
+  const res = await fetch('https://music.youtube.com/youtubei/v1/search?prettyPrint=false', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': 'AIzaSyC9XL3ZjWddXya6X74dJoCTL-FUHU13d08',
+      'X-YouTube-Client-Name': '67',
+      'X-YouTube-Client-Version': '1.20240101.01.00',
+      'Origin': 'https://music.youtube.com',
+      'Referer': 'https://music.youtube.com/',
+    },
+    body: JSON.stringify({
+      query,
+      params: 'EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D',
+      context: {
+        client: {
+          clientName: 'WEB_REMIX',
+          clientVersion: '1.20240101.01.00',
+          hl: 'en',
+          gl: 'US',
+        },
+      },
+    }),
+  });
+  return res.json();
+});
+
 ipcMain.handle('updater:check', async () => {
   try {
     const result = await autoUpdater.checkForUpdates();
@@ -50,6 +77,82 @@ ipcMain.handle('updater:check', async () => {
     return { error: err.message };
   }
 });
+
+// ── Overlay ───────────────────────────────────────────────────────────────────
+ipcMain.on('overlay:hide', () => {
+  if (!overlayWin) return;
+  overlayWin.hide();
+  overlayWin.setIgnoreMouseEvents(true, { forward: true });
+});
+
+// ── Ollama install (Windows first, cross-platform skeleton below) ──────────────
+const { https: httpsModule } = require('https'); // already built-in, just alias
+const os = require('os');
+
+ipcMain.handle('ollama:install', async () => {
+  const { execSync } = require('child_process');
+
+  // 1. Already installed?
+  const alreadyInstalled = (() => {
+    try { execSync('ollama --version', { stdio: 'ignore' }); return true; }
+    catch { return false; }
+  })();
+  if (alreadyInstalled) return { alreadyInstalled: true };
+
+  const platform = process.platform;
+
+  try {
+    if (platform === 'win32') {
+      const installerPath = path.join(os.tmpdir(), 'OllamaSetup.exe');
+      await downloadFile('https://ollama.com/download/OllamaSetup.exe', installerPath);
+      // Send progress to renderer
+      overlayWin?.webContents.send('ollama:installProgress', 'Running installer…');
+      await runShell(`"${installerPath}" /S`);
+    } else if (platform === 'darwin') {
+      await runShell('brew install ollama');
+    } else {
+      await runShell('curl -fsSL https://ollama.com/install.sh | sh');
+    }
+
+    // Pull the model Faye uses
+    overlayWin?.webContents.send('ollama:installProgress', 'Pulling phi3:mini model…');
+    await runShell(`"${getOllamaPath()}" pull phi3:mini`);
+
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+function downloadFile(url, dest) {
+  const https = require('https');
+  const fs2 = require('fs');
+  return new Promise((resolve, reject) => {
+    const file = fs2.createWriteStream(dest);
+    https.get(url, (res) => {
+      // Follow redirect
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        file.close();
+        return downloadFile(res.headers.location, dest).then(resolve).catch(reject);
+      }
+      res.pipe(file);
+      file.on('finish', () => { file.close(); resolve(); });
+    }).on('error', (err) => {
+      fs2.unlink(dest, () => {});
+      reject(err);
+    });
+  });
+}
+
+function runShell(cmd) {
+  return new Promise((resolve, reject) => {
+    const { exec } = require('child_process');
+    exec(cmd, { shell: true }, (err, _stdout, stderr) => {
+      if (err) reject(new Error(stderr || err.message));
+      else resolve();
+    });
+  });
+}
 
 // main.js
 ipcMain.handle('faye:saveMemory', (_e, messages) => {
@@ -109,6 +212,9 @@ const isDev = process.env.NODE_ENV === 'development' || !fs.existsSync(distIndex
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+
+/** @type {BrowserWindow | null} */
+let overlayWin = null;          // ← ADD THIS
 
 /** @type {Tray | null} */
 let tray = null;
@@ -249,6 +355,44 @@ function createWindow() {
   });
 }
 
+function createOverlay() {
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+
+  overlayWin = new BrowserWindow({
+    width,
+    height,
+    x: 0,
+    y: 0,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: true,
+    resizable: false,
+    movable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  // Load same app but with ?overlay=1 so React can render FayeOverlay instead
+  if (isDev) {
+    overlayWin.loadURL('http://localhost:5173?overlay=1');
+  } else {
+    overlayWin.loadFile(distIndex, { query: { overlay: '1' } });
+  }
+
+  overlayWin.hide();
+  overlayWin.setIgnoreMouseEvents(true, { forward: true });
+
+  overlayWin.on('closed', () => {
+    overlayWin = null;
+  });
+}
+
 ipcMain.handle('app:getLauncherPath', () => path.dirname(app.getPath('exe')));
 
 // ── Screenshots ───────────────────────────────────────────────────────────────
@@ -319,6 +463,71 @@ ipcMain.on('shell:openExternal', (_event, url) => {
   shell.openExternal(url);
 });
 
+// ── Screenshot (take) ─────────────────────────────────────────────────────────
+ipcMain.handle('screenshots:take', async (_e, gameId) => {
+  try {
+    const { desktopCapturer } = require('electron');
+    // Hide overlay so it doesn't appear in the capture
+    overlayWin?.hide();
+    await new Promise(r => setTimeout(r, 120)); // let OS composite
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 1920, height: 1080 },
+    });
+    // Show overlay again immediately
+    overlayWin?.show();
+    const src = sources[0];
+    if (!src) return { ok: false, error: 'No screen source found' };
+    const dir = screenshotsDir(gameId);
+    fs.mkdirSync(dir, { recursive: true });
+    const filename = `screenshot-${Date.now()}.png`;
+    const filepath = path.join(dir, filename);
+    fs.writeFileSync(filepath, src.thumbnail.toPNG());
+    return { ok: true, path: filepath };
+  } catch (err) {
+    overlayWin?.show();
+    return { ok: false, error: err.message };
+  }
+});
+
+// ── Faye commands (Spotify, volume, open URL) ─────────────────────────────────
+ipcMain.handle('faye:command', async (_e, command, args) => {
+  try {
+    if (command === 'spotify') {
+      const query = args?.query ? encodeURIComponent(args.query) : '';
+      await shell.openExternal(query ? `spotify:search:${query}` : 'spotify:');
+      return { ok: true };
+    }
+    if (command === 'volume') {
+      if (process.platform === 'win32') {
+        const { execSync } = require('child_process');
+        // 175 = volume up, 174 = volume down keys
+        const key = args?.direction === 'up' ? 175 : 174;
+        execSync(`powershell -c "(New-Object -ComObject WScript.Shell).SendKeys([char]${key})"`);
+      }
+      return { ok: true };
+    }
+    if (command === 'openUrl') {
+      await shell.openExternal(args?.url);
+      return { ok: true };
+    }
+    return { ok: false, error: 'Unknown command' };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// ── Forward overlay console to main process ───────────────────────────────────
+// (called after overlayWin is created in createOverlay)
+function attachOverlayConsole() {
+  overlayWin?.webContents.on('console-message', (_e, level, message) => {
+    const prefix = '[overlay]';
+    if (level === 2) console.warn(prefix, message);
+    else if (level >= 3) console.error(prefix, message);
+    else console.log(prefix, message);
+  });
+}
+
 app.whenReady().then(() => {
   // Create screenshots folder
   const screenshotsDir = path.join(app.getPath('userData'), 'screenshots', 'stay');
@@ -328,8 +537,24 @@ app.whenReady().then(() => {
   registerStorageHandlers();
   registerGameHandlers();
   registerWindowHandlers(() => mainWindow);
+  createOverlay();
+  attachOverlayConsole();
   createWindow();
   createTray();
+
+  // ── Overlay hotkey ──────────────────────────────────────────────
+  globalShortcut.register('Alt+F', () => {
+    if (!overlayWin) return;
+    if (overlayWin.isVisible()) {
+      overlayWin.hide();
+      overlayWin.setIgnoreMouseEvents(true, { forward: true });
+    } else {
+      overlayWin.show();
+      overlayWin.setIgnoreMouseEvents(false);
+      overlayWin.focus();
+      overlayWin.webContents.send('overlay:show');
+    }
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -351,7 +576,14 @@ ipcMain.handle('faye:start', async () => {
     await new Promise(r => setTimeout(r, 500));
     try {
       const res = await fetch('http://localhost:11434/api/tags');
-      if (res.ok) return { ok: true };
+      if (res.ok) {
+        // Verify phi3:mini is actually pulled
+        const tags = await res.json();
+        const models = (tags.models || []).map(m => m.name);
+        const hasModel = models.some(n => n.startsWith('phi3:mini') || n === 'phi3:mini');
+        if (!hasModel) return { ok: false, error: `phi3:mini not found. Run "Install Ollama" to pull it. Available: ${models.join(', ') || 'none'}` };
+        return { ok: true };
+      }
     } catch {}
   }
   return { ok: false, error: 'Ollama did not start in time' };
@@ -388,28 +620,33 @@ IMPORTANT: Reply in 1-2 short casual sentences ONLY. No lists. No formatting. No
     });
 
     const data = await res.json();
+    if (data.error) return { ok: false, error: data.error };
+
     const content = (data.message?.content ?? '')
-        .replace(/--.*$/s, '')        // strip everything after --
-        .replace(/\*\*.*$/s, '')      // strip everything after **
-        .replace(/#+\s.*$/gm, '')     // strip markdown headers
+        .replace(/--.*$/s, '')
+        .replace(/\*\*.*$/s, '')
+        .replace(/#+\s.*$/gm, '')
         .trim();
 
-    // Self-assess mood
-    const moodRes = await fetch('http://localhost:11434/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'phi3:mini',
-        messages: [
-          { role: 'user', content: `Given this reply: "${content}" — what is Faye's mood in one word: neutral, happy, tired, excited, or worried? Reply with ONLY the single word.` }
-        ],
-        stream: false,
-      }),
-    });
-    const moodData = await moodRes.json();
-    const mood = moodData.message?.content?.trim().toLowerCase().split(/\s/)[0] ?? 'neutral';
-    const validMoods = ['neutral', 'happy', 'tired', 'excited', 'worried'];
-    const finalMood = validMoods.includes(mood) ? mood : 'neutral';
+    if (!content) return { ok: false, error: 'Model returned empty response — is phi3:mini pulled?' };
+
+    // Mood — best-effort, never block the response
+    let finalMood = 'neutral';
+    try {
+      const moodRes = await fetch('http://localhost:11434/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'phi3:mini',
+          messages: [{ role: 'user', content: `Given this reply: "${content}" — what is Faye's mood in one word: neutral, happy, thinking, or sad? Reply with ONLY the single word.` }],
+          stream: false,
+        }),
+      });
+      const moodData = await moodRes.json();
+      const mood = moodData.message?.content?.trim().toLowerCase().split(/\s/)[0] ?? 'neutral';
+      const validMoods = ['neutral', 'happy', 'thinking', 'sad'];
+      if (validMoods.includes(mood)) finalMood = mood;
+    } catch {}
 
     return { ok: true, content, mood: finalMood };
   } catch (err) {
@@ -427,6 +664,10 @@ app.on('window-all-closed', () => {
   // If closeToTray is on, windows being hidden doesn't mean we should quit.
   const s = readSettings();
   if (!s.closeToTray && process.platform !== 'darwin') app.quit();
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 process.on('uncaughtException', (err) => {
