@@ -11,10 +11,13 @@ import NewsPage from './pages/NewsPage.jsx';
 import AchievementsPage from './pages/AchievementsPage.jsx';
 import FriendsPage from './pages/FriendsPage.jsx';
 import { useSettings, THEMES, ACCENTS } from './hooks/useSettings.js';
-import { loadUid, clearSession } from './lib/authSession.js';
+import { loadUid, saveUid, clearSession } from './lib/authSession.js';
 import ScreenshotsPage from './pages/ScreenshotsPage.jsx';
+import FayePage from './pages/FayePage.tsx';
 import Logo from './Logo/icon.png';
 import { useHotkeys } from './hooks/useHotkeys.js';
+
+import UpdateTourPage, { useUpdateTourCheck } from './pages/UpdateTourPage.jsx';
 
 import OnboardingPage, { useOnboardingCheck } from './pages/OnboardingPage.jsx';
 
@@ -56,6 +59,7 @@ const PAGE_ORDER = {
   achievements: 3,
   screenshots: 4,
   settings: 5,
+  faye: 6,
 };
 
 
@@ -156,6 +160,7 @@ const PAGES = {
   achievements: AchievementsPage,
   screenshots:  ScreenshotsPage,
   settings:     SettingsPage,
+  faye: FayePage,
 };
 
 const MIN_SPLASH_MS = 8000;
@@ -174,8 +179,12 @@ export default function App() {
   const [pageDirection, setPageDirection] = useState(1);
   const directionRef = useRef(1);
 
-  const [showOnboarding, setShowOnboarding] = useState(false);
+// at the top of the component
 const { shouldShowOnboarding, markOnboardingComplete } = useOnboardingCheck();
+const [showOnboarding, setShowOnboarding] = useState(() => shouldShowOnboarding());
+
+const { shouldShow: shouldShowUpdate, markSeen } = useUpdateTourCheck();
+const [showUpdateTour, setShowUpdateTour] = useState(() => shouldShowUpdate());
 
   function navigateTo(newPage) {
     const dir = (PAGE_ORDER[newPage] ?? 0) > (PAGE_ORDER[activePage] ?? 0) ? 1 : -1;
@@ -282,18 +291,24 @@ function handleCycleAccent() {
     return () => clearTimeout(id);
   }, []);
 
-  useEffect(() => {
-    if (!minSplashDone || checking || !settings || !profile) return;
-    if (settings.fullscreenOnLaunch) {
-      window.launcherAPI?.setFullscreen?.(true);
-    }
-  }, [minSplashDone, checking, settings, profile]);
+useEffect(() => {
+  const isSpecialScreen = !minSplashDone || !profile || showOnboarding || showUpdateTour;
+  
+  if (!isSpecialScreen && settings?.fullscreenOnLaunch) {
+    window.launcherAPI?.setFullscreen?.(true);
+  } else {
+    window.launcherAPI?.setFullscreen?.(false);
+  }
+}, [minSplashDone, profile, showOnboarding, showUpdateTour, settings?.fullscreenOnLaunch]);
 
   useEffect(() => {
     if (!settings) return;
 
     async function tryAutoLogin() {
-      if (!settings.rememberLogin) {
+      // Default rememberLogin to true — if the setting is missing/undefined,
+      // treat it as enabled so we don't wipe the session on first load.
+      const rememberLogin = settings.rememberLogin ?? true;
+      if (!rememberLogin) {
         clearSession();
         setChecking(false);
         return;
@@ -314,6 +329,9 @@ function handleCycleAccent() {
         }
 
         const d = snap.data();
+        // Re-persist the UID so the session survives hot-reloads and restarts.
+        // Without this, saveUid() was never called from App and the key went stale.
+        saveUid(uid);
         setProfile({
           uid,
           email:        d.email        ?? '',
@@ -356,28 +374,34 @@ function handleCycleAccent() {
   const ActivePageComponent = PAGES[activePage];
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-black/70">
+   <div className="flex h-screen flex-col overflow-hidden bg-black/70">
 
-      <AnimatePresence>
+    <AnimatePresence>
       {(checking || !settings || !minSplashDone) && <SplashScreen key="splash" />}
     </AnimatePresence>
 
     {/* Auth or app — splash covers this until ready */}
     {!profile ? (
-  <AuthGate onAuthSuccess={setProfile} />
-) : showOnboarding ? (
-  <OnboardingPage 
-    profile={profile}
-    onComplete={() => {
-      markOnboardingComplete();
-      setShowOnboarding(false);
-    }}
-  />
-) : (
-  <>
-
-      {/* ── Global background — rendered once, persists across page transitions ── */}
-      <BackgroundVideo
+  <AuthGate onAuthSuccess={(p) => { saveUid(p.uid); setProfile(p); }} />
+    ) : showOnboarding ? (
+      <OnboardingPage
+        profile={profile}
+        onComplete={() => {
+          markOnboardingComplete();
+          setShowOnboarding(false);
+        }}
+      />
+    ) : showUpdateTour && minSplashDone ? (
+      <UpdateTourPage
+        onComplete={() => {
+          markSeen();                 // write to localStorage
+          setShowUpdateTour(false);   // ← this actually removes the page
+        }}
+      />
+    ) : (
+      <>
+        {/* ── Global background — rendered once, persists across page transitions ── */}
+        <BackgroundVideo
         key={backgroundVideoSrc + backgroundQuality}
         src={backgroundVideoSrc}
         active={motionOn}
@@ -411,6 +435,7 @@ function handleCycleAccent() {
       </AnimatePresence>
 
       <TitleBar />
+      
 
       <div className="flex min-h-0 flex-1 gap-4 p-4">
         <NavRail

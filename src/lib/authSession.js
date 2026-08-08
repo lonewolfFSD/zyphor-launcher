@@ -1,4 +1,7 @@
 const SESSION_KEY = 'zyphor.auth.uid.v1';
+// saveUid()    — call this after every successful login (AuthGate + auto-login restore)
+// loadUid()    — call this on app boot to attempt session restore
+// clearSession() — call this on logout or when rememberLogin is disabled
 
 export function saveUid(uid) {
   try {

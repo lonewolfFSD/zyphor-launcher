@@ -1,7 +1,7 @@
 {
   "name": "stay-launcher",
   "productName": "Zyphor Launcher",
-  "version": "1.2.2",
+  "version": "1.2.6",
   "description": "Official desktop launcher for all Zyphor Studios titles.",
   "author": "Zyphor Studios",
   "license": "UNLICENSED",
@@ -76,6 +76,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "electron/resources/ollama.exe",
+        "to": "ollama.exe"
       }
     ],
     "win": {

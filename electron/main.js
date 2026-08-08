@@ -2,6 +2,9 @@ const { app, BrowserWindow, shell, ipcMain, Tray, Menu, nativeImage } = require(
 const path = require('path');
 const fs = require('fs');
 
+const { spawn } = require('child_process');
+let ollamaProcess = null;
+
 const { autoUpdater } = require('electron-updater');
 
 // Don't auto-download — let the user decide
@@ -48,6 +51,18 @@ ipcMain.handle('updater:check', async () => {
   }
 });
 
+// main.js
+ipcMain.handle('faye:saveMemory', (_e, messages) => {
+  const memPath = path.join(app.getPath('userData'), 'faye-memory.json');
+  fs.writeFileSync(memPath, JSON.stringify(messages));
+});
+
+ipcMain.handle('faye:loadMemory', () => {
+  const memPath = path.join(app.getPath('userData'), 'faye-memory.json');
+  if (!fs.existsSync(memPath)) return [];
+  return JSON.parse(fs.readFileSync(memPath, 'utf-8'));
+});
+
 // ipcMain.handle('updater:check', async () => {
 //   try {
 //     return await autoUpdater.checkForUpdates();
@@ -55,6 +70,25 @@ ipcMain.handle('updater:check', async () => {
 //     return { error: err.message };
 //   }
 // });
+
+ipcMain.handle('faye:pullModel', async () => {
+  return new Promise((resolve) => {
+    const proc = spawn(getOllamaPath(), ['pull', 'phi3:mini'], {
+      stdio: 'pipe',
+      env: {
+        ...process.env,
+        OLLAMA_MODELS: path.join(app.getPath('userData'), 'faye-models'),
+      },
+    });
+    proc.stdout.on('data', (d) => {
+      mainWindow?.webContents.send('faye:pullProgress', d.toString());
+    });
+    proc.stderr.on('data', (d) => {
+      mainWindow?.webContents.send('faye:pullProgress', d.toString());
+    });
+    proc.on('close', (code) => resolve({ ok: code === 0 }));
+  });
+});
 
 ipcMain.handle('updater:download', () => {
   autoUpdater.downloadUpdate();
@@ -116,6 +150,34 @@ function createTray() {
   });
 }
 
+function getOllamaPath() {
+  const bundled = path.join(process.resourcesPath, 'ollama.exe');
+  if (fs.existsSync(bundled)) return bundled;
+  // dev fallback — use system installed Ollama
+  const localApp = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe');
+  if (fs.existsSync(localApp)) return localApp;
+  return 'ollama';
+}
+
+function startOllama() {
+  if (ollamaProcess) return;
+  const ollamaPath = getOllamaPath();
+  ollamaProcess = spawn(ollamaPath, ['serve'], {
+    detached: false,
+    stdio: 'pipe',
+  });
+  ollamaProcess.stdout.on('data', (d) => console.log('[ollama]', d.toString()));
+  ollamaProcess.stderr.on('data', (d) => console.error('[ollama err]', d.toString()));
+  ollamaProcess.on('error', (err) => console.error('[ollama] failed to start:', err.message));
+  ollamaProcess.on('close', (code) => console.log('[ollama] exited with code', code));
+}
+
+function stopOllama() {
+  if (!ollamaProcess) return;
+  ollamaProcess.kill();
+  ollamaProcess = null;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1180,
@@ -156,24 +218,6 @@ function createWindow() {
     // Apply launchOnStartup on every boot so it stays in sync with the setting.
     const s = readSettings();
     app.setLoginItemSettings({ openAtLogin: !!s.launchOnStartup, openAsHidden: true });
-  });
-
-  // Close to tray — intercept the close event and hide instead of quitting.
-  mainWindow.on('close', (e) => {
-    const s = readSettings();
-    if (s.closeToTray) {
-      e.preventDefault();
-      mainWindow.hide();
-    }
-  });
-
-  // Minimize to tray
-  mainWindow.on('minimize', (e) => {
-    const s = readSettings();
-    if (s.minimizeToTray) {
-      e.preventDefault();
-      mainWindow.hide();
-    }
   });
 
   // Log renderer-side errors to the main process console so black-screen
@@ -290,6 +334,87 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+// ── Faye AI (Ollama) ──────────────────────────────────────────────────────────
+ipcMain.handle('faye:checkInstalled', async () => {
+  const bundled = path.join(process.resourcesPath, 'ollama.exe');
+  if (fs.existsSync(bundled)) return true;
+  const localApp = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe');
+  return fs.existsSync(localApp);
+});
+
+ipcMain.handle('faye:start', async () => {
+  startOllama();
+  // Wait for Ollama to boot
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    try {
+      const res = await fetch('http://localhost:11434/api/tags');
+      if (res.ok) return { ok: true };
+    } catch {}
+  }
+  return { ok: false, error: 'Ollama did not start in time' };
+});
+
+ipcMain.handle('faye:stop', () => {
+  stopOllama();
+  return { ok: true };
+});
+
+ipcMain.handle('faye:isReady', async () => {
+  try {
+    const res = await fetch('http://localhost:11434/api/tags');
+    return res.ok;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle('faye:chat', async (_e, messages, playerName, playtime) => {
+  try {
+    const system = `You are Faye. A cheerful, witty companion for the Zyphor Launcher. You care about the player and speak like a close friend — casual, warm, short. Never robotic. Never formal.
+${playerName ? `The player's name is ${playerName}.` : ''}
+IMPORTANT: Reply in 1-2 short casual sentences ONLY. No lists. No formatting. No asterisks. No dashes. Just natural conversation.`;
+
+    const res = await fetch('http://localhost:11434/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'phi3:mini',
+        messages: [{ role: 'system', content: system }, ...messages],
+        stream: false,
+      }),
+    });
+
+    const data = await res.json();
+    const content = (data.message?.content ?? '')
+        .replace(/--.*$/s, '')        // strip everything after --
+        .replace(/\*\*.*$/s, '')      // strip everything after **
+        .replace(/#+\s.*$/gm, '')     // strip markdown headers
+        .trim();
+
+    // Self-assess mood
+    const moodRes = await fetch('http://localhost:11434/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'phi3:mini',
+        messages: [
+          { role: 'user', content: `Given this reply: "${content}" — what is Faye's mood in one word: neutral, happy, tired, excited, or worried? Reply with ONLY the single word.` }
+        ],
+        stream: false,
+      }),
+    });
+    const moodData = await moodRes.json();
+    const mood = moodData.message?.content?.trim().toLowerCase().split(/\s/)[0] ?? 'neutral';
+    const validMoods = ['neutral', 'happy', 'tired', 'excited', 'worried'];
+    const finalMood = validMoods.includes(mood) ? mood : 'neutral';
+
+    return { ok: true, content, mood: finalMood };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
 
 // Anywhere after app is ready:

@@ -82,16 +82,12 @@ function loadFromDisk() {
 }
 
 function persistToDisk(settings) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-        resolve();
-      } catch (err) {
-        reject(err);
-      }
-    }, 300);
-  });
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    return Promise.resolve();
+  } catch (err) {
+    return Promise.reject(err);
+  }
 }
 
 // ── Singleton store ────────────────────────────────────────────────────────────
@@ -229,11 +225,11 @@ export function useSettings() {
 
       window.launcherAPI?.settingsChanged?.(next); // add this line
 
+      // Write synchronously so a hot-reload / page close never drops the update.
+      // The 250 ms debounce was swallowing writes on fast reloads.
       clearTimeout(saveTimer.current);
       clearTimeout(savedTimer.current);
-      saveTimer.current = setTimeout(() => {
-        if (pending.current) flush(pending.current);
-      }, 250);
+      flush(next);
     },
     [flush]
   );

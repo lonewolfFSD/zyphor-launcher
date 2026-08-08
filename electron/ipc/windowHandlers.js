@@ -14,11 +14,16 @@ function registerWindowHandlers(getWindow) {
   });
 
   ipcMain.on('window:maximize', () => {
-    const win = getWindow();
-    if (!win) return;
-    if (win.isMaximized()) win.unmaximize();
-    else win.maximize();
-  });
+  const win = getWindow();
+  if (!win) return;
+  if (win.isFullScreen()) {
+    win.setFullScreen(false);
+  } else if (win.isMaximized()) {
+    win.unmaximize();
+  } else {
+    win.maximize();
+  }
+});
 
   ipcMain.on('window:close', () => {
     const win = getWindow();

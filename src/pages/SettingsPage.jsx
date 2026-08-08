@@ -54,6 +54,8 @@ const PRESET_VIDEO_MAP = {
   'preset-rossi': VIDEO_ROSSI
 };
 
+const CURRENT_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.0.0';
+
 // Shows the launcher's own installation folder -- read-only, fetched from main process.
 function LauncherPathRow({ theme }) {
   const [launcherPath, setLauncherPath] = useState('Loading...');
@@ -947,7 +949,10 @@ async function handleCheckUpdate() {
             <SettingRow label="Fullscreen on launch" hint="Automatically enters fullscreen after the splash screen finishes.">
               <Toggle
                 checked={settings.fullscreenOnLaunch ?? false}
-                onChange={(checked) => update({ fullscreenOnLaunch: checked })}
+                onChange={(checked) => {
+                  update({ fullscreenOnLaunch: checked });
+                  window.launcherAPI?.setFullscreen?.(checked);  // ← add this
+                }}
               />
             </SettingRow>
           </Section>
@@ -1365,7 +1370,7 @@ async function handleCheckUpdate() {
                 </div>
                 <div>
                   <p className="text-[11px] text-ash/50">Version</p>
-                  <p className="mt-0.5 text-[13px] font-semibold text-bone">1.2.2</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-bone">v{CURRENT_VERSION}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-ash/50">Build channel</p>

@@ -51,6 +51,8 @@ const PRESET_STATIC_MAP = {
 const HANDSHAKE_BASE = 'https://zyphorstudios.com/login-game-handshake'
 const SESSION_TTL_MS = 5 * 60 * 1000
 
+const CURRENT_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.0.0';
+
 const newSessionId = () => crypto.randomUUID()
 
 /* ─── Spinner: clean arc, no wobble ─── */
@@ -372,7 +374,7 @@ export default function AuthGate({ onAuthSuccess }) {
             color: M,
             marginBottom: 6,
           }}>
-            v.1.2.2
+            v{CURRENT_VERSION}
           </p>
 
           </span>

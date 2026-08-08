@@ -15,6 +15,19 @@ contextBridge.exposeInMainWorld('launcherAPI', {  // was 'api'
     openFolder: (gameId) => ipcRenderer.invoke('screenshots:openFolder', gameId),
     delete: (gameId, fileNames) => ipcRenderer.invoke('screenshots:delete', gameId, fileNames),
   },
+
+  faye: {
+  checkInstalled: () => ipcRenderer.invoke('faye:checkInstalled'),
+  start:          () => ipcRenderer.invoke('faye:start'),
+  stop:           () => ipcRenderer.invoke('faye:stop'),
+  isReady:        () => ipcRenderer.invoke('faye:isReady'),
+  chat:           (messages, playerName, playtime) => ipcRenderer.invoke('faye:chat', messages, playerName, playtime),
+},
+
+pullModel: () => ipcRenderer.invoke('faye:pullModel'),
+onPullProgress: (cb) => ipcRenderer.on('faye:pullProgress', (_e, msg) => cb(msg)),
+
+onFayeChunk: (cb) => ipcRenderer.on('faye:chunk', (_e, chunk) => cb(chunk)),
   
   minimizeWindow:   () => ipcRenderer.send('window:minimize'),
   maximizeWindow:   () => ipcRenderer.send('window:maximize'),

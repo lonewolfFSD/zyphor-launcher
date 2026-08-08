@@ -5,7 +5,7 @@ import { useGSAP } from '@gsap/react';
 import {
   faHouse, faNewspaper, faGear, faTrophy, faRightFromBracket, faPlay,
   faShield, faGamepad, faCrown, faCopy, faCheck, faFingerprint,
-  faUsers, faImages,
+  faUsers, faImages, faRobot
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { signOut } from 'firebase/auth';
@@ -24,6 +24,7 @@ const NAV_ITEMS = [
   { id: 'friends',      label: 'Friends',      icon: faUsers },
   { id: 'achievements', label: 'Achievements', icon: faTrophy },
   { id: 'screenshots',  label: 'Screenshots',  icon: faImages },
+  { id: 'faye',  label: 'Faye AI',  icon: faRobot },
 ];
 
 function maskEmail(email) {

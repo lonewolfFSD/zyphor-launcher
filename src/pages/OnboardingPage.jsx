@@ -19,6 +19,7 @@ import Sleepy from './images/faye/sleepy.png';
 import Waving from './images/faye/waving.png';
 import Wink from './images/faye/wink.png';
 import Curious from './images/faye/curious.png';
+import Explain from './images/faye/explain.png';
 
 import first from './audio/first.mp3';
 import second from './audio/second.mp3';
@@ -48,6 +49,7 @@ const EXPRESSIONS = {
   waving:   Waving,
   sleepy:   Sleepy,
   sad:      Sad,
+  explain:  Explain
 };
 
 const VOICE_LINES = {
@@ -130,7 +132,7 @@ const SCRIPT = [
   },
   {
     id: 'nav',
-    expression: 'happy',
+    expression: 'explain',
     text: "Before you gooo~! Here's where everything is! Home, Friends, News, Achievements, Screenshots, and Settings! Easy peasy! ✨",
     subtext: "I still get lost sometimes... don't tell the developers. 🤫",
     action: 'continue',
@@ -148,9 +150,9 @@ const SCRIPT = [
     id: 'goodbye',
     expression: 'waving',
     text: "Everything's ready! I hope you have lots and lots of fun with Zyphor Launcher! 💖",
-    subtext: "If you ever see me again... it probably means you reinstalled the launcher. 😂 Byeee~!",
+    subtext: "Don't worry, this isn't goodbye! I'll be back in a future launcher update with new tricks, new features, and maybe a few surprises too~! See you next update! 👋✨",
     action: 'finish',
-    btn: "Launch! 🚀",
+    btn: "Launchhh!",
   },
 ];
 
@@ -408,6 +410,7 @@ export default function OnboardingPage({ onComplete, profile }) {
   const [selectedBg, setSelectedBg]         = useState(settings?.backgroundVideoType || 'default');
   const [burstTrigger, setBurstTrigger]     = useState(0);
   const [isMobile, setIsMobile]             = useState(false);
+  const [exiting, setExiting]               = useState(false);
 
   const currentStep = SCRIPT[stepIndex];
   const isLastStep  = stepIndex === SCRIPT.length - 1;
@@ -502,22 +505,24 @@ export default function OnboardingPage({ onComplete, profile }) {
     return () => clearInterval(typingRef.current);
   }, [stepIndex, activeDialogue?.text]);
 
-  // Voice
+  // Voice — key off activeDialogue.id so special lines (favt/aww) play too
   useEffect(() => {
-    if (!currentStep?.id || !VOICE_LINES[currentStep.id]) return;
+    const id = activeDialogue?.id;
+    if (!id || !VOICE_LINES[id]) return;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
-    audioRef.current = new Audio(VOICE_LINES[currentStep.id]);
+    audioRef.current = new Audio(VOICE_LINES[id]);
     audioRef.current.volume = 0.75;
     audioRef.current.play().catch(() => {});
     return () => audioRef.current?.pause();
-  }, [stepIndex]);
+  }, [activeDialogue?.id]);
 
   const nextStep = useCallback(() => {
     if (isLastStep) {
-      onComplete?.();
+      setExiting(true);
+      setTimeout(() => onComplete?.(), 1200);
       return;
     }
     setStepIndex(p => p + 1);
@@ -719,8 +724,8 @@ export default function OnboardingPage({ onComplete, profile }) {
             <div className="min-h-[110px]">
               <AnimatePresence mode="wait">
 
-                {/* Continue */}
-                {currentStep?.action === 'continue' && !isTyping && (
+                {/* Continue or Finish (Launch) */}
+                {(currentStep?.action === 'continue' || currentStep?.action === 'finish') && !isTyping && (
                   <motion.div
                     key="continue"
                     initial={{ opacity: 0, y: 16 }}
@@ -729,7 +734,7 @@ export default function OnboardingPage({ onComplete, profile }) {
                     transition={{ duration: 0.28 }}
                     className="flex justify-end"
                   >
-                    <button
+                    <motion.button
                       onClick={(e) => { e.stopPropagation(); nextStep(); }}
                       className="group relative flex items-center gap-2.5 rounded-xl px-6 py-2.5 mr-6 text-[13px] font-semibold tracking-wide transition-all duration-200 hover:scale-[1.03] active:scale-[0.97]"
                       style={{
@@ -737,12 +742,20 @@ export default function OnboardingPage({ onComplete, profile }) {
                         color: accent.on,
                         boxShadow: `0 4px 28px ${accent.hex}45, 0 0 0 1px ${accent.hex}30`,
                       }}
+                      animate={isLastStep ? {
+                        boxShadow: [
+                          `0 4px 28px ${accent.hex}45, 0 0 0 1px ${accent.hex}30`,
+                          `0 4px 48px ${accent.hex}90, 0 0 0 3px ${accent.hex}60`,
+                          `0 4px 28px ${accent.hex}45, 0 0 0 1px ${accent.hex}30`,
+                        ],
+                      } : {}}
+                      transition={isLastStep ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' } : {}}
                     >
                       {currentStep.btn || 'Continue'}
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="transition-transform duration-200 group-hover:translate-x-0.5">
                         <path d="M5 12h14M12 5l7 7-7 7"/>
                       </svg>
-                    </button>
+                    </motion.button>
                   </motion.div>
                 )}
 
@@ -938,21 +951,18 @@ export default function OnboardingPage({ onComplete, profile }) {
         </div>
       </div>
 
-      {/* Skip */}
-      <motion.button
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 2.8 }}
-        onClick={(e) => { e.stopPropagation(); onComplete?.(); }}
-        className="fixed bottom-5 right-5 z-50 text-[10px] font-medium px-3.5 py-1.5 rounded-lg border transition-all duration-200 hover:bg-white/[0.04] hover:border-white/12"
-        style={{
-          color: 'rgba(255,255,255,0.22)',
-          borderColor: 'rgba(255,255,255,0.06)',
-          backdropFilter: 'blur(12px)',
-        }}
-      >
-        Skip intro →
-      </motion.button>
+      {/* Exit transition overlay */}
+      <AnimatePresence>
+        {exiting && (
+          <motion.div
+            className="pointer-events-none fixed inset-0"
+            style={{ zIndex: 200, background: 'black' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.9, ease: [0.4, 0, 1, 1] }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

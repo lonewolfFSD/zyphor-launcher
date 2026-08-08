@@ -15,6 +15,8 @@ const SPLASH_MESSAGES = [
   'Almost ready',
 ];
 
+const CURRENT_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.0.0';
+
 export default function SplashScreen() {
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
@@ -234,7 +236,7 @@ useEffect(() => {
             className="text-[16px] uppercase tracking-[0.25em] -mt-1"
             style={{ fontFamily: 'Apple Garamond', color: 'rgba(255,255,255,0.22)' }}
           >
-            v1.2.2
+            V{CURRENT_VERSION}
           </p>
         </motion.div>
 
