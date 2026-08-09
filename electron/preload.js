@@ -16,14 +16,28 @@ contextBridge.exposeInMainWorld('launcherAPI', {  // was 'api'
     delete: (gameId, fileNames) => ipcRenderer.invoke('screenshots:delete', gameId, fileNames),
   },
 
-  faye: {
+onVoiceStart: (cb) => {
+  const l = (_e, payload) => cb(payload);
+  ipcRenderer.on('faye:voiceStart', l);
+  return () => ipcRenderer.removeListener('faye:voiceStart', l);
+},
+onVoiceStop: (cb) => {
+  const l = () => cb();
+  ipcRenderer.on('faye:voiceStop', l);
+  return () => ipcRenderer.removeListener('faye:voiceStop', l);
+},
+voiceDone: () => ipcRenderer.send('faye:voiceDone'),
+transcribeAudio: (bufferArray) => ipcRenderer.invoke('faye:transcribeAudio', bufferArray),
+
+faye: {
   checkInstalled: () => ipcRenderer.invoke('faye:checkInstalled'),
-  start:          () => ipcRenderer.invoke('faye:start'),
+  start:          (model) => ipcRenderer.invoke('faye:start', model),
   stop:           () => ipcRenderer.invoke('faye:stop'),
   isReady:        () => ipcRenderer.invoke('faye:isReady'),
-  chat:           (messages, playerName, playtime) => ipcRenderer.invoke('faye:chat', messages, playerName, playtime),
+  pullModel:      (model) => ipcRenderer.invoke('faye:pullModel', model),
+chat: (messages, playerName, playtime, modelName) => 
+  ipcRenderer.invoke('faye:chat', messages, playerName, playtime, modelName),
 },
-
   takeScreenshot: (gameId) => ipcRenderer.invoke('screenshots:take', gameId),
   fayeCommand:    (command, args) => ipcRenderer.invoke('faye:command', command, args),
 
@@ -43,9 +57,29 @@ contextBridge.exposeInMainWorld('launcherAPI', {  // was 'api'
     return () => ipcRenderer.removeListener('ollama:installProgress', l);
   },
 
+  installOllama: () => ipcRenderer.invoke('ollama:install'),
+onOllamaInstallProgress: (cb) => {
+  const l = (_e, msg) => cb(msg);
+  ipcRenderer.on('ollama:installProgress', l);
+  return () => ipcRenderer.removeListener('ollama:installProgress', l);
+},
+
+// ── Ollama model check/pull (used by Settings page) ──────────────
+checkOllamaModel: (model) => ipcRenderer.invoke('ollama:checkModel', model),
+pullOllamaModel:  (model) => ipcRenderer.invoke('ollama:pullModel', model),
+onOllamaPullProgress: (cb) => {
+  const l = (_e, pct) => cb(pct);
+  ipcRenderer.on('ollama:pullProgress', l);
+  return () => ipcRenderer.removeListener('ollama:pullProgress', l);
+},
+
 ytmSearch: (query) => ipcRenderer.invoke('ytm-search', query),
 pullModel: () => ipcRenderer.invoke('faye:pullModel'),
-onPullProgress: (cb) => ipcRenderer.on('faye:pullProgress', (_e, msg) => cb(msg)),
+onPullProgress: (cb) => {
+  const listener = (_e, msg) => cb(msg);
+  ipcRenderer.on('faye:pullProgress', listener);
+  return () => ipcRenderer.removeListener('faye:pullProgress', listener);
+},
 
 onFayeChunk: (cb) => ipcRenderer.on('faye:chunk', (_e, chunk) => cb(chunk)),
   
@@ -67,6 +101,10 @@ onFayeChunk: (cb) => ipcRenderer.on('faye:chunk', (_e, chunk) => cb(chunk)),
   openExternal:     (url) => ipcRenderer.send('shell:openExternal', url),
   getLauncherPath:  () => ipcRenderer.invoke('app:getLauncherPath'),
   setFullscreen: (flag) => ipcRenderer.send('set-fullscreen', flag),
+
+  getRamGB: () => ipcRenderer.invoke('system:getRamGB'),
+
+  getRelatedVideos: (videoId) => ipcRenderer.invoke('yt:getRelated', videoId),
   
   // ── New: Storage ──────────────────────────────────────────────────
   getDiskItems:         () => ipcRenderer.invoke('storage:getDiskItems'),
@@ -84,4 +122,16 @@ onFayeChunk: (cb) => ipcRenderer.on('faye:chunk', (_e, chunk) => cb(chunk)),
 
   // --- External browser (AuthGate) ----------------------------------
   openExternal: (url) => ipcRenderer.send('shell:openExternal', url),
+
+  onSettingsSync: (cb) => {
+  const l = (_e, s) => cb(s);
+  ipcRenderer.on('settings-sync', l);
+  return () => ipcRenderer.removeListener('settings-sync', l);
+},
+startListening: () => ipcRenderer.send('speech:start'),
+onSpeechResult: (cb) => {
+  const l = (_e, t) => cb(t);
+  ipcRenderer.on('speech:result', l);
+  return () => ipcRenderer.removeListener('speech:result', l);
+},
 });

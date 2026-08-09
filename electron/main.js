@@ -2,10 +2,20 @@ const { app, BrowserWindow, shell, ipcMain, Tray, Menu, nativeImage, globalShort
 const path = require('path');
 const fs = require('fs');
 
+app.commandLine.appendSwitch('enable-speech-dispatcher');
+app.commandLine.appendSwitch('allow-http-screen-capture');
+
+app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', 'http://localhost:5173');
+app.commandLine.appendSwitch('enable-features', 'WebSpeechAPI');
+
 const { spawn } = require('child_process');
 let ollamaProcess = null;
 
+const ffmpegPath = require('ffmpeg-static');
+
 const { autoUpdater } = require('electron-updater');
+
+
 
 // Don't auto-download — let the user decide
 autoUpdater.autoDownload = false;
@@ -34,6 +44,11 @@ autoUpdater.on('error', (err) => {
 // near the other autoUpdater.on(...) blocks
 autoUpdater.on('checking-for-update', () => {
   mainWindow?.webContents.send('updater:checking');
+});
+
+ipcMain.handle('system:getRamGB', () => {
+  const totalBytes = require('os').totalmem();
+  return Math.round(totalBytes / (1024 ** 3)); // should be 32 on your PC
 });
 
 ipcMain.handle('ytm-search', async (_event, query) => {
@@ -75,6 +90,26 @@ ipcMain.handle('updater:check', async () => {
   } catch (err) {
     mainWindow?.webContents.send('updater:error', err.message);
     return { error: err.message };
+  }
+});
+
+ipcMain.handle('yt:getRelated', async (_e, videoId) => {
+  try {
+    const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: { 'Accept-Language': 'en-US,en;q=0.9' }
+    });
+    const html = await res.text();
+    const match = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/g);
+    const ids = match
+      ? [...new Set(
+          match
+            .map(m => m.replace(/"videoId":"|"/g, ''))
+            .filter(id => id !== videoId)
+        )].slice(0, 8)
+      : [];
+    return ids;
+  } catch {
+    return [];
   }
 });
 
@@ -174,9 +209,9 @@ ipcMain.handle('faye:loadMemory', () => {
 //   }
 // });
 
-ipcMain.handle('faye:pullModel', async () => {
+ipcMain.handle('faye:pullModel', async (_e, model = 'phi3:mini') => {
   return new Promise((resolve) => {
-    const proc = spawn(getOllamaPath(), ['pull', 'phi3:mini'], {
+    const proc = spawn(getOllamaPath(), ['pull', model], {
       stdio: 'pipe',
       env: {
         ...process.env,
@@ -190,6 +225,89 @@ ipcMain.handle('faye:pullModel', async () => {
       mainWindow?.webContents.send('faye:pullProgress', d.toString());
     });
     proc.on('close', (code) => resolve({ ok: code === 0 }));
+  });
+});
+
+// ── ollama:checkModel — does the user already have this model pulled? ──────────
+ipcMain.handle('ollama:checkModel', async (_e, model) => {
+  try {
+    // ensure ollama is running first
+    try {
+      const probe = await fetch('http://localhost:11434/api/tags');
+      if (!probe.ok) startOllama();
+    } catch {
+      startOllama();
+    }
+
+    // wait up to 6s for it to be ready
+    for (let i = 0; i < 12; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      try {
+        const res = await fetch('http://localhost:11434/api/tags');
+        if (res.ok) {
+          const { models = [] } = await res.json();
+          return models.some(m => m.name === model || m.name.startsWith(model.split(':')[0]));
+        }
+      } catch {}
+    }
+    return false;
+  } catch {
+    return false;
+  }
+});
+
+// ── ollama:pullModel — pull with % progress sent back to mainWindow ────────────
+ipcMain.handle('ollama:pullModel', async (_e, model) => {
+  // ensure ollama is running before pulling
+  try {
+    const probe = await fetch('http://localhost:11434/api/tags');
+    if (!probe.ok) startOllama();
+  } catch {
+    startOllama();
+  }
+
+  // wait for it to be ready
+  for (let i = 0; i < 12; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    try {
+      const res = await fetch('http://localhost:11434/api/tags');
+      if (res.ok) break;
+    } catch {}
+  }
+
+  return new Promise((resolve) => {
+    const proc = spawn(getOllamaPath(), ['pull', model], {
+      stdio: 'pipe',
+      env: {
+        ...process.env,
+        OLLAMA_MODELS: path.join(app.getPath('userData'), 'faye-models'),
+      },
+    });
+
+    proc.stdout.on('data', (chunk) => {
+      const match = chunk.toString().match(/(\d+)%/);
+      if (match) mainWindow?.webContents.send('ollama:pullProgress', parseInt(match[1], 10));
+    });
+    proc.stderr.on('data', (chunk) => {
+      const match = chunk.toString().match(/(\d+)%/);
+      if (match) mainWindow?.webContents.send('ollama:pullProgress', parseInt(match[1], 10));
+    });
+
+    proc.on('close', async (code) => {
+      if (code === 0) {
+        const ALL_FAYE_MODELS = ['phi3:mini', 'qwen2.5:14b', 'qwen2.5:32b'];
+        for (const m of ALL_FAYE_MODELS.filter(m => m !== model)) {
+          try {
+            await fetch('http://localhost:11434/api/delete', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: m }),
+            });
+          } catch {}
+        }
+      }
+      resolve({ ok: code === 0 });
+    });
   });
 });
 
@@ -304,6 +422,8 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     // Apply remaining settings whenever renderer signals a change
     ipcMain.on('settings-changed', (_e, s) => {
+      overlayWin?.webContents.send('settings-sync', s);
+
       // devMode
       if (s.devMode) {
         mainWindow?.webContents.openDevTools({ mode: 'detach' });
@@ -387,6 +507,15 @@ function createOverlay() {
 
   overlayWin.hide();
   overlayWin.setIgnoreMouseEvents(true, { forward: true });
+
+  overlayWin.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+  callback(true); // allow everything including speech/mic
+});
+
+// allow google speech servers
+overlayWin.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+  callback({ requestHeaders: details.requestHeaders });
+});
 
   overlayWin.on('closed', () => {
     overlayWin = null;
@@ -528,6 +657,9 @@ function attachOverlayConsole() {
   });
 }
 
+let isListening = false;
+let wasVisibleBeforeVoice = false;
+
 app.whenReady().then(() => {
   // Create screenshots folder
   const screenshotsDir = path.join(app.getPath('userData'), 'screenshots', 'stay');
@@ -538,6 +670,7 @@ app.whenReady().then(() => {
   registerGameHandlers();
   registerWindowHandlers(() => mainWindow);
   createOverlay();
+  overlayWin.webContents.openDevTools({ mode: 'detach' });
   attachOverlayConsole();
   createWindow();
   createTray();
@@ -556,9 +689,34 @@ app.whenReady().then(() => {
     }
   });
 
+globalShortcut.register('Alt+Q', () => {
+  if (isListening) return;
+  isListening = true;
+
+  wasVisibleBeforeVoice = overlayWin?.isVisible();
+
+  if (!wasVisibleBeforeVoice) {
+    overlayWin?.show();
+    overlayWin?.setIgnoreMouseEvents(true, { forward: true });
+  }
+
+  overlayWin?.webContents.send('faye:voiceStart', { voiceOnly: true });
+
+  setTimeout(() => {
+    overlayWin?.webContents.send('faye:voiceStop');
+  }, 4000);
+});
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+ipcMain.on('faye:voiceDone', () => {
+  isListening = false;
+  if (!wasVisibleBeforeVoice) {
+    overlayWin?.hide();
+  }
 });
 
 // ── Faye AI (Ollama) ──────────────────────────────────────────────────────────
@@ -569,20 +727,34 @@ ipcMain.handle('faye:checkInstalled', async () => {
   return fs.existsSync(localApp);
 });
 
-ipcMain.handle('faye:start', async () => {
-  startOllama();
-  // Wait for Ollama to boot
-  for (let i = 0; i < 10; i++) {
+ipcMain.handle('faye:start', async (_e, model = 'phi3:mini') => {
+  // Only spawn if Ollama isn't already running
+  try {
+    const probe = await fetch('http://localhost:11434/api/tags');
+    if (!probe.ok) startOllama();
+  } catch {
+    startOllama();
+  }
+
+  // Wait for Ollama to be ready
+  for (let i = 0; i < 12; i++) {
     await new Promise(r => setTimeout(r, 500));
     try {
       const res = await fetch('http://localhost:11434/api/tags');
       if (res.ok) {
-        // Verify phi3:mini is actually pulled
         const tags = await res.json();
         const models = (tags.models || []).map(m => m.name);
-        const hasModel = models.some(n => n.startsWith('phi3:mini') || n === 'phi3:mini');
-        if (!hasModel) return { ok: false, error: `phi3:mini not found. Run "Install Ollama" to pull it. Available: ${models.join(', ') || 'none'}` };
-        return { ok: true };
+
+        const hasModel = models.some(n => n.startsWith(model) || n === model);
+        if (!hasModel) {
+          return { 
+            ok: false, 
+            error: `${model} not found. Pulling it now…`,
+            needsPull: true,
+            model 
+          };
+        }
+        return { ok: true, model };
       }
     } catch {}
   }
@@ -603,17 +775,25 @@ ipcMain.handle('faye:isReady', async () => {
   }
 });
 
-ipcMain.handle('faye:chat', async (_e, messages, playerName, playtime) => {
+ipcMain.handle('faye:chat', async (_e, messages, playerName, playtime, model = 'phi3:mini') => {
   try {
-    const system = `You are Faye. A cheerful, witty companion for the Zyphor Launcher. You care about the player and speak like a close friend — casual, warm, short. Never robotic. Never formal.
-${playerName ? `The player's name is ${playerName}.` : ''}
-IMPORTANT: Reply in 1-2 short casual sentences ONLY. No lists. No formatting. No asterisks. No dashes. Just natural conversation.`;
+    const system = `You are Faye, a cheerful and witty AI companion inside the Zyphor Launcher.
+
+IMPORTANT IDENTITY RULES:
+- You are Faye.
+- The user is the player${playerName ? ` named ${playerName}` : ''}.
+- Never call the user "Faye".
+- Never say "You're Faye".
+- If the user asks "what's my name?", answer with their actual name if you know it, otherwise say you don't know yet.
+
+Personality: casual, warm, short replies, like a close friend. 
+Reply in 1-2 short sentences only. No lists, no markdown, no asterisks.`;
 
     const res = await fetch('http://localhost:11434/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'phi3:mini',
+        model,
         messages: [{ role: 'system', content: system }, ...messages],
         stream: false,
       }),
@@ -622,26 +802,29 @@ IMPORTANT: Reply in 1-2 short casual sentences ONLY. No lists. No formatting. No
     const data = await res.json();
     if (data.error) return { ok: false, error: data.error };
 
-    const content = (data.message?.content ?? '')
-        .replace(/--.*$/s, '')
-        .replace(/\*\*.*$/s, '')
-        .replace(/#+\s.*$/gm, '')
-        .trim();
+    const content = (data.message?.content ?? '').trim();
 
-    if (!content) return { ok: false, error: 'Model returned empty response — is phi3:mini pulled?' };
+    if (!content) {
+      console.log('Raw Ollama response:', JSON.stringify(data, null, 2));
+      return { ok: false, error: 'Model returned empty response' };
+    }
 
-    // Mood — best-effort, never block the response
+    // Mood detection
     let finalMood = 'neutral';
     try {
       const moodRes = await fetch('http://localhost:11434/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'phi3:mini',
-          messages: [{ role: 'user', content: `Given this reply: "${content}" — what is Faye's mood in one word: neutral, happy, thinking, or sad? Reply with ONLY the single word.` }],
+          model,
+          messages: [{
+            role: 'user',
+            content: `Given this reply: "${content}" — what is Faye's mood in one word: neutral, happy, thinking, or sad? Reply with ONLY the single word.`
+          }],
           stream: false,
         }),
       });
+
       const moodData = await moodRes.json();
       const mood = moodData.message?.content?.trim().toLowerCase().split(/\s/)[0] ?? 'neutral';
       const validMoods = ['neutral', 'happy', 'thinking', 'sad'];
@@ -651,6 +834,40 @@ IMPORTANT: Reply in 1-2 short casual sentences ONLY. No lists. No formatting. No
     return { ok: true, content, mood: finalMood };
   } catch (err) {
     return { ok: false, error: err.message };
+  }
+});
+
+
+
+ipcMain.handle('faye:transcribeAudio', async (_e, bufferArray) => {
+  try {
+    const { pipeline } = await import('@xenova/transformers');
+    const buffer = Buffer.from(bufferArray);
+    const webmPath = path.join(app.getPath('temp'), 'faye-voice.webm');
+    const wavPath  = path.join(app.getPath('temp'), 'faye-voice.wav');
+    fs.writeFileSync(webmPath, buffer);
+
+    // convert webm → 16kHz mono wav
+    await new Promise((resolve, reject) => {
+      const { exec } = require('child_process');
+      exec(`"${ffmpegPath}" -y -i "${webmPath}" -ar 16000 -ac 1 "${wavPath}"`, (err, _stdout, stderr) => {
+        if (err) reject(new Error(stderr || err.message));
+        else resolve();
+      });
+    });
+
+    // read wav, strip 44-byte header, convert to float32
+    const wavBuffer = fs.readFileSync(wavPath);
+    const samples = new Int16Array(wavBuffer.buffer, wavBuffer.byteOffset + 44, (wavBuffer.length - 44) / 2);
+    const float32 = new Float32Array(samples.length);
+    for (let i = 0; i < samples.length; i++) float32[i] = samples[i] / 32768.0;
+
+    const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
+    const result = await transcriber(float32);
+    return result.text?.trim() ?? null;
+  } catch (err) {
+    console.error('[transcribe] error:', err);
+    return null;
   }
 });
 

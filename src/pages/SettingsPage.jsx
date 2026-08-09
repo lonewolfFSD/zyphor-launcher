@@ -54,6 +54,12 @@ const PRESET_VIDEO_MAP = {
   'preset-rossi': VIDEO_ROSSI
 };
 
+const FAYE_MODELS = [
+  { id: 'fast',     label: 'Fast',     desc: '', model: 'phi3:mini',   displayModel: 'Faye Spark'   },
+  { id: 'balanced', label: 'Balanced', desc: '', model: 'qwen2.5:14b', displayModel: 'Faye Core'    },
+  { id: 'quality',  label: 'Quality',  desc: '', model: 'qwen2.5:32b', displayModel: 'Faye Ultra'   },
+];
+
 const CURRENT_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.0.0';
 
 // Shows the launcher's own installation folder -- read-only, fetched from main process.
@@ -168,6 +174,25 @@ export default function SettingsPage() {
   const [updateInfo, setUpdateInfo]   = useState(null);
   const [scanState, setScanState] = useState({}); // { [key]: 'idle'|'scanning'|'done'|'error' }
   
+  // Add after the existing state declarations (around line 190)
+const [modelDownloadState, setModelDownloadState] = useState('idle'); 
+// 'idle' | 'checking' | 'not-found' | 'downloading' | 'done' | 'error'
+const [modelDownloadProgress, setModelDownloadProgress] = useState(0);
+const [pendingModel, setPendingModel] = useState(null); // the FAYE_MODELS entry awaiting download
+
+const [ramGB, setRamGB] = useState(null);
+
+useEffect(() => {
+  window.launcherAPI?.getRamGB?.()
+    .then((gb) => {
+      console.log('Detected RAM:', gb);
+      setRamGB(gb);
+    })
+    .catch((err) => {
+      console.error('RAM detection failed:', err);
+      setRamGB(16);
+    });
+}, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -955,6 +980,209 @@ async function handleCheckUpdate() {
                 }}
               />
             </SettingRow>
+            <div className='mt-6'>
+              <p className='text-gray-500 text-sm font-bold font-[Manrope] mb-2'>Faye AI</p>
+
+            <SettingRow
+  label="Faye AI Model"
+  hint={
+    <>
+      Choose the Faye AI model based on your system's available RAM.
+      <p
+    style={{
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.4)',
+      marginTop: 3,
+    }}
+    >
+    Detected RAM: {ramGB ?? '…'} GB
+  </p>
+      <span className="block mt-3" style={{ color: '#fbbf24' }}>
+        ⚠️ Balanced uses more RAM and Quality requires significantly more RAM. Lower-end systems may experience reduced performance.
+      </span>
+        
+    </>
+  }
+>
+
+  <div className="flex gap-1.5">
+    {FAYE_MODELS.map((m) => {
+      const isActive =
+        (settings.fayeModel ?? 'fast') === m.id;
+        
+        // Disable rules
+        const disabled =
+        (m.id === 'balanced' && ramGB < 20) ||
+        (m.id === 'quality' && ramGB < 28);
+        
+        return (
+          <button
+          key={m.id}
+          type="button"
+          disabled={disabled}
+          onClick={async () => {
+            if (disabled) return;
+
+            // Check if model is already pulled in Ollama
+            setModelDownloadState('checking');
+            setPendingModel(m);
+
+            try {
+              const available = await window.launcherAPI?.checkOllamaModel?.(m.model);
+              if (available) {
+                // Already downloaded — just activate
+                update({ fayeModel: m.id });
+                setToast(`Faye model → ${m.label}`);
+                setModelDownloadState('idle');
+                setPendingModel(null);
+              } else {
+                // Not found — show download panel
+                setModelDownloadState('not-found');
+              }
+            } catch {
+              setModelDownloadState('not-found'); // assume not found on error
+            }
+          }}
+          style={{
+            padding: '8px 18px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            border: 'none',
+            opacity: disabled ? 0.4 : 1,
+            background: isActive
+            ? accent.hex
+            : 'rgba(255,255,255,0.07)',
+            color: isActive
+            ? accent.on
+            : 'rgba(255,255,255,0.55)',
+            minWidth: '78px',
+            textAlign: 'center',
+          }}
+          title={
+            disabled
+            ? `Needs more RAM (you have ~${ramGB} GB)`
+            : m.desc
+          }
+          >
+          <div>{m.label}</div>
+
+          <div style={{ fontSize: '10px', opacity: 0.7, marginTop: 2 }}>
+            {m.displayModel}
+          </div>
+        </button>
+      );
+    })}
+  </div>
+</SettingRow>
+
+{/* ── Faye model download panel ── */}
+{pendingModel && modelDownloadState !== 'idle' && (
+  <div
+    className="mt-3 rounded-xl border px-5 py-4"
+    style={{ borderColor: modelDownloadState === 'error' ? '#ef4444' : accent.hex + '55', backgroundColor: `${accent.hex}0d` }}
+  >
+    {modelDownloadState === 'checking' && (
+      <p className="text-[13px] text-bone/70">Checking if <span style={{ color: accent.hex }}>{pendingModel.label}</span> is available…</p>
+    )}
+
+    {modelDownloadState === 'not-found' && (
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[13px] font-semibold text-bone">
+            <span style={{ color: accent.hex }}>{pendingModel.label}</span> model not downloaded
+          </p>
+          <p className="mt-1 text-[12px] text-ash/60">
+            {pendingModel.displayModel} needs to be downloaded before Faye can use it.
+            {settings.fayeModel && settings.fayeModel !== pendingModel.id && (
+              <span className="block mt-1" style={{ color: '#fbbf24' }}>
+                ⚠️ Your current model will be removed to free up space.
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={() => { setModelDownloadState('idle'); setPendingModel(null); }}
+            className="rounded-lg px-3 py-1.5 text-[12px] text-ash/60 hover:text-bone transition-colors"
+            style={{ background: 'rgba(255,255,255,0.05)' }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+           onClick={async () => {
+              setModelDownloadState('downloading');
+              setModelDownloadProgress(0);
+
+              // Subscribe to progress events from main
+              const unsub = window.launcherAPI?.onOllamaPullProgress?.((pct) => {
+                setModelDownloadProgress(pct);
+              });
+
+              try {
+                const result = await window.launcherAPI?.pullOllamaModel?.(pendingModel.model);
+                unsub?.(); // clean up listener
+                if (result?.ok) {
+                  update({ fayeModel: pendingModel.id });
+                  setModelDownloadState('done');
+                  setToast(`${pendingModel.label} downloaded — Faye is ready`);
+                  setTimeout(() => { setModelDownloadState('idle'); setPendingModel(null); }, 2000);
+                } else {
+                  setModelDownloadState('error');
+                }
+              } catch {
+                unsub?.();
+                setModelDownloadState('error');
+              }
+            }}
+            className="rounded-lg px-4 py-1.5 text-[12px] font-semibold transition-colors"
+            style={{ background: accent.hex, color: accent.on }}
+          >
+            Download
+          </button>
+        </div>
+      </div>
+    )}
+
+    {modelDownloadState === 'downloading' && (
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[13px] text-bone/80">Downloading <span style={{ color: accent.hex }}>{pendingModel.label}</span>…</p>
+          <p className="text-[12px] text-ash/60">{modelDownloadProgress}%</p>
+        </div>
+        <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{ width: `${modelDownloadProgress}%`, backgroundColor: accent.hex }}
+          />
+        </div>
+        <p className="mt-2 text-[11px] text-ash/40">This may take a few minutes depending on your connection.</p>
+      </div>
+    )}
+
+    {modelDownloadState === 'done' && (
+      <p className="text-[13px]" style={{ color: accent.hex }}>✓ {pendingModel.label} ready — Faye will use it on next launch.</p>
+    )}
+
+    {modelDownloadState === 'error' && (
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] text-red-400">Download failed. Check your connection or Ollama install.</p>
+        <button
+          type="button"
+          onClick={() => { setModelDownloadState('idle'); setPendingModel(null); }}
+          className="text-[12px] text-ash/50 hover:text-bone transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+    )}
+  </div>
+)}
+    </div>
+            
           </Section>
         )}
 

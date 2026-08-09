@@ -47,6 +47,7 @@ const DEFAULTS = {
   autoUpdate: true,
   updateChannel: 'stable',
 
+  fayeModel: 'fast',   // default
   fullscreenOnLaunch: true,
 
   gamePath: '',
