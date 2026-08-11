@@ -233,6 +233,18 @@ export default function HomePage({ profile }) {
     } catch {
       setUpdateStatus('current');
     }
+
+      // Steam link check on mount
+      // Steam link check on mount — check Firestore directly
+      if (profile?.uid) {
+        try {
+          const snap = await getDoc(doc(db, 'users', profile.uid));
+          const data = snap.data();
+          if (!data?.steamId) {
+            setShowSteamLinkModal(true);
+          }
+        } catch {}
+      }
   })(); }, []);
 
   useEffect(() => {
@@ -255,15 +267,7 @@ export default function HomePage({ profile }) {
     window.launcherAPI?.onUpdateDownloaded?.(() => setUpdateDlState('downloaded'));
   }, []); // eslint-disable-line
 
-  // Steam link check on mount
-    if (window.launcherAPI?.verifySteamOwnership && profile?.uid) {
-      try {
-        const result = await window.launcherAPI.verifySteamOwnership(profile.uid);
-        if (result?.reason === 'no_steam_linked') {
-          setShowSteamLinkModal(true);
-        }
-      } catch {}
-    }
+
 
   const banners = news.length ? news : placeholderNews;
   useEffect(() => {
@@ -781,6 +785,77 @@ export default function HomePage({ profile }) {
   );
 }
 
+function SteamLinkModal({ visible, uid, accent, theme, onClose }) {
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="absolute inset-0 z-50 flex items-center justify-center "
+          style={{ backdropFilter: 'blur(10px)', backgroundColor: 'rgba(0,0,0,0.72)' }}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="relative flex flex-col overflow-hidden rounded-[2.5rem] border shadow-2xl p-8 gap-5"
+            style={{ width: 560, backgroundColor: `${theme.surface}f0`, borderColor: theme.border }}
+          >
+            {/* Steam icon */}
+            <div
+              className="flex h-16 w-16 items-center justify-center rounded-2xl"
+              style={{ backgroundColor: '#1b2838' }}
+            >
+              <i
+                className="fa-brands fa-steam"
+                style={{ fontSize: 43, color: '#c7d5e0' }}
+              ></i>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-medium text-bone">Link your Steam account</h2>
+              <p className="mt-2 text-sm text-ash/60 leading-relaxed font-[Manrope]">
+                To verify your copy of STAY and unlock the launcher, you need to connect your Steam account. This only takes a moment.
+              </p>
+            </div>
+
+            <div className="flex gap-3 mt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  window.launcherAPI?.openExternal(`https://zyphorstudios.com/steam-activate?uid=${uid}`);
+                  onClose();
+                }}
+                className="flex-1 rounded-2xl py-4 text-[13px] font-semibold font-[Manrope] transition hover:opacity-90 active:scale-[0.98]"
+                style={{ backgroundColor: '#1b2838', color: '#c7d5e0', border: '1px solid #4c6b8a' }}
+              >
+                Connect Steam
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl px-5 py-3 text-sm underline font-[Manrope] font-medium transition hover:bg-white/5"
+                style={{ color: `${theme.text}60` }}
+              >
+                Later
+              </button>
+            </div>
+
+            <div
+              className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full blur-3xl opacity-15"
+              style={{ backgroundColor: accent.hex }}
+            />
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
@@ -831,71 +906,6 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
             </div>
             <div
               className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full blur-3xl opacity-20"
-              style={{ backgroundColor: accent.hex }}
-            />
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-function SteamLinkModal({ visible, uid, accent, theme, onClose }) {
-  return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="absolute inset-0 z-50 flex items-center justify-center"
-          style={{ backdropFilter: 'blur(10px)', backgroundColor: 'rgba(0,0,0,0.72)' }}
-        >
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 20 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="relative flex flex-col overflow-hidden rounded-[2rem] border shadow-2xl p-8 gap-5"
-            style={{ width: 460, backgroundColor: `${theme.surface}f0`, borderColor: theme.border }}
-          >
-            {/* Steam icon */}
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl" style={{ backgroundColor: '#1b2838' }}>
-              <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 22, color: '#c7d5e0' }} />
-            </div>
-
-            <div>
-              <h2 className="text-xl font-medium text-bone">Link your Steam account</h2>
-              <p className="mt-2 text-sm text-ash/60 leading-relaxed">
-                To verify your copy of STAY and unlock the launcher, you need to connect your Steam account. This only takes a moment.
-              </p>
-            </div>
-
-            <div className="flex gap-3 mt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  window.launcherAPI?.openExternal(`https://zyphorstudios.com/steam-activate?uid=${uid}`);
-                  onClose();
-                }}
-                className="flex-1 rounded-xl py-3 text-sm font-semibold transition hover:opacity-90 active:scale-[0.98]"
-                style={{ backgroundColor: '#1b2838', color: '#c7d5e0', border: '1px solid #4c6b8a' }}
-              >
-                Connect Steam
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl px-5 py-3 text-sm font-medium transition hover:bg-white/5"
-                style={{ color: `${theme.text}60` }}
-              >
-                Later
-              </button>
-            </div>
-
-            <div
-              className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full blur-3xl opacity-15"
               style={{ backgroundColor: accent.hex }}
             />
           </motion.div>
