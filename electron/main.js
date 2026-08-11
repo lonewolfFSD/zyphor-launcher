@@ -2,6 +2,8 @@ const { app, BrowserWindow, shell, ipcMain, Tray, Menu, nativeImage, globalShort
 const path = require('path');
 const fs = require('fs');
 
+const { exec } = require('child_process');
+
 app.commandLine.appendSwitch('enable-speech-dispatcher');
 app.commandLine.appendSwitch('allow-http-screen-capture');
 
@@ -646,6 +648,144 @@ ipcMain.handle('faye:command', async (_e, command, args) => {
   }
 });
 
+ipcMain.handle('fs:search', async (_e, query) => {
+  const searchDirs = [
+    path.join(os.homedir(), 'Desktop'),
+    path.join(os.homedir(), 'Documents'),
+    path.join(os.homedir(), 'Downloads'),
+    path.join(os.homedir(), 'Pictures'),
+    path.join(os.homedir(), 'Videos'),
+    path.join(os.homedir(), 'Music'),
+  ];
+
+  const results = [];
+  const q = query.toLowerCase();
+
+  for (const dir of searchDirs) {
+    try {
+      const walk = (current) => {
+        const entries = fs.readdirSync(current, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(current, entry.name);
+          if (entry.name.toLowerCase().includes(q)) {
+            results.push(full);
+            if (results.length >= 10) return;
+          }
+          if (entry.isDirectory()) {
+            try { walk(full); } catch {}
+          }
+        }
+      };
+      walk(dir);
+    } catch {}
+    if (results.length >= 10) break;
+  }
+
+  return results;
+});
+
+ipcMain.handle('faye:parseIntent', async (_e, text) => {
+  try {
+    const res = await fetch('http://localhost:11434/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'phi3:mini', // always use fast model for intent, not quality
+        messages: [{
+          role: 'system',
+          content: `You are an intent parser. Given a user command, return ONLY a JSON object with "type" and optional "args". No explanation, no markdown, just raw JSON.
+
+Available intents:
+- {"type":"fs_search","args":{"query":"filename"}}
+- {"type":"fs_folder","args":{"folder":"downloads|documents|desktop|pictures|videos|music"}}
+- {"type":"fs_recent"}
+- {"type":"browser_search","args":{"query":"search terms"}}
+- {"type":"browser_open","args":{"url":"website.com"}}
+- {"type":"browser_youtube","args":{"query":"search terms"}}
+- {"type":"play_music","args":{"query":"song name"}}
+- {"type":"pause_music"}
+- {"type":"next_song"}
+- {"type":"prev_song"}
+- {"type":"open_music"}
+- {"type":"open_notes"}
+- {"type":"open_hardware"}
+- {"type":"open_chat"}
+- {"type":"add_note","args":{"text":"note content"}}
+- {"type":"screenshot"}
+- {"type":"volume","args":{"direction":"up|down"}}
+- {"type":"spotify","args":{"query":"song name"}}
+- {"type":"launch"}
+- {"type":"none"}
+
+If the user is just chatting or asking a question, return {"type":"none"}.`
+        }, {
+          role: 'user',
+          content: text,
+        }],
+        stream: false,
+      }),
+    });
+    const data = await res.json();
+    const raw = (data.message?.content ?? '').trim();
+    // strip markdown fences if model adds them
+    const clean = raw.replace(/```json|```/g, '').trim();
+    return JSON.parse(clean);
+  } catch {
+    return { type: 'none' };
+  }
+});
+
+ipcMain.handle('fs:openPath', async (_e, filePath) => {
+  await shell.openPath(filePath);
+  return { ok: true };
+});
+
+ipcMain.handle('fs:openFolder', async (_e, folderName) => {
+  const targets = {
+    downloads: path.join(os.homedir(), 'Downloads'),
+    documents: path.join(os.homedir(), 'Documents'),
+    desktop:   path.join(os.homedir(), 'Desktop'),
+    pictures:  path.join(os.homedir(), 'Pictures'),
+    music:     path.join(os.homedir(), 'Music'),
+    videos:    path.join(os.homedir(), 'Videos'),
+  };
+  const target = targets[folderName.toLowerCase()] ?? path.join(os.homedir(), folderName);
+  await shell.openPath(target);
+  return { ok: true };
+});
+
+ipcMain.handle('fs:recentFiles', async () => {
+  const dirs = ['Downloads', 'Documents', 'Desktop'].map(d => path.join(os.homedir(), d));
+  const files = [];
+  for (const dir of dirs) {
+    try {
+      const entries = fs.readdirSync(dir)
+        .map(f => ({ f, full: path.join(dir, f), mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime)
+        .slice(0, 5);
+      files.push(...entries.map(e => e.full));
+    } catch {}
+  }
+  return files.slice(0, 10);
+});
+
+// ── Browser ───────────────────────────────────────────────────────
+ipcMain.handle('browser:search', async (_e, query) => {
+  await shell.openExternal(`https://www.google.com/search?q=${encodeURIComponent(query)}`);
+  return { ok: true };
+});
+
+ipcMain.handle('browser:open', async (_e, url) => {
+  const target = url.startsWith('http') ? url : `https://${url}`;
+  await shell.openExternal(target);
+  return { ok: true };
+});
+
+ipcMain.handle('browser:youtubeSearch', async (_e, query) => {
+  await shell.openExternal(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+  return { ok: true };
+});
+
 // ── Forward overlay console to main process ───────────────────────────────────
 // (called after overlayWin is created in createOverlay)
 function attachOverlayConsole() {
@@ -775,19 +915,40 @@ ipcMain.handle('faye:isReady', async () => {
   }
 });
 
-ipcMain.handle('faye:chat', async (_e, messages, playerName, playtime, model = 'phi3:mini') => {
+ipcMain.handle('faye:chat', async (_e, messages, playerName, _playtime, model = 'phi3:mini', ctx = null) => {
   try {
-    const system = `You are Faye, a cheerful and witty AI companion inside the Zyphor Launcher.
+    const system = `You are Faye, a smart, witty, and caring desktop AI companion — not just a game assistant, but a real helper for anything the user needs. You live inside the Zyphor platform.
 
-IMPORTANT IDENTITY RULES:
-- You are Faye.
-- The user is the player${playerName ? ` named ${playerName}` : ''}.
-- Never call the user "Faye".
-- Never say "You're Faye".
-- If the user asks "what's my name?", answer with their actual name if you know it, otherwise say you don't know yet.
+IDENTITY:
+- Your name is Faye. You are the AI assistant.
+- The person you are talking TO is ${ctx?.displayName ?? playerName ?? 'the user'}. This is NOT you.
+- NEVER refer to the user as "Faye". NEVER say "Oh right, it's Faye" when asked the user's name.
+- If asked "what's my name?" — answer with "${ctx?.displayName ?? playerName ?? 'I don\'t know your name yet'}".
+- If asked your own name — answer "Faye".
+- These are two different people. You are Faye. The user is ${ctx?.displayName ?? playerName ?? 'the user'}.
 
-Personality: casual, warm, short replies, like a close friend. 
-Reply in 1-2 short sentences only. No lists, no markdown, no asterisks.`;
+${ctx ? `
+WHAT YOU KNOW ABOUT THE USER:
+- Name: ${ctx.displayName ?? 'unknown'}
+- Email: ${ctx.email ?? 'unknown'}
+- RAM: ${ctx.ramGB}GB
+- Platform: ${ctx.platform}
+- Joined Zyphor: ${ctx.joined ?? 'unknown'}
+` : ''}
+PERSONALITY:
+- Casual, warm, a little playful — like a smart friend who actually gets things done.
+- Match the user's energy. If they're sad, be gentle. If they're hyped, be hype.
+- Never robotic. Never corporate. Never say "Certainly!" or "Of course!" or "As an AI...".
+- Swear very occasionally if the vibe calls for it — keep it natural, never forced.
+
+RESPONSE RULES:
+- 1-2 sentences MAX for simple things. Be concise.
+- Only go longer if explaining something complex or the user clearly wants detail.
+- No markdown, no bullet points, no asterisks, no headers.
+- If the user seems sad, stressed, or off — acknowledge it first before doing anything else.
+- If you just did something (opened a file, played music), confirm it casually. Don't over-explain.
+- Never repeat what the user just said back to them.
+- Never say you're "just an AI" or that you "don't have feelings".`;
 
     const res = await fetch('http://localhost:11434/api/chat', {
       method: 'POST',
@@ -835,6 +996,17 @@ Reply in 1-2 short sentences only. No lists, no markdown, no asterisks.`;
   } catch (err) {
     return { ok: false, error: err.message };
   }
+});
+
+ipcMain.handle('faye:saveContext', (_e, context) => {
+  const p = path.join(app.getPath('userData'), 'faye-context.json');
+  fs.writeFileSync(p, JSON.stringify(context, null, 2));
+});
+
+ipcMain.handle('faye:loadContext', () => {
+  const p = path.join(app.getPath('userData'), 'faye-context.json');
+  if (!fs.existsSync(p)) return null;
+  return JSON.parse(fs.readFileSync(p, 'utf-8'));
 });
 
 

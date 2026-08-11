@@ -105,6 +105,33 @@ function detectIntent(text: string): { type: string; args?: any } | null {
     return { type: 'prev_song' };
   }
 
+  // File system
+  if (t.match(/^(find|search for|where is|locate)\s+(.+)/)) {
+    const match = t.match(/^(?:find|search for|where is|locate)\s+(.+)/);
+    return { type: 'fs_search', args: { query: match?.[1] ?? '' } };
+  }
+  if (t.match(/^open\s+(downloads|documents|desktop|pictures|music|videos)/)) {
+    const match = t.match(/^open\s+(\w+)/);
+    return { type: 'fs_folder', args: { folder: match?.[1] ?? 'downloads' } };
+  }
+  if (t.match(/recent files|what did i open|last files/)) {
+    return { type: 'fs_recent' };
+  }
+
+  // Browser
+  if (t.match(/^(search|google)\s+(.+)/)) {
+    const match = t.match(/^(?:search|google)\s+(.+)/);
+    return { type: 'browser_search', args: { query: match?.[1] ?? '' } };
+  }
+  if (t.match(/^(open|go to|navigate to)\s+(https?:\/\/|\w+\.\w+).*/)) {
+    const match = t.match(/^(?:open|go to|navigate to)\s+(.+)/);
+    return { type: 'browser_open', args: { url: match?.[1] ?? '' } };
+  }
+  if (t.match(/^(search youtube|youtube)\s+(.+)/)) {
+    const match = t.match(/^(?:search youtube|youtube)\s+(.+)/);
+    return { type: 'browser_youtube', args: { query: match?.[1] ?? '' } };
+  }
+
   // Open panels
   if (t.match(/\b(open|show|bring up)\b.*\b(music|player)\b/) || t === 'music') {
     return { type: 'open_music' };
@@ -2446,6 +2473,8 @@ const [voiceOnly, setVoiceOnly] = useState(false);
 const [lastTranscript, setLastTranscript] = useState('');
 
   const currentModelRef = useRef('phi3:mini');
+
+  const fayeCtxRef = useRef<any>(null);
   const musicCommandRef = useRef<((cmd: string) => void) | null>(null);
   const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'processing'>('idle');
 
@@ -2548,9 +2577,21 @@ useEffect(() => {
     audio.play().catch(() => {});
   };
 
+  async function resolveIntent(text: string) {
+  // fast local regex first — no Ollama round trip needed
+  const quick = detectIntent(text);
+  if (quick) return quick;
+  // fallback to Ollama NLU
+  try {
+    const result = await window.launcherAPI?.parseIntent?.(text);
+    if (result?.type && result.type !== 'none') return result;
+  } catch {}
+  return null;
+}
+
   const handleVoiceCommand = async (transcript: string) => {
       setVoiceState('processing');
-      const intent = detectIntent(transcript);
+      const intent = await resolveIntent(transcript);
       if (!intent) { 
         playFayeAudio('unknown'); 
         setVoiceState('idle');
@@ -2603,6 +2644,38 @@ useEffect(() => {
           playFayeAudio('note');
           break;
         }
+        case 'fs_search': {
+          const results = await window.launcherAPI?.fs?.search(intent.args?.query);
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: results?.length
+              ? `Found ${results.length} files:\n${results.join('\n')}`
+              : `Couldn't find anything for "${intent.args?.query}"`,
+            ts: nowTime(),
+          }]);
+          break;
+        }
+        case 'fs_folder':
+          await window.launcherAPI?.fs?.openFolder(intent.args?.folder);
+          break;
+        case 'fs_recent': {
+          const files = await window.launcherAPI?.fs?.recentFiles();
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: files?.length ? `Recent files:\n${files.join('\n')}` : 'No recent files found.',
+            ts: nowTime(),
+          }]);
+          break;
+        }
+        case 'browser_search':
+          await window.launcherAPI?.browser?.search(intent.args?.query);
+          break;
+        case 'browser_open':
+          await window.launcherAPI?.browser?.open(intent.args?.url);
+          break;
+        case 'browser_youtube':
+          await window.launcherAPI?.browser?.youtubeSearch(intent.args?.query);
+          break;
         default:
           playFayeAudio('unknown');
     }
@@ -2677,6 +2750,23 @@ async function handleEnable() {
   const modelKey = rawSettings?.fayeModel ?? settings?.fayeModel ?? 'fast';
   const modelName = modelMap[modelKey] || 'phi3:mini';
 
+  // after
+const ctx = await window.launcherAPI?.faye?.loadContext?.();
+
+  const freshCtx = {
+  displayName: profile?.displayName ?? null,
+  email:       profile?.email ?? null,
+  uid:         profile?.uid ?? null,
+  ramGB:       await window.launcherAPI.getRamGB(),
+  platform:    navigator.platform,
+  os:          navigator.userAgent,
+  joined:      (profile as any)?.metadata?.creationTime ?? null,
+  savedAt:     new Date().toISOString(),
+};
+await window.launcherAPI?.faye?.saveContext?.(freshCtx);
+
+fayeCtxRef.current = freshCtx;
+
   const result = await window.launcherAPI.faye.start(modelName);
 console.log('[faye] start result:', JSON.stringify(result));
 
@@ -2695,11 +2785,12 @@ if (result.needsPull) {
     setThinking(true);
     setExpression('thinking');
     const res = await window.launcherAPI.faye.chat(
-      [{ role: 'user', content: 'greet me, you just woke up' }],
-      profile?.displayName || null,
-      null,
-      modelName
-    );
+  [{ role: 'user', content: 'greet me, you just woke up' }],
+  profile?.displayName || null,
+  null,
+  modelName,
+  freshCtx
+);
     console.log('[faye] chat result:', JSON.stringify(res));
     setThinking(false);
     if (res.ok) {
@@ -2727,7 +2818,7 @@ if (result.needsPull) {
     setMessages(next);
     setInput('');
 
-    const intent = detectIntent(input.trim());
+    const intent = await resolveIntent(input.trim());
 
 if (intent) {
   // Music commands
@@ -2805,6 +2896,47 @@ if (intent.type === 'play_music') {
     setExpression('happy');
     return;
   }
+
+  if (intent.type === 'fs_search') {
+  const results = await window.launcherAPI?.fs?.search(intent.args?.query);
+  setMessages([...next, {
+    role: 'assistant',
+    content: results?.length
+      ? `Found ${results.length} result(s):\n${results.join('\n')}`
+      : `Nothing found for "${intent.args?.query}"`,
+    ts: nowTime(),
+  }]);
+  return;
+}
+if (intent.type === 'fs_folder') {
+  await window.launcherAPI?.fs?.openFolder(intent.args?.folder);
+  setMessages([...next, { role: 'assistant', content: `Opening ${intent.args?.folder}...`, ts: nowTime() }]);
+  return;
+}
+if (intent.type === 'fs_recent') {
+  const files = await window.launcherAPI?.fs?.recentFiles();
+  setMessages([...next, {
+    role: 'assistant',
+    content: files?.length ? `Recent files:\n${files.join('\n')}` : 'No recent files found.',
+    ts: nowTime(),
+  }]);
+  return;
+}
+if (intent.type === 'browser_search') {
+  await window.launcherAPI?.browser?.search(intent.args?.query);
+  setMessages([...next, { role: 'assistant', content: `Searching for "${intent.args?.query}"...`, ts: nowTime() }]);
+  return;
+}
+if (intent.type === 'browser_open') {
+  await window.launcherAPI?.browser?.open(intent.args?.url);
+  setMessages([...next, { role: 'assistant', content: `Opening ${intent.args?.url}...`, ts: nowTime() }]);
+  return;
+}
+if (intent.type === 'browser_youtube') {
+  await window.launcherAPI?.browser?.youtubeSearch(intent.args?.query);
+  setMessages([...next, { role: 'assistant', content: `Searching YouTube for "${intent.args?.query}"...`, ts: nowTime() }]);
+  return;
+}
 }
 
         setThinking(true);
