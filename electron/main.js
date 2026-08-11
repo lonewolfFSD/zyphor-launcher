@@ -247,17 +247,28 @@ ipcMain.handle('verify-steam-ownership', async (_, uid) => {
 
 // ── Game path resolution ───────────────────────────────────────────────────────
 function getGameExecutablePath() {
-  // 1. Packaged: STAY.exe sits next to the launcher exe (depot layout)
-  const nextToLauncher = path.join(path.dirname(app.getPath('exe')), 'STAY.exe');
-  if (fs.existsSync(nextToLauncher)) return nextToLauncher;
-
-  // 2. Dev: try a hardcoded local build path
-  const devPath = path.join(__dirname, '..', '..', 'game-build', 'STAY.exe');
-  if (fs.existsSync(devPath)) return devPath;
-
-  // 3. Fallback: check persisted user config (set from a "locate game" dialog)
+  // 1. Persisted user config (set after first successful find or manual pick)
   const cfg = readSettings();
   if (cfg.gameExePath && fs.existsSync(cfg.gameExePath)) return cfg.gameExePath;
+
+  // 2. Scan Steam library folders from VDF
+  try {
+    const steamRoot = path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Steam');
+    const vdfPath = path.join(steamRoot, 'steamapps', 'libraryfolders.vdf');
+    if (fs.existsSync(vdfPath)) {
+      const vdf = fs.readFileSync(vdfPath, 'utf-8');
+      // Extract all "path" values from the VDF
+      const libPaths = [...vdf.matchAll(/"path"\s+"([^"]+)"/g)].map(m => m[1].replace(/\\\\/g, '\\'));
+      for (const lib of libPaths) {
+        const candidate = path.join(lib, 'steamapps', 'common', 'STAY', 'STAY.exe');
+        if (fs.existsSync(candidate)) return candidate;
+      }
+    }
+  } catch {}
+
+  // 3. Dev fallback
+  const devPath = path.join(__dirname, '..', '..', 'game-build', 'STAY.exe');
+  if (fs.existsSync(devPath)) return devPath;
 
   return null;
 }
