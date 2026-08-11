@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld('launcherAPI', {
     loadContext:    ()    => ipcRenderer.invoke('faye:loadContext'),
   },
 
+  verifySteamOwnership: (uid) => ipcRenderer.invoke('verify-steam-ownership', uid),
+launchGame: (args) => ipcRenderer.invoke('launch-game', args),
+
   fs: {
     search:      (query)    => ipcRenderer.invoke('fs:search', query),
     openPath:    (filePath) => ipcRenderer.invoke('fs:openPath', filePath),

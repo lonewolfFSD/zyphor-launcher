@@ -230,6 +230,55 @@ ipcMain.handle('faye:pullModel', async (_e, model = 'phi3:mini') => {
   });
 });
 
+// Expose verifySteamOwnership to renderer
+ipcMain.handle('verify-steam-ownership', async (_, uid) => {
+  // Steamworks runs in main process — get the ticket here
+  // If you use greenworks or steamworks.js:
+  const ticket = await getSteamAuthTicket() // your existing Steamworks binding
+  const steamId = getSteamId()
+
+  const res = await fetch('https://zyphorstudios.com/api/verify-steam', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticket, steamId, firebaseUid: uid }),
+  })
+  return res.json() // { owns, reason }
+})
+
+// ── Game path resolution ───────────────────────────────────────────────────────
+function getGameExecutablePath() {
+  // 1. Packaged: STAY.exe sits next to the launcher exe (depot layout)
+  const nextToLauncher = path.join(path.dirname(app.getPath('exe')), 'STAY.exe');
+  if (fs.existsSync(nextToLauncher)) return nextToLauncher;
+
+  // 2. Dev: try a hardcoded local build path
+  const devPath = path.join(__dirname, '..', '..', 'game-build', 'STAY.exe');
+  if (fs.existsSync(devPath)) return devPath;
+
+  // 3. Fallback: check persisted user config (set from a "locate game" dialog)
+  const cfg = readSettings();
+  if (cfg.gameExePath && fs.existsSync(cfg.gameExePath)) return cfg.gameExePath;
+
+  return null;
+}
+
+ipcMain.handle('launch-game', async (_, args = []) => {
+  const gamePath = getGameExecutablePath();
+
+  if (!gamePath) {
+    // Signal the renderer so it can show a "locate STAY.exe" dialog
+    return { ok: false, reason: 'exe_not_found' };
+  }
+
+  const child = spawn(gamePath, args, {
+    detached: true,
+    stdio: 'ignore',
+    cwd: path.dirname(gamePath), // Unity needs CWD to be the game folder
+  });
+  child.unref();
+  return { ok: true };
+});
+
 // ── ollama:checkModel — does the user already have this model pulled? ──────────
 ipcMain.handle('ollama:checkModel', async (_e, model) => {
   try {

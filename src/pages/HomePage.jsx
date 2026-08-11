@@ -319,26 +319,73 @@ export default function HomePage({ profile }) {
   }
 
   async function handlePlay() {
-    setLaunchState('launching');
-    setShowLaunchModal(true);
-    try {
-      if (window.launcherAPI?.openExternal) {
-        await window.launcherAPI.openExternal(`steam://run/${STAY_STEAM_APP_ID}`);
-      } else {
-        window.location.href = `steam://run/${STAY_STEAM_APP_ID}`;
+  const isVip = Boolean(profile?.isVip)
+  
+  setLaunchState('launching')
+  setShowLaunchModal(true)
+
+  try {
+    let hasAccess = isVip // VIPs skip Steam check
+
+    if (!hasAccess && window.launcherAPI?.verifySteamOwnership && profile?.uid) {
+      const result = await window.launcherAPI.verifySteamOwnership(profile.uid)
+
+      if (result?.reason === 'no_steam_linked') {
+        // First time — they need to link Steam first
+        setLaunchState('idle')
+        setShowLaunchModal(false)
+        window.launcherAPI?.openExternal(
+          `https://zyphorstudios.com/steam-activate?uid=${profile.uid}`
+        )
+        return
       }
-      setTimeout(() => {
-        setLaunchState('running');
-        setShowLaunchModal(false);
-        startGamePolling();
-        if (window.launcherAPI?.minimizeToTray) window.launcherAPI.minimizeToTray();
-        if (window.launcherAPI?.minimize) window.launcherAPI.minimize();
-      }, 3000);
-    } catch {
-      setLaunchState('idle');
-      setShowLaunchModal(false);
+
+      hasAccess = Boolean(result?.owns)
     }
+
+    if (!hasAccess) {
+      setLaunchState('idle')
+      setShowLaunchModal(false)
+      // setShowNoAccessModal(true)
+      return
+    }
+
+    // verified — launch
+    const result = await window.launcherAPI.launchGame(launchArgs)
+    if (result?.reason === 'exe_not_found') {
+      // TODO: show a modal asking the user to locate STAY.exe
+      setLaunchState('idle')
+      setShowLaunchModal(false)
+      return
+    }
+
+    // in handlePlay(), right before launchGame call
+    const launchArgs = [
+      '--zyphor-access-verified',
+      `--zyphor-uid=${profile.uid}`,
+      `--zyphor-name=${profile.displayName}`,
+      `--zyphor-vip=${profile.isVip ? '1' : '0'}`,
+      `--zyphor-avatar=${profile.photoURL ?? ''}`,
+      `--zyphor-location=${profile.location ?? ''}`,
+      `--zyphor-timezone=${profile.timezone ?? ''}`,
+      `--zyphor-gender=${profile.gender ?? ''}`,
+    ]
+
+    await window.launcherAPI.launchGame(launchArgs)
+
+    setTimeout(() => {
+      setLaunchState('running')
+      setShowLaunchModal(false)
+      startGamePolling()
+      window.launcherAPI?.minimizeToTray?.()
+      window.launcherAPI?.minimize?.()
+    }, 3000)
+
+  } catch {
+    setLaunchState('idle')
+    setShowLaunchModal(false)
   }
+}
 
   async function handleStop() {
     clearInterval(pollRef.current);
