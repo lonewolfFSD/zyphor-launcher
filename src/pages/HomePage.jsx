@@ -175,7 +175,7 @@ export default function HomePage({ profile }) {
   const accent  = ACCENTS[settings?.accent] || ACCENTS.bulb;
   const motionOn = settings ? settings.animations && !settings.reduceMotion : true;
 
-  const hasGame = Boolean(profile?.hasGame || profile?.steamOwnsGame);
+  const hasGame = Boolean(profile?.hasGame || profile?.steamOwnsGame || profile?.steamId);
 
   const [launchState, setLaunchState]       = useState('idle');
   const [showLaunchModal, setShowLaunchModal] = useState(false);

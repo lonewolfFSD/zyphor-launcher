@@ -275,6 +275,8 @@ function getGameExecutablePath() {
 
 ipcMain.handle('launch-game', async (_, args = []) => {
   const gamePath = getGameExecutablePath();
+  console.log('[launch-game] path:', gamePath);
+  console.log('[launch-game] exists:', gamePath ? fs.existsSync(gamePath) : false);
 
   if (!gamePath) {
     // Signal the renderer so it can show a "locate STAY.exe" dialog
@@ -522,7 +524,7 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    // mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(distIndex);
   }
