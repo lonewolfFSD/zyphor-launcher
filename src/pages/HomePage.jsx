@@ -335,47 +335,28 @@ export default function HomePage({ profile }) {
   }
 
   async function handlePlay() {
-  const isVip = Boolean(profile?.isVip)
+  console.log('[handlePlay] fired')
   
   setLaunchState('launching')
   setShowLaunchModal(true)
 
   try {
-    let hasAccess = isVip // VIPs skip Steam check
-
-    if (!hasAccess && window.launcherAPI?.verifySteamOwnership && profile?.uid) {
-      const result = await window.launcherAPI.verifySteamOwnership(profile.uid)
-
-      if (result?.reason === 'no_steam_linked') {
-        // First time — they need to link Steam first
-        setLaunchState('idle')
-        setShowLaunchModal(false)
-        window.launcherAPI?.openExternal(
-          `https://zyphorstudios.com/steam-activate?uid=${profile.uid}`
-        )
-        return
-      }
-
-      hasAccess = Boolean(result?.owns)
-    }
+    // already have ownership info on profile, no need for IPC verify
+    const hasAccess = Boolean(profile?.isVip || profile?.steamOwnsGame || profile?.hasGame)
 
     if (!hasAccess) {
       setLaunchState('idle')
       setShowLaunchModal(false)
-      // setShowNoAccessModal(true)
       return
     }
 
-    // verified — launch
-    const result = await window.launcherAPI.launchGame(launchArgs)
-    if (result?.reason === 'exe_not_found') {
-      // TODO: show a modal asking the user to locate STAY.exe
+    if (!profile?.steamId) {
+      setShowSteamLinkModal(true)
       setLaunchState('idle')
       setShowLaunchModal(false)
       return
     }
 
-    // in handlePlay(), right before launchGame call
     const launchArgs = [
       '--zyphor-access-verified',
       `--zyphor-uid=${profile.uid}`,
@@ -387,7 +368,14 @@ export default function HomePage({ profile }) {
       `--zyphor-gender=${profile.gender ?? ''}`,
     ]
 
-    await window.launcherAPI.launchGame(launchArgs)
+    const result = await window.launcherAPI.launchGame(launchArgs)
+    console.log('[handlePlay] launch result:', result)
+
+    if (result?.reason === 'exe_not_found') {
+      setLaunchState('idle')
+      setShowLaunchModal(false)
+      return
+    }
 
     setTimeout(() => {
       setLaunchState('running')
@@ -397,7 +385,8 @@ export default function HomePage({ profile }) {
       window.launcherAPI?.minimize?.()
     }, 3000)
 
-  } catch {
+  } catch (e) {
+    console.error('[handlePlay] error:', e)
     setLaunchState('idle')
     setShowLaunchModal(false)
   }

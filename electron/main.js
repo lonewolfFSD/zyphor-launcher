@@ -232,18 +232,26 @@ ipcMain.handle('faye:pullModel', async (_e, model = 'phi3:mini') => {
 
 // Expose verifySteamOwnership to renderer
 ipcMain.handle('verify-steam-ownership', async (_, uid) => {
-  // Steamworks runs in main process — get the ticket here
-  // If you use greenworks or steamworks.js:
-  const ticket = await getSteamAuthTicket() // your existing Steamworks binding
-  const steamId = getSteamId()
+  try {
+    const { initializeApp, getApps } = require('firebase-admin/app');
+    const { getFirestore } = require('firebase-admin/firestore');
 
-  const res = await fetch('https://zyphorstudios.com/api/verify-steam', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ticket, steamId, firebaseUid: uid }),
-  })
-  return res.json() // { owns, reason }
-})
+    const adminApp = getApps().find(a => a.name === 'admin')
+      ?? require('firebase-admin').initializeApp({
+           credential: require('firebase-admin').credential.applicationDefault(),
+         }, 'admin');
+
+    const db = getFirestore(adminApp);
+    const snap = await db.collection('users').doc(uid).get();
+    const data = snap.data();
+
+    if (!data?.steamId) return { owns: false, reason: 'no_steam_linked' };
+    return { owns: Boolean(data?.steamOwnsGame), reason: data?.steamOwnsGame ? null : 'no_access' };
+  } catch (err) {
+    console.error('[verify-steam-ownership]', err);
+    return { owns: false, reason: 'error' };
+  }
+});
 
 // ── Game path resolution ───────────────────────────────────────────────────────
 function getGameExecutablePath() {
@@ -524,7 +532,7 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    // mainWindow.webContents.openDevTools({ mode: 'detach' });
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(distIndex);
   }
