@@ -47,6 +47,11 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   verifySteamOwnership: (uid) => ipcRenderer.invoke('verify-steam-ownership', uid),
 launchGame: (args) => ipcRenderer.invoke('launch-game', args),
 
+readGameSettings: () => ipcRenderer.invoke('settings:readFromGame'),
+
+// Add inside the contextBridge.exposeInMainWorld('launcherAPI', { ... }) object:
+writeGameSettings: (settings) => ipcRenderer.invoke('settings:writeToGame', settings),
+
   fs: {
     search:      (query)    => ipcRenderer.invoke('fs:search', query),
     openPath:    (filePath) => ipcRenderer.invoke('fs:openPath', filePath),

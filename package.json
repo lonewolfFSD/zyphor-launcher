@@ -39,7 +39,8 @@
     "screenshot-desktop": "^1.15.4",
     "sharp": "^0.35.3",
     "tesseract.js": "^7.0.0",
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "winreg": "^1.2.5"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
