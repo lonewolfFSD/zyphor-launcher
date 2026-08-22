@@ -2,6 +2,7 @@ import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, mem
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
+import { useTranslation } from '../i18n/index.jsx';
 import {
   Image, AlertTriangle, ChevronDown, X, ZoomIn, ZoomOut,
   Download, FolderOpen, RefreshCw, Trash2, Copy, Share2,
@@ -585,6 +586,7 @@ function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticP
 }
 
 export default function ScreenshotsPage() {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const theme    = THEMES[settings?.theme]   || THEMES.oled;
   const accent   = ACCENTS[settings?.accent] || ACCENTS.bulb;
@@ -762,8 +764,12 @@ useEffect(() => {
       <div className="px-9 py-7">
         <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
           <div>
-            <h2 className="text-4xl font-medium tracking-tight" style={{ color: theme.text, fontFamily: 'Apple Garamond' }}>Screenshots</h2>
-            <p className="mt-1 text-lg opacity-40" style={{ fontFamily: 'Apple Garamond'}}>Official captures from Zyphor Studio titles.</p>
+            <h2 className="text-4xl font-medium tracking-tight" style={{ color: theme.text, fontFamily: 'Apple Garamond' }}>
+              {t('screenshots.title', {}, 'Screenshots')}
+            </h2>
+            <p className="mt-1 text-lg opacity-40" style={{ fontFamily: 'Apple Garamond'}}>
+              {t('screenshots.subtitle', {}, 'Official captures from Zyphor Studio titles.')}
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <GameSelector games={GAMES} selected={selectedGameId} onSelect={setSelectedGameId} accent={accent} theme={theme} />
@@ -771,7 +777,7 @@ useEffect(() => {
               style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }}>
               <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
             </button>
-            <button type="button" onClick={openFolder} title="Open folder" className="flex h-10 w-10 items-center justify-center rounded-xl transition hover:opacity-80"
+            <button type="button" onClick={openFolder} title={t('screenshots.openFolder', {}, 'Open folder')} className="flex h-10 w-10 items-center justify-center rounded-xl transition hover:opacity-80"
               style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }}>
               <FolderOpen size={17} />
             </button>

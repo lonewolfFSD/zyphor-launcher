@@ -13,8 +13,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js'
-import { ExternalLink, ShieldAlert, RefreshCw, ArrowRight, Zap } from 'lucide-react'
+import { ExternalLink, ShieldAlert, RefreshCw, ArrowRight, Zap, Globe } from 'lucide-react'
 import { clearSession, saveUid } from '../lib/authSession.js'
+import { useTranslation, SUPPORTED_LANGUAGES } from '../i18n/index.jsx'
 
 import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4'
 import VIDEO_GAMING             from './videos/gaming.mp4'
@@ -128,7 +129,8 @@ function CountdownRing({ secondsLeft, total, color }) {
 }
 
 export default function AuthGate({ onAuthSuccess }) {
-  const { settings } = useSettings()
+  const { t, language, setLanguage } = useTranslation()
+  const { settings, update: updateSettings } = useSettings()
   const accent = ACCENTS[settings?.accent] || ACCENTS.bulb
 
   const motionOn            = settings ? settings.animations && !settings.reduceMotion : true
@@ -341,48 +343,60 @@ export default function AuthGate({ onAuthSuccess }) {
           pointerEvents: 'none',
         }} />
 
-        {/* ── Logo / Brand ── */}
+        {/* ── Logo / Brand + Language Selector ── */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15, duration: 0.5 }}
-          style={{ marginBottom: 40 }}
+          style={{ marginBottom: 40, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}
         >
-
           <div className='flex gap-3'>
-            <img className='w-[70px] h-[70px]' src={Logo} />
-
-          
-
-          <span>
-            <h1 style={{
-            fontFamily: "Apple Garamond",
-            marginTop: 4,
-            fontSize: 40, fontWeight: 500,
-            letterSpacing: '0.01em',
-            color: T,
-            lineHeight: 1,
-          }}>
-            Zyphor Launcher
-          </h1>
-                    <p style={{
-            fontFamily: "Apple Garamond",
-            fontSize: 10, fontWeight: 600,
-            letterSpacing: '0.22em',
-            textTransform: 'uppercase',
-            marginTop: 10,
-            color: M,
-            marginBottom: 6,
-          }}>
-            v{CURRENT_VERSION}
-          </p>
-
-          </span>
+            <img className='w-[70px] h-[70px]' src={Logo} alt="" />
+            <span>
+              <h1 style={{
+                fontFamily: "Apple Garamond",
+                marginTop: 4,
+                fontSize: 40, fontWeight: 500,
+                letterSpacing: '0.01em',
+                color: T,
+                lineHeight: 1,
+              }}>
+                Zyphor Launcher
+              </h1>
+              <p style={{
+                fontFamily: "Apple Garamond",
+                fontSize: 10, fontWeight: 600,
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                marginTop: 10,
+                color: M,
+                marginBottom: 6,
+              }}>
+                v{CURRENT_VERSION}
+              </p>
+            </span>
           </div>
 
-
-
-         
+          {/* Quick Language Dropdown */}
+          <div className="relative">
+            <select
+              value={language || 'en'}
+              onChange={(e) => {
+                const newLang = e.target.value;
+                setLanguage?.(newLang);
+                updateSettings?.({ language: newLang });
+              }}
+              className="appearance-none rounded-xl border border-white/10 bg-white/5 py-1.5 pl-3 pr-7 text-[11px] font-medium text-bone/80 outline-none transition hover:bg-white/10"
+              style={{ cursor: 'pointer' }}
+            >
+              {SUPPORTED_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code} style={{ backgroundColor: '#181818', color: '#fff' }}>
+                  {l.flag} {l.nativeName}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[9px] opacity-40">▼</div>
+          </div>
         </motion.div>
 
         {/* ── State content ── */}
@@ -405,12 +419,11 @@ export default function AuthGate({ onAuthSuccess }) {
                 fontFamily: "Apple Garamond",
                 fontWeight: 200,
               }}>
-                Sign in or create an account on the Zyphor website. The launcher connects automatically once you're done.
+                {t('auth.signInToContinue', {}, "Sign in or create an account on the Zyphor website. The launcher connects automatically once you're done.")}
               </p>
 
               <motion.button
                 onClick={handleLogin}
-                
                 whileTap={{ scale: 0.97 }}
                 style={{
                   display: 'flex',
@@ -431,22 +444,20 @@ export default function AuthGate({ onAuthSuccess }) {
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  
-                  Sign in through Zyphor Portal
+                  {t('auth.signIn', {}, 'Sign in through Zyphor Portal')}
                 </span>
                 <ArrowRight size={18} strokeWidth={2.2} style={{ opacity: 0.7 }} />
               </motion.button>
 
               {/* Divider hint */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.06em', fontFamily: "Apple Garamond", }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.06em', fontFamily: "Apple Garamond" }}>
                   BROWSER AUTHENTICATION
                 </span>
                 <div style={{ flex: 1, height: 1, backgroundColor: B }} />
               </div>
 
-              <p style={{ fontSize: 15.5, color: 'rgba(255,255,255,0.22)', marginTop: -10, lineHeight: 1.2, textAlign: 'left', fontFamily: "Apple Garamond", }}>
+              <p style={{ fontSize: 15.5, color: 'rgba(255,255,255,0.22)', marginTop: -10, lineHeight: 1.2, textAlign: 'left', fontFamily: "Apple Garamond" }}>
                 A browser window will open. Sign in there — the launcher detects it automatically.
               </p>
             </motion.div>

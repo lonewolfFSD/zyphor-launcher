@@ -16,6 +16,7 @@ import {
   faDiscord, faXTwitter, faYoutube, faRedditAlien, faTiktok, faInstagram,
 } from '@fortawesome/free-brands-svg-icons';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
+import { useTranslation } from '../i18n/index.jsx';
 import { doc, getDoc, collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import Logo from '../../build-resources/logo.png';
@@ -170,6 +171,7 @@ function HomeSkeleton({ theme, accent }) {
 }
 
 export default function HomePage({ profile }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const theme   = THEMES[settings?.theme]   || THEMES.oled;
   const accent  = ACCENTS[settings?.accent] || ACCENTS.bulb;
@@ -189,8 +191,6 @@ export default function HomePage({ profile }) {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateDlState, setUpdateDlState]   = useState('idle');
   const [pageReady, setPageReady]           = useState(homeVisited);
-
-  const [showPreLaunch, setShowPreLaunch] = useState(false);
 
   const [showSteamLinkModal, setShowSteamLinkModal] = useState(false);
 
@@ -338,29 +338,6 @@ export default function HomePage({ profile }) {
 
   async function handlePlay() {
   console.log('[handlePlay] fired')
-
-  try {
-  const gameSettings = {
-    masterVolume: 1.0,   // pull from your launcher settings state
-    musicVolume:  1.0,
-    sfxVolume:    1.0,
-    voiceVolume:  1.0,
-    qualityLevel: 2,     // 0=Low 1=Med 2=High 3=Ultra
-    vsync:        true,
-    targetFps:    -1,
-    brightness:   1.0,
-    mouseSensX:   1.0,
-    mouseSensY:   1.0,
-    invertY:      false,
-    fov:          60,
-  };
-  await window.launcherAPI.writeGameSettings(gameSettings);
-} catch (e) {
-  console.warn('[handlePlay] writeGameSettings failed:', e);
-  // non-fatal, game will use its own saved prefs
-}
-
-const result = await window.launcherAPI.launchGame(launchArgs);
   
   setLaunchState('launching')
   setShowLaunchModal(true)
@@ -430,9 +407,9 @@ const result = await window.launcherAPI.launchGame(launchArgs);
   }
 
   function handlePlayToggle() {
-  if (launchState === 'running') handleStop();
-  else if (launchState === 'idle') setShowPreLaunch(true); // ← open modal
-}
+    if (launchState === 'running') handleStop();
+    else if (launchState === 'idle') handlePlay();
+  }
 
   useGSAP(() => {
     if (!pageReady || !pageRef.current || didIntro.current) return;
@@ -473,18 +450,6 @@ const result = await window.launcherAPI.launchGame(launchArgs);
         onInstall={() => window.launcherAPI?.installUpdate?.()}
       />
 
-      <PreLaunchSettingsModal
-        visible={showPreLaunch}
-        accent={accent}
-        theme={theme}
-        onCancel={() => setShowPreLaunch(false)}
-        onConfirm={async (gameSettings) => {
-          setShowPreLaunch(false);
-          await window.launcherAPI.writeGameSettings(gameSettings);
-          handlePlay();
-        }}
-      />
-
       <LaunchModal
         visible={showLaunchModal}
         gameName={STAY_GAME_NAME}
@@ -521,20 +486,20 @@ const result = await window.launcherAPI.launchGame(launchArgs);
 </div>
           <StatusChip
             icon={updateStatus === 'available' ? faCircleArrowUp : faCircleCheck}
-            label={updateStatus === 'available' ? `Update available — v${updateInfo?.version ?? ''}` : updateStatus === 'checking' ? 'Checking for updates…' : 'Up to date'}
+            label={updateStatus === 'available' ? `${t('titleBar.updateAvailable', {}, 'Update available')} — v${updateInfo?.version ?? ''}` : updateStatus === 'checking' ? t('home.checkUpdates', {}, 'Checking for updates…') : t('settings.about.upToDate', {}, 'Up to date')}
             tone={updateStatus === 'available' ? accent.hex : undefined}
             onClick={updateStatus === 'available' ? () => setShowUpdateModal(true) : undefined}
           />
           <Divider theme={theme} />
           <StatusChip
             icon={serverStatus === 'online' ? faWifi : faTriangleExclamation}
-            label={serverStatus === 'online' ? 'Servers online' : serverStatus === 'checking' ? 'Checking servers…' : 'Servers offline'}
+            label={serverStatus === 'online' ? t('home.serverStatus', {}, 'Servers online') : serverStatus === 'checking' ? 'Checking servers…' : 'Servers offline'}
             tone={serverStatus === 'offline' ? '#c1633a' : accent.hex}
           />
           {playtime != null && (
             <>
               <Divider theme={theme} />
-              <StatusChip icon={faClock} label={`${playtime} hrs played`} />
+              <StatusChip icon={faClock} label={`${playtime} ${t('home.hours', {}, 'hrs')} ${t('home.playTime', {}, 'played')}`} />
             </>
           )}
         </motion.div>
@@ -704,7 +669,7 @@ const result = await window.launcherAPI.launchGame(launchArgs);
 </div>
         <div className="flex shrink-0 items-center gap-2.5 border-b px-6 py-3.5" style={{ borderColor: theme.border }}>
           <h2 className="text-[18.5px] mt-0.5 font-medium tracking-tight text-bone" style={{ fontFamily: 'Apple Garamond' }}>
-            What's New?
+            {t('home.latestNews', {}, "What's New?")}
           </h2>
           <span
             className="ml-auto rounded-lg px-2 py-1 text-[10px] font-bold"
@@ -1117,320 +1082,6 @@ function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose,
                   Restart &amp; install
                 </button>
               )}
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-const TABS = ['Audio', 'Graphics', 'Display', 'Controls', 'Accessibility'];
-
-function PreLaunchSettingsModal({ visible, accent, theme, onConfirm, onCancel }) {
-  const [tab, setTab] = useState('Audio');
-  const [loaded, setLoaded] = useState(false);
-
-  // Audio
-  const [masterVol, setMasterVol] = useState(1.0);
-  const [musicVol,  setMusicVol]  = useState(1.0);
-  const [sfxVol,    setSfxVol]    = useState(1.0);
-  const [voiceVol,  setVoiceVol]  = useState(1.0);
-
-  // Graphics
-  const [qualityLevel,     setQualityLevel]     = useState(2); // 0=Low 1=Med 2=High 3=Ultra
-  const [textureQuality,   setTextureQuality]   = useState(0); // 0=Full 1=Half 2=Quarter 3=Eighth
-  const [shadowQuality,    setShadowQuality]    = useState(3); // 0=Off 1=Low 2=Med 3=High
-  const [shadowDistance,   setShadowDistance]   = useState(2); // 0=Short 1=Med 2=Long 3=VeryLong
-  const [antiAliasing,     setAntiAliasing]     = useState(2); // 0=Off 1=FXAA 2=MSAA4x 3=MSAA8x
-  const [anisotropic,      setAnisotropic]      = useState(1); // 0=Disabled 1=PerTexture 2=Force
-  const [softParticles,    setSoftParticles]    = useState(true);
-  const [realtimeReflect,  setRealtimeReflect]  = useState(true);
-  const [brightness,       setBrightness]       = useState(1.0);
-
-  // Display
-  const [windowMode,  setWindowMode]  = useState(0); // 0=Fullscreen 1=Borderless 2=Windowed
-  const [vsync,       setVsync]       = useState(true);
-  const [targetFps,   setTargetFps]   = useState(-1); // -1=Uncapped
-  const [aspectRatio, setAspectRatio] = useState(0);  // 0=Auto 1=16:9 2=16:10 3=21:9 4=4:3
-  const [uiScale,     setUiScale]     = useState(1.0);
-
-  // Controls
-  const [mouseSensX, setMouseSensX] = useState(1.0);
-  const [mouseSensY, setMouseSensY] = useState(1.0);
-  const [invertY,    setInvertY]    = useState(false);
-  const [fov,        setFov]        = useState(60);
-
-  // Accessibility
-  const [colorblind,    setColorblind]    = useState(0); // 0=Off 1=Protanopia 2=Deuteranopia 3=Tritanopia
-  const [textSize,      setTextSize]      = useState(1); // 0=Small 1=Med 2=Large 3=XL
-  const [shakeIntensity,setShakeIntensity]= useState(1.0);
-  const [highContrast,  setHighContrast]  = useState(false);
-
-useEffect(() => {
-  if (!visible) return;
-  setLoaded(false);
-  window.launcherAPI?.readGameSettings?.().then((s) => {
-    if (!s) return;
-    setMasterVol(s.masterVolume);
-    setMusicVol(s.musicVolume);
-    setSfxVol(s.sfxVolume);
-    setVoiceVol(s.voiceVolume);
-    setBrightness(s.brightness);
-    setMouseSensX(s.mouseSensX);
-    setMouseSensY(s.mouseSensY);
-    setFov(s.fov);
-    setUiScale(s.uiScale);
-    setShakeIntensity(s.shakeIntensity);
-    setQualityLevel(s.qualityLevel);
-    setTextureQuality(s.textureQuality);
-    setShadowQuality(s.shadowQuality);
-    setShadowDistance(s.shadowDistance);
-    setAntiAliasing(s.antiAliasing);
-    setAnisotropic(s.anisotropic);
-    setWindowMode(s.windowMode);
-    setVsync(s.vsync);
-    setTargetFps(s.targetFps);
-    setAspectRatio(s.aspectRatio);
-    setSoftParticles(s.softParticles);
-    setRealtimeReflect(s.realtimeReflect);
-    setColorblind(s.colorblind);
-    setTextSize(s.textSize);
-    setInvertY(s.invertY);
-    setHighContrast(s.highContrast);
-  }).finally(() => setLoaded(true));
-}, [visible]);
-
-  function buildSettings() {
-    return {
-      // Audio
-      masterVolume: masterVol, musicVolume: musicVol,
-      sfxVolume: sfxVol,       voiceVolume: voiceVol,
-      // Graphics
-      qualityLevel, textureQuality, shadowQuality, shadowDistance,
-      antiAliasing, anisotropic, softParticles, realtimeReflect, brightness,
-      // Display
-      windowMode, vsync, targetFps, aspectRatio, uiScale,
-      // Controls
-      mouseSensX, mouseSensY, invertY, fov,
-      // Accessibility
-      colorblind, textSize, shakeIntensity, highContrast,
-    };
-  }
-
-  const row = 'flex flex-col gap-1.5';
-  const label = { fontSize: 11, color: `${theme.text}55`, fontFamily: 'Manrope', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' };
-  const val   = { fontSize: 12, color: `${theme.text}90`, fontFamily: 'Manrope', fontWeight: 700 };
-
-  function Slider({ label: l, value, setValue, min, max, step = 0.01, display }) {
-    return (
-      <div className={row}>
-        <div className="flex justify-between items-center">
-          <span style={label}>{l}</span>
-          <span style={val}>{display ?? value}</span>
-        </div>
-        <input type="range" min={min} max={max} step={step} value={value}
-          onChange={(e) => setValue(+e.target.value)}
-          style={{ accentColor: accent.hex, width: '100%' }} />
-      </div>
-    );
-  }
-
-  function Select({ label: l, value, setValue, options }) {
-    return (
-      <div className={row}>
-        <span style={label}>{l}</span>
-        <div className="flex gap-2 flex-wrap mt-0.5">
-          {options.map(([idx, text]) => (
-            <button key={idx} onClick={() => setValue(idx)}
-              className="rounded-lg px-3 py-1.5 text-[11px] font-semibold font-[Manrope] transition-all"
-              style={{
-                backgroundColor: value === idx ? accent.hex : `${theme.surface}`,
-                color: value === idx ? accent.on : `${theme.text}60`,
-                border: `1px solid ${value === idx ? accent.hex : theme.border}`,
-              }}>
-              {text}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  function Toggle({ label: l, value, setValue }) {
-    return (
-      <div className="flex items-center justify-between">
-        <span style={label}>{l}</span>
-        <button onClick={() => setValue(!value)}
-          className="w-10 h-5 rounded-full transition-all relative"
-          style={{ backgroundColor: value ? accent.hex : `${theme.text}20` }}>
-          <span className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
-            style={{ left: value ? '1.25rem' : '0.125rem' }} />
-        </button>
-      </div>
-    );
-  }
-
-  const fpsOptions = [[-1,'Uncapped'],[30,'30'],[60,'60'],[120,'120'],[144,'144'],[165,'165'],[240,'240']];
-
-  return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="absolute inset-0 z-50 flex items-center justify-center"
-          style={{ backdropFilter: 'blur(10px)', backgroundColor: 'rgba(0,0,0,0.72)' }}
-        >
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 20 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="flex flex-col overflow-hidden rounded-[2rem] border shadow-2xl"
-            style={{ width: 880, maxHeight: '65vh', backgroundColor: `${theme.surface}f0`, borderColor: theme.border }}
-          >
-            {/* Header */}
-            <div className="flex items-center gap-3 px-7 pt-7 pb-4 shrink-0">
-              <div className="flex-1">
-                <h2 className="text-2xl font-medium text-bone" style={{ fontFamily: 'Apple Garamond' }}>
-                  Game Settings
-                </h2>
-                <p className="text-[12px] font-[Manrope] mt-0.5" style={{ color: `${theme.text}45` }}>
-                  Applied before launch — saved to game's settings
-                </p>
-              </div>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex gap-1 px-7 shrink-0 border-b pb-0" style={{ borderColor: theme.border }}>
-              {TABS.map((t) => (
-                <button key={t} onClick={() => setTab(t)}
-                  className="px-3.5 py-2.5 text-[11.5px] font-semibold font-[Manrope] rounded-t-lg transition-all"
-                  style={{
-                    color: tab === t ? accent.hex : `${theme.text}45`,
-                    borderBottom: tab === t ? `2px solid ${accent.hex}` : '2px solid transparent',
-                    marginBottom: -1,
-                  }}>
-                  {t}
-                </button>
-              ))}
-            </div>
-            
-            {!loaded ? (
-              <div className="flex-1 flex items-center justify-center gap-3 font-[Manrope] text-xs py-10" style={{ color: `${theme.text}40` }}>
-                <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
-                  <path d="M4 12a8 8 0 018-8v8z" fill="currentColor" className="opacity-75" />
-                </svg>
-                Loading saved settings…
-              </div>
-            ) : (
-              <>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto px-7 py-5 flex flex-col gap-5">
-
-              {tab === 'Audio' && <>
-                <Slider label="Master Volume" value={masterVol} setValue={setMasterVol} min={0} max={1} display={`${Math.round(masterVol * 100)}%`} />
-                <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Slider label="Music Volume"  value={musicVol}  setValue={setMusicVol}  min={0} max={1} display={`${Math.round(musicVol  * 100)}%`} />
-                <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Slider label="SFX Volume"    value={sfxVol}    setValue={setSfxVol}    min={0} max={1} display={`${Math.round(sfxVol    * 100)}%`} />
-                <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Slider label="Voice Volume"  value={voiceVol}  setValue={setVoiceVol}  min={0} max={1} display={`${Math.round(voiceVol  * 100)}%`} />
-              </>}
-
-              {tab === 'Graphics' && <>
-                <Select label="Quality Preset" value={qualityLevel} setValue={setQualityLevel}
-                  options={[[0,'Low'],[1,'Medium'],[2,'High'],[3,'Very High'],[4,'Ultra']]} />
-                <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Select label="Texture Quality" value={textureQuality} setValue={setTextureQuality}
-                  options={[[0,'Full'],[1,'Half'],[2,'Quarter'],[3,'Eighth']]} />
-                  <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Select label="Shadow Quality" value={shadowQuality} setValue={setShadowQuality}
-                  options={[[0,'Off'],[1,'Low'],[2,'Medium'],[3,'High']]} />
-                  <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Select label="Shadow Distance" value={shadowDistance} setValue={setShadowDistance}
-                  options={[[0,'Short'],[1,'Medium'],[2,'Long'],[3,'Very Long']]} />
-                  <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Select label="Anti-Aliasing" value={antiAliasing} setValue={setAntiAliasing}
-                  options={[[0,'Off'],[1,'FXAA'],[2,'MSAA 4×'],[3,'MSAA 8×']]} />
-                  <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Select label="Anisotropic Filtering" value={anisotropic} setValue={setAnisotropic}
-                  options={[[0,'Disabled'],[1,'Per Texture'],[2,'Force Enable']]} />
-                  <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Slider label="Brightness" value={brightness} setValue={setBrightness} min={0.1} max={2} display={brightness.toFixed(2)} />
-                  <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <div className="flex flex-col gap-3">
-                  <Toggle label="Soft Particles"       value={softParticles}   setValue={setSoftParticles} />
-                  <Toggle label="Realtime Reflections" value={realtimeReflect} setValue={setRealtimeReflect} />
-                </div>
-              </>}
-
-              {tab === 'Display' && <>
-                <Select label="Window Mode" value={windowMode} setValue={setWindowMode}
-                  options={[[0,'Fullscreen'],[1,'Borderless'],[2,'Windowed']]} />
-                  <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Select label="Aspect Ratio" value={aspectRatio} setValue={setAspectRatio}
-                  options={[[0,'Auto'],[1,'16:9'],[2,'16:10'],[3,'21:9'],[4,'4:3']]} />
-                  <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <div className={row}>
-                  <span style={label}>Frame Rate Cap</span>
-                  <div className="flex gap-2 flex-wrap mt-0.5">
-                    {fpsOptions.map(([v, t]) => (
-                      <button key={v} onClick={() => setTargetFps(v)}
-                        className="rounded-lg px-3 py-1.5 text-[11px] font-semibold font-[Manrope] transition-all"
-                        style={{
-                          backgroundColor: targetFps === v ? accent.hex : theme.surface,
-                          color: targetFps === v ? accent.on : `${theme.text}60`,
-                          border: `1px solid ${targetFps === v ? accent.hex : theme.border}`,
-                        }}>
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Slider label="UI Scale" value={uiScale} setValue={setUiScale} min={0.5} max={2} step={0.05} display={`${Math.round(uiScale * 100)}%`} />
-                <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Toggle label="VSync" value={vsync} setValue={setVsync} />
-              </>}
-
-              {tab === 'Controls' && <>
-                <Slider label="Mouse Sensitivity X" value={mouseSensX} setValue={setMouseSensX} min={0.1} max={5} step={0.05} display={mouseSensX.toFixed(2)} />
-                <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Slider label="Mouse Sensitivity Y" value={mouseSensY} setValue={setMouseSensY} min={0.1} max={5} step={0.05} display={mouseSensY.toFixed(2)} />
-                <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Slider label="Field of View" value={fov} setValue={setFov} min={50} max={110} step={1} display={`${fov}°`} />
-                <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Toggle label="Invert Y Axis" value={invertY} setValue={setInvertY} />
-              </>}
-
-              {tab === 'Accessibility' && <>
-                <Select label="Colorblind Mode" value={colorblind} setValue={setColorblind}
-                  options={[[0,'Off'],[1,'Protanopia'],[2,'Deuteranopia'],[3,'Tritanopia']]} />
-                  <hr className='opacity-[0.1] -mt-2 -mb-2' />
-                <Select label="Text Size" value={textSize} setValue={setTextSize}
-                  options={[[0,'Small'],[1,'Medium'],[2,'Large'],[3,'Extra Large']]} />
-                
-              </>}
-
-            </div>
-            </>
-            )}
-
-            {/* Footer */}
-            <div className="flex gap-3 px-7 py-5 shrink-0 border-t" style={{ borderColor: theme.border }}>
-              <button onClick={() => onConfirm(buildSettings())}
-                className="flex-1 rounded-2xl py-3.5 text-[14px] font-semibold font-[Manrope] transition hover:opacity-90 active:scale-[0.98]"
-                style={{ backgroundColor: accent.hex, color: accent.on }}>
-                Launch Game
-              </button>
-              <button onClick={onCancel}
-                className="rounded-xl px-5 text-xs font-[Manrope] transition hover:bg-white/5"
-                style={{ color: `${theme.text}60` }}>
-                Cancel
-              </button>
             </div>
           </motion.div>
         </motion.div>

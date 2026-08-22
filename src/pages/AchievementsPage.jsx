@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
+import { useTranslation } from '../i18n/index.jsx';
 import { Lock, Unlock, Trophy, AlertTriangle, RefreshCw, ExternalLink, ChevronDown } from 'lucide-react';
 
 import GlassSurface from '../effects/GlassSurface.tsx';
@@ -314,6 +315,7 @@ let achievementsVisited = false;
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function AchievementsPage({ profile }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const theme    = THEMES[settings?.theme]   || THEMES.oled;
   const accent   = ACCENTS[settings?.accent] || ACCENTS.bulb;
@@ -432,11 +434,11 @@ export default function AchievementsPage({ profile }) {
               className="text-4xl font-medium tracking-tight"
               style={{ color: theme.text, fontFamily: 'Apple Garamond' }}
             >
-              Achievements
+              {t('achievements.title', {}, 'Achievements')}
             </h2>
             <p className="mt-0 text-lg opacity-40"><span style={{
               fontFamily: 'Apple Garamond'
-            }}>Track your progress across Zyphor Studio games.</span></p>
+            }}>{t('achievements.subtitle', {}, 'Track your progress across Zyphor Studio games.')}</span></p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -592,9 +594,9 @@ export default function AchievementsPage({ profile }) {
                 style={{ fontFamily: 'Apple Garamond' }}
               >
                 {[
-                  { id: 'all',      label: `All (${achievements.length})` },
-                  { id: 'achieved', label: `Achieved (${unlocked})` },
-                  { id: 'locked',   label: `Locked (${total - unlocked})` },
+                  { id: 'all',      label: `${t('achievements.all', {}, 'All')} (${achievements.length})` },
+                  { id: 'achieved', label: `${t('achievements.unlocked', {}, 'Unlocked')} (${unlocked})` },
+                  { id: 'locked',   label: `${t('achievements.locked', {}, 'Locked')} (${total - unlocked})` },
                 ].map(opt => (
                   <button
                     key={opt.id}

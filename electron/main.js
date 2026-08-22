@@ -7,8 +7,6 @@ const Registry = require('winreg');
 
 const { exec } = require('child_process');
 
-const UNITY_REG_KEY = '\\Software\\ZyphorStudios\\STAY';
-
 app.commandLine.appendSwitch('enable-speech-dispatcher');
 app.commandLine.appendSwitch('allow-http-screen-capture');
 
@@ -21,8 +19,6 @@ let ollamaProcess = null;
 const ffmpegPath = require('ffmpeg-static');
 
 const { autoUpdater } = require('electron-updater');
-
-
 
 
 
@@ -167,141 +163,6 @@ ipcMain.handle('ollama:install', async () => {
     return { ok: false, error: err.message };
   }
 });
-
-ipcMain.handle('settings:readFromGame', async () => {
-  const reg = new Registry({ hive: Registry.HKCU, key: UNITY_REG_KEY });
-
-  function readKey(name) {
-    return new Promise((resolve) => {
-      reg.get(name + '_h' + djb2hash(name), (err, item) => {
-        if (err || !item) return resolve(null);
-        resolve(item);
-      });
-    });
-  }
-
-  async function readFloat(name, fallback) {
-    const item = await readKey(name);
-    if (!item) return fallback;
-    try {
-      // Unity stores floats as REG_BINARY: 8 bytes, first 4 = little-endian float
-      const buf = Buffer.from(item.value.replace(/\s/g, ''), 'hex');
-      return buf.readFloatLE(0);
-    } catch { return fallback; }
-  }
-
-  async function readInt(name, fallback) {
-    const item = await readKey(name);
-    if (!item) return fallback;
-    try {
-      return parseInt(item.value, 16); // winreg returns DWORD as hex string
-    } catch { return fallback; }
-  }
-
-  return {
-    masterVolume:    await readFloat('Settings_MasterVolume',         1.0),
-    musicVolume:     await readFloat('Settings_MusicVolume',          1.0),
-    sfxVolume:       await readFloat('Settings_SFXVolume',            1.0),
-    voiceVolume:     await readFloat('Settings_VoiceVolume',          1.0),
-    brightness:      await readFloat('Settings_Brightness',           1.0),
-    mouseSensX:      await readFloat('Settings_MouseSensitivityX',    1.0),
-    mouseSensY:      await readFloat('Settings_MouseSensitivityY',    1.0),
-    fov:             await readFloat('Settings_FieldOfView',          60.0),
-    uiScale:         await readFloat('Settings_UIScale',              1.0),
-    shakeIntensity:  await readFloat('Settings_ScreenShakeIntensity', 1.0),
-    qualityLevel:    await readInt('Settings_QualityLevel',           2),
-    textureQuality:  await readInt('Settings_TextureQuality',         0),
-    shadowQuality:   await readInt('Settings_ShadowQuality',          3),
-    shadowDistance:  await readInt('Settings_ShadowDistance',         2),
-    antiAliasing:    await readInt('Settings_AntiAliasing',           2),
-    anisotropic:     await readInt('Settings_AnisotropicFiltering',   1),
-    windowMode:      await readInt('Settings_WindowMode',             0),
-    vsync:          (await readInt('Settings_VSync',                  1)) === 1,
-    targetFps:       await readInt('Settings_TargetFPS',             -1),
-    aspectRatio:     await readInt('Settings_AspectRatio',            0),
-    softParticles:  (await readInt('Settings_SoftParticles',          1)) === 1,
-    realtimeReflect:(await readInt('Settings_RealtimeReflections',    1)) === 1,
-    colorblind:      await readInt('Settings_ColorblindMode',         0),
-    textSize:        await readInt('Settings_TextSize',               1),
-    invertY:        (await readInt('Settings_InvertY',                0)) === 1,
-    highContrast:   (await readInt('Settings_HighContrastUI',         0)) === 1,
-  };
-});
-
-ipcMain.handle('settings:writeToGame', async (_e, settings) => {
-  // settings shape: { masterVolume, musicVolume, sfxVolume, voiceVolume,
-  //                   qualityLevel, vsync, targetFps, brightness,
-  //                   mouseSensX, mouseSensY, invertY, fov }
-
-  // Replace the entries array in your ipcMain.handle('settings:writeToGame') with:
-const entries = [
-  ['Settings_MasterVolume',         'float', settings.masterVolume    ?? 1.0],
-  ['Settings_MusicVolume',          'float', settings.musicVolume     ?? 1.0],
-  ['Settings_SFXVolume',            'float', settings.sfxVolume       ?? 1.0],
-  ['Settings_VoiceVolume',          'float', settings.voiceVolume     ?? 1.0],
-  ['Settings_Brightness',           'float', settings.brightness      ?? 1.0],
-  ['Settings_MouseSensitivityX',    'float', settings.mouseSensX      ?? 1.0],
-  ['Settings_MouseSensitivityY',    'float', settings.mouseSensY      ?? 1.0],
-  ['Settings_FieldOfView',          'float', settings.fov             ?? 60.0],
-  ['Settings_UIScale',              'float', settings.uiScale         ?? 1.0],
-  ['Settings_ScreenShakeIntensity', 'float', settings.shakeIntensity  ?? 1.0],
-  ['Settings_QualityLevel',         'int',   settings.qualityLevel    ?? 2],
-  ['Settings_TextureQuality',       'int',   settings.textureQuality  ?? 0],
-  ['Settings_ShadowQuality',        'int',   settings.shadowQuality   ?? 3],
-  ['Settings_ShadowDistance',       'int',   settings.shadowDistance  ?? 2],
-  ['Settings_AntiAliasing',         'int',   settings.antiAliasing    ?? 2],
-  ['Settings_AnisotropicFiltering', 'int',   settings.anisotropic     ?? 1],
-  ['Settings_WindowMode',           'int',   settings.windowMode      ?? 0],
-  ['Settings_VSync',                'int',   settings.vsync ? 1 : 0],
-  ['Settings_TargetFPS',            'int',   settings.targetFps       ?? -1],
-  ['Settings_AspectRatio',          'int',   settings.aspectRatio     ?? 0],
-  ['Settings_SoftParticles',        'int',   settings.softParticles   ? 1 : 0],
-  ['Settings_RealtimeReflections',  'int',   settings.realtimeReflect ? 1 : 0],
-  ['Settings_ColorblindMode',       'int',   settings.colorblind      ?? 0],
-  ['Settings_TextSize',             'int',   settings.textSize        ?? 1],
-  ['Settings_InvertY',              'int',   settings.invertY         ? 1 : 0],
-  ['Settings_HighContrastUI',       'int',   settings.highContrast    ? 1 : 0],
-];
-
-  // Unity stores floats as little-endian hex in the registry
-  function floatToUnityRegValue(f) {
-    const buf = Buffer.allocUnsafe(4);
-    buf.writeFloatLE(f, 0);
-    // Unity appends 00000000 (4 null bytes) — it stores as REG_BINARY
-    return Buffer.concat([buf, Buffer.alloc(4)]);
-  }
-
-  const reg = new Registry({ hive: Registry.HKCU, key: UNITY_REG_KEY });
-
-  for (const [key, type, val] of entries) {
-    await new Promise((resolve, reject) => {
-      if (type === 'int') {
-        // Unity stores ints as REG_DWORD but with key name suffixed with "_h<hash>"
-        // Simpler: use PowerShell to write exactly what Unity expects
-        reg.set(key + '_h' + djb2hash(key), Registry.REG_DWORD, val.toString(), (err) => {
-          err ? reject(err) : resolve();
-        });
-      } else {
-        const binary = floatToUnityRegValue(val);
-        reg.set(key + '_h' + djb2hash(key), Registry.REG_BINARY, binary.toString('hex'), (err) => {
-          err ? reject(err) : resolve();
-        });
-      }
-    });
-  }
-
-  return { ok: true };
-});
-
-// Unity uses DJB2 hash of the key name as a suffix in the registry
-function djb2hash(str) {
-  let hash = 5381;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
-    hash = hash >>> 0; // keep unsigned 32-bit
-  }
-  return hash;
-}
 
 function downloadFile(url, dest) {
   const https = require('https');
@@ -674,7 +535,7 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    // mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(distIndex);
   }

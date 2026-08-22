@@ -13,17 +13,18 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase.js';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import { clearSession } from '../lib/authSession.js';
+import { useTranslation } from '../i18n/index.jsx';
 
 import GlassSurface from '../effects/GlassSurface.tsx';
 
 gsap.registerPlugin(useGSAP);
 
-const NAV_ITEMS = [
-  { id: 'home',         label: 'Home',         icon: faHouse },
-  { id: 'news',         label: 'News',         icon: faNewspaper },
-  { id: 'friends',      label: 'Friends',      icon: faUsers },
-  { id: 'achievements', label: 'Achievements', icon: faTrophy },
-  { id: 'screenshots',  label: 'Screenshots',  icon: faImages },
+const NAV_ITEMS_DEF = [
+  { id: 'home',         key: 'nav.home',         defaultLabel: 'Home',         icon: faHouse },
+  { id: 'news',         key: 'nav.news',         defaultLabel: 'News',         icon: faNewspaper },
+  { id: 'friends',      key: 'nav.friends',      defaultLabel: 'Friends',      icon: faUsers },
+  { id: 'achievements', key: 'nav.achievements', defaultLabel: 'Achievements', icon: faTrophy },
+  { id: 'screenshots',  key: 'nav.screenshots',  defaultLabel: 'Screenshots',  icon: faImages },
 ];
 
 function maskEmail(email) {
@@ -186,6 +187,7 @@ function NavItems({ items, activePage, onNavigate, accent, isLiquidGlass }) {
 }
 
 export default function NavRail({ activePage, onNavigate, onExit, profile, onLogout }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const [launchState, setLaunchState] = useState('idle');
   const [accountOpen, setAccountOpen] = useState(false);
@@ -193,6 +195,11 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
   const popoverRef = useRef(null);
   const avatarBtnRef = useRef(null);
   const railRef = useRef(null);
+
+  const navItems = NAV_ITEMS_DEF.map((item) => ({
+    ...item,
+    label: t(item.key, {}, item.defaultLabel),
+  }));
 
   const theme  = THEMES[settings?.theme]  || THEMES.oled;
   const accent = ACCENTS[settings?.accent] || ACCENTS.bulb;
@@ -325,17 +332,16 @@ const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: -8, scale: 0.96 }}
             transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-            className={`fixed z-50 ml-4 overflow-hidden rounded-3xl border shadow-2xl`}
-           className="fixed z-50 ml-4 overflow-hidden rounded-3xl border shadow-2xl"
-style={{
-  left: 92,
-  top: 56,
-  width: 260,
-  backgroundColor: `${theme.surface}aa`,
-  borderColor: isVip ? `${vipGold}40` : theme.border,
-  backdropFilter: 'blur(16px)',
-  color: theme.text,
-}}
+            className="fixed z-50 ml-4 overflow-hidden rounded-3xl border shadow-2xl"
+            style={{
+              left: 92,
+              top: 56,
+              width: 260,
+              backgroundColor: `${theme.surface}aa`,
+              borderColor: isVip ? `${vipGold}40` : theme.border,
+              backdropFilter: 'blur(16px)',
+              color: theme.text,
+            }}
           >
             
             <div className="flex items-center gap-3 px-4 py-3">
@@ -400,8 +406,8 @@ style={{
               {[
                 {
                   icon: faGear,
-                  label: 'Settings',
-                  sub: 'Launcher preferences',
+                  label: t('settings.title', {}, 'Settings'),
+                  sub: t('settings.subtitle', {}, 'Launcher preferences'),
                   action: () => { setAccountOpen(false); onNavigate('settings'); },
                 },
                 {
@@ -458,7 +464,7 @@ style={{
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-400">
                   <FontAwesomeIcon icon={faRightFromBracket} style={{ fontSize: 12 }} />
                 </div>
-                <span className="text-[12px] font-medium text-red-400">Sign out</span>
+                <span className="text-[12px] font-medium text-red-400">{t('nav.signOut', {}, 'Sign out')}</span>
               </button>
             </div>
           </motion.div>
@@ -541,7 +547,7 @@ style={{
             type="button"
             onClick={handleQuickLaunch}
             disabled={launchState === 'launching'}
-            title="Quick Launch"
+            title={t('home.quickLaunch', {}, 'Quick Launch')}
             style={{
               backgroundColor: launchState === 'error' ? undefined : accent.hex,
               color: accent.on,
@@ -570,7 +576,7 @@ style={{
 
         {/* Nav items — drag-to-slide */}
         <NavItems
-          items={NAV_ITEMS}
+          items={navItems}
           activePage={activePage}
           onNavigate={handleNav}
           accent={accent}
@@ -584,7 +590,7 @@ style={{
           <button
             type="button"
             onClick={() => handleNav('settings')}
-            title="Settings"
+            title={t('settings.title', {}, 'Settings')}
             aria-current={activePage === 'settings' ? 'page' : undefined}
             style={{ color: activePage === 'settings' ? accent.hex : undefined }}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-ash/70 transition-colors hover:bg-white/[0.05] hover:text-bone"
@@ -594,7 +600,7 @@ style={{
           <button
             type="button"
             onClick={onExit}
-            title="Exit"
+            title={t('common.close', {}, 'Exit')}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-ash/50 transition-colors hover:bg-rust/10 hover:text-rust"
           >
             <FontAwesomeIcon icon={faRightFromBracket} style={{ fontSize: 20 }} />

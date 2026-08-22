@@ -3,6 +3,10 @@ module.exports = {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
+      screens: {
+        '3xl': '1920px',
+      },
+      
       colors: {
         void: '#000000',          // pure OLED black
         panel: '#0a0a0a',         // almost black glass

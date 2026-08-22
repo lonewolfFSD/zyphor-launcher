@@ -23,6 +23,7 @@ import OnboardingPage, { useOnboardingCheck } from './pages/OnboardingPage.jsx';
 
 import DEFAULT_BACKGROUND_VIDEO from './pages/videos/test_video.mp4';
 import SplashScreen from './components/SplashScreen.jsx';
+import { I18nProvider } from './i18n/index.jsx';
 
 import VIDEO_ROSSI from './pages/videos/rossi.mp4';
 import VIDEO_GAMING from './pages/videos/gaming.mp4';
@@ -156,11 +157,10 @@ const PAGES = {
   home:         HomePage,
   news:         NewsPage,
   friends:      FriendsPage,
-  settings:     SettingsPage,
   achievements: AchievementsPage,
   screenshots:  ScreenshotsPage,
   settings:     SettingsPage,
-  faye: FayePage,
+  faye:         FayePage,
 };
 
 const MIN_SPLASH_MS = 8000;
@@ -374,97 +374,99 @@ useEffect(() => {
   const ActivePageComponent = PAGES[activePage];
 
   return (
-   <div className="flex h-screen flex-col overflow-hidden bg-black/70">
+    <I18nProvider language={settings?.language || 'en'} onLanguageChange={(lang) => updateSettings?.({ language: lang })}>
+      <div className="flex h-screen flex-col overflow-hidden bg-black/70">
 
-    <AnimatePresence>
-      {(checking || !settings || !minSplashDone) && <SplashScreen key="splash" />}
-    </AnimatePresence>
+        <AnimatePresence>
+          {(checking || !settings || !minSplashDone) && <SplashScreen key="splash" />}
+        </AnimatePresence>
 
-    {/* Auth or app — splash covers this until ready */}
-    {!profile ? (
-  <AuthGate onAuthSuccess={(p) => { saveUid(p.uid); setProfile(p); }} />
-    ) : showOnboarding ? (
-      <OnboardingPage
-        profile={profile}
-        onComplete={() => {
-          markOnboardingComplete();
-          setShowOnboarding(false);
-        }}
-      />
-    ) : showUpdateTour && minSplashDone ? (
-      <UpdateTourPage
-        onComplete={() => {
-          markSeen();                 // write to localStorage
-          setShowUpdateTour(false);   // ← this actually removes the page
-        }}
-      />
-    ) : (
-      <>
-        {/* ── Global background — rendered once, persists across page transitions ── */}
-        <BackgroundVideo
-        key={backgroundVideoSrc + backgroundQuality}
-        src={backgroundVideoSrc}
-        active={motionOn}
-        quality={backgroundQuality}
-        videoStyle={bgVideoStyle}
-        staticPoster={bgStaticPoster}
-        />
-      <AnimatedGrid accent={accent} active={motionOn} />
+        {/* Auth or app — splash covers this until ready */}
+        {!profile ? (
+          <AuthGate onAuthSuccess={(p) => { saveUid(p.uid); setProfile(p); }} />
+        ) : showOnboarding ? (
+          <OnboardingPage
+            profile={profile}
+            onComplete={() => {
+              markOnboardingComplete();
+              setShowOnboarding(false);
+            }}
+          />
+        ) : showUpdateTour && minSplashDone ? (
+          <UpdateTourPage
+            onComplete={() => {
+              markSeen();                 // write to localStorage
+              setShowUpdateTour(false);   // ← this actually removes the page
+            }}
+          />
+        ) : (
+          <>
+            {/* ── Global background — rendered once, persists across page transitions ── */}
+            <BackgroundVideo
+              key={backgroundVideoSrc + backgroundQuality}
+              src={backgroundVideoSrc}
+              active={motionOn}
+              quality={backgroundQuality}
+              videoStyle={bgVideoStyle}
+              staticPoster={bgStaticPoster}
+            />
+            <AnimatedGrid accent={accent} active={motionOn} />
 
-      {/* ── Dev info overlay (Ctrl+`) ─────────────────────────────────────── */}
-      <AnimatePresence>
-        {showDevInfo && (
-          <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.18 }}
-          className="fixed top-10 left-1/2 z-[200] -translate-x-1/2 rounded-2xl border px-5 py-3 text-[11px] font-mono shadow-2xl"
-          style={{ backgroundColor: `${theme.surface}ee`, borderColor: theme.border, color: theme.text }}
-          >
-            <div className="flex items-center gap-6">
-              <span className="opacity-40 uppercase tracking-widest text-[9px]">Zyphor Dev</span>
-              <span>v{import.meta.env.VITE_APP_VERSION ?? '1.2.2'}</span>
-              <span style={{ color: accent.hex }}>theme: {settings?.theme ?? 'oled'}</span>
-              <span style={{ color: accent.hex }}>glass: {settings?.navStyle ?? 'glass'}</span>
-              <span>page: {activePage}</span>
-              <button onClick={() => setShowDevInfo(false)} className="opacity-40 hover:opacity-80 ml-2">✕</button>
+            {/* ── Dev info overlay (Ctrl+`) ─────────────────────────────────────── */}
+            <AnimatePresence>
+              {showDevInfo && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.18 }}
+                  className="fixed top-10 left-1/2 z-[200] -translate-x-1/2 rounded-2xl border px-5 py-3 text-[11px] font-mono shadow-2xl"
+                  style={{ backgroundColor: `${theme.surface}ee`, borderColor: theme.border, color: theme.text }}
+                >
+                  <div className="flex items-center gap-6">
+                    <span className="opacity-40 uppercase tracking-widest text-[9px]">Zyphor Dev</span>
+                    <span>v{import.meta.env.VITE_APP_VERSION ?? '1.2.2'}</span>
+                    <span style={{ color: accent.hex }}>theme: {settings?.theme ?? 'oled'}</span>
+                    <span style={{ color: accent.hex }}>glass: {settings?.navStyle ?? 'glass'}</span>
+                    <span>page: {activePage}</span>
+                    <button onClick={() => setShowDevInfo(false)} className="opacity-40 hover:opacity-80 ml-2">✕</button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <TitleBar />
+            
+
+            <div className="flex min-h-0 flex-1 gap-4 p-4">
+              <NavRail
+                activePage={activePage}
+                onNavigate={navigateTo}
+                onExit={() => window.launcherAPI.quitApp()}
+                profile={profile}
+                onLogout={() => {
+                  clearSession();
+                  setProfile(null);
+                }}
+              />
+              <main className="min-h-0 flex-1 overflow-hidden relative">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activePage}
+                    initial={{ opacity: 0, y: 20 * directionRef.current }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 * directionRef.current }}
+                    transition={{ duration: 0.2 }}
+                    className="h-full w-full"
+                  >
+                    <ActivePageComponent profile={profile} />
+                  </motion.div>
+                </AnimatePresence>
+              </main>
             </div>
-          </motion.div>
+          </>
         )}
-      </AnimatePresence>
-
-      <TitleBar />
-      
-
-      <div className="flex min-h-0 flex-1 gap-4 p-4">
-        <NavRail
-          activePage={activePage}
-          onNavigate={navigateTo}
-          onExit={() => window.launcherAPI.quitApp()}
-          profile={profile}
-          onLogout={() => {
-            clearSession();
-            setProfile(null);
-          }}
-        />
-        <main className="min-h-0 flex-1 overflow-hidden relative">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activePage}
-              initial={{ opacity: 0, y: 20 * directionRef.current }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 * directionRef.current }}
-              transition={{ duration: 0.2 }}
-              className="h-full w-full"
-              >
-              <ActivePageComponent profile={profile} />
-            </motion.div>
-          </AnimatePresence>
-        </main>
       </div>
-      </>
-    )}
-    </div>
+    </I18nProvider>
   );
 }

@@ -5,6 +5,7 @@ gsap.registerPlugin(useGSAP);
 import { AnimatePresence, motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
+import { useTranslation } from '../i18n/index.jsx';
 import { FaSearch } from 'react-icons/fa';
 import { AlertCircle, AlertTriangle, Search, X, ExternalLink, RefreshCw } from 'lucide-react';
 import GlassSurface from '../effects/GlassSurface.tsx';
@@ -92,6 +93,7 @@ function mapRelease(release) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function NewsPage() {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const theme  = THEMES[settings?.theme]   || THEMES.oled;
   const accent = ACCENTS[settings?.accent] || ACCENTS.bulb;
@@ -108,33 +110,32 @@ export default function NewsPage() {
   const [releases,      setReleases]      = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState(null);
-  const [selectedEntry, setSelectedEntry] = useState(null);
   const [search,        setSearch]        = useState('');
   const [tagFilter,     setTagFilter]     = useState('all');
+  const [selectedEntry, setSelectedEntry] = useState(null);
 
   const fetchReleases = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [listRes, latestRes] = await Promise.all([
-        fetch(`${RELEASES_URL}?per_page=100`, { headers: { Accept: 'application/vnd.github+json' } }),
-        fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } }),
-      ]);
-      if (!listRes.ok) throw new Error(`GitHub API returned ${listRes.status}`);
-      const list   = await listRes.json();
-      const latest = latestRes.ok ? await latestRes.json() : null;
-      const merged = latest ? [latest, ...list.filter(r => r.tag_name !== latest.tag_name)] : list;
-      setReleases(merged.map(mapRelease));
+      const data = await window.launcherAPI?.getReleases?.();
+      if (Array.isArray(data) && data.length) {
+        setReleases(data.map(mapRelease));
+      } else {
+        const res = await fetch('https://api.github.com/repos/lonewolfFSD/zyphor-launcher/releases');
+        if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+        const json = await res.json();
+        setReleases(json.map(mapRelease));
+      }
     } catch (err) {
-      setError(err.message);
+      setError(err.message ?? 'Failed to fetch releases.');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => { fetchReleases(); }, 1000);
-    return () => clearTimeout(timer);
+    fetchReleases();
   }, [fetchReleases]);
 
   useEffect(() => {
@@ -150,28 +151,35 @@ export default function NewsPage() {
   }, [releases]);
 
   const filteredEntries = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return releases.filter((entry) => {
-      const matchesTag = tagFilter === 'all' || entry.tags?.includes(tagFilter);
-      if (!matchesTag) return false;
-      if (!q) return true;
-      return [entry.title, ...entry.notes].join(' ').toLowerCase().includes(q);
+    return releases.filter((r) => {
+      const matchTag = tagFilter === 'all' || r.tags.includes(tagFilter);
+      const q = search.toLowerCase();
+      const matchSearch =
+        !q ||
+        r.title.toLowerCase().includes(q) ||
+        r.version.toLowerCase().includes(q) ||
+        r.body.toLowerCase().includes(q);
+      return matchTag && matchSearch;
     });
-  }, [search, tagFilter, releases]);
+  }, [releases, tagFilter, search]);
 
   return (
-    <div className="relative h-full overflow-y-auto font-['Inter']">
+    <div className="relative h-full overflow-y-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
+      <div
+        className="pointer-events-none fixed inset-0 -z-10"
+        style={{ background: `linear-gradient(to bottom, ${theme.bg}cc 0%, ${theme.bg}88 40%, ${theme.bg}cc 100%)`, opacity: 0.2 }}
+      />
       <div className="px-9 py-7">
         <div ref={headerRef} className="flex flex-col gap-4">
 
           {/* ── Header row ── */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between">
             <div>
               <h2 className="text-4xl font-medium tracking-tight text-bone" style={{ fontFamily: 'Apple Garamond' }}>
-                Updates & Patch Notes
+                {t('news.title', {}, 'Updates & Patch Notes')}
               </h2>
               <p className="mt-1 text-base text-ash/70" style={{ fontFamily: 'Apple Garamond' }}>
-                Fetched live from GitHub Releases.
+                {t('news.subtitle', {}, 'Latest announcements, patch notes, and community highlights')}
               </p>
             </div>
             <button
@@ -187,49 +195,49 @@ export default function NewsPage() {
 
           {/* ── Warning banner ── */}
           <div
-  className="flex items-start gap-2.5 rounded-2xl border px-4 py-3 text-[15px] leading-relaxed text-ash/80 backdrop-blur-sm"
-  style={{ borderColor: `${accent.hex}40`, backgroundColor: `${theme.surface}66`, fontFamily: 'Apple Garamond' }}
->
-  <AlertTriangle size={15} className="mt-1 shrink-0" style={{ color: accent.hex }} />
-  <span>Patch notes are compiled after each release and may not reflect hotfixes pushed without a full client update.</span>
-</div>
+            className="flex items-start gap-2.5 rounded-2xl border px-4 py-3 text-[15px] leading-relaxed text-ash/80 backdrop-blur-sm"
+            style={{ borderColor: `${accent.hex}40`, backgroundColor: `${theme.surface}66`, fontFamily: 'Apple Garamond' }}
+          >
+            <AlertTriangle size={15} className="mt-1 shrink-0" style={{ color: accent.hex }} />
+            <span>{t('news.cautionBanner', {}, 'Patch notes are compiled after each release and may not reflect hotfixes pushed without a full client update.')}</span>
+          </div>
 
           {/* ── Search + filter bar ── */}
           <div
-  className="flex items-center gap-0 overflow-hidden rounded-2xl border backdrop-blur-sm"
-  style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66` }}
->
-  <div className="flex w-[350px] shrink-0 items-center gap-2 border-r px-3 py-4" style={{ borderColor: theme.border }}>
-    <FaSearch size={16} className="shrink-0 text-ash/40" />
-    <input
-      type="text"
-      value={search}
-      onChange={(e) => setSearch(e.target.value)}
-      placeholder="Search…"
-      className="ml-1 w-full bg-transparent text-sm text-bone placeholder:text-ash/40 focus:outline-none"
-    />
-  </div>
-  <div className="flex flex-1 items-center gap-1.5 overflow-x-auto px-3 py-2 scrollbar-none">
-    <span className="font-['Manrope'] text-[13px] font-semibold text-ash/60">Filters:</span>
-    {[{ value: 'all', label: 'All' }, ...allTags.map((t) => ({ value: t, label: t }))].map((opt) => {
-      const active = tagFilter === opt.value;
-      return (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => setTagFilter(opt.value)}
-          style={active
-            ? { backgroundColor: accent.hex, color: accent.on, borderColor: accent.hex }
-            : { borderColor: theme.border }
-          }
-          className="shrink-0 whitespace-nowrap rounded-lg border px-5 py-1.5 text-[11px] font-medium transition-colors"
-        >
-          {opt.label}
-        </button>
-      );
-    })}
-  </div>
-</div>
+            className="flex items-center gap-0 overflow-hidden rounded-2xl border backdrop-blur-sm"
+            style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66` }}
+          >
+            <div className="flex w-[350px] shrink-0 items-center gap-2 border-r px-3 py-4" style={{ borderColor: theme.border }}>
+              <FaSearch size={16} className="shrink-0 text-ash/40" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t('news.searchPlaceholder', {}, 'Search…')}
+                className="ml-1 w-full bg-transparent text-sm text-bone placeholder:text-ash/40 focus:outline-none"
+              />
+            </div>
+            <div className="flex flex-1 items-center gap-1.5 overflow-x-auto px-3 py-2 scrollbar-none">
+              <span className="font-['Manrope'] text-[13px] font-semibold text-ash/60">{t('news.filters', {}, 'Filters:')}</span>
+              {[{ value: 'all', label: t('news.filterAll', {}, 'All') }, ...allTags.map((t) => ({ value: t, label: t }))].map((opt) => {
+                const active = tagFilter === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setTagFilter(opt.value)}
+                    style={active
+                      ? { backgroundColor: accent.hex, color: accent.on, borderColor: accent.hex }
+                      : { borderColor: theme.border }
+                    }
+                    className="shrink-0 whitespace-nowrap rounded-lg border px-5 py-1.5 text-[11px] font-medium transition-colors"
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* ── Cards grid ── */}
@@ -248,7 +256,7 @@ export default function NewsPage() {
                   style={{ backgroundColor: `${theme.surface}66`, borderColor: theme.border }}
                 >
                   <AlertCircle size={28} style={{ color: accent.hex }} />
-                  <p className="text-sm font-medium text-bone/70">Failed to load releases</p>
+                  <p className="text-sm font-medium text-bone/70">{t('news.failedToLoad', {}, 'Failed to load releases')}</p>
                   <p className="text-xs text-ash/50">{error}</p>
                   <button
                     type="button"
@@ -256,7 +264,7 @@ export default function NewsPage() {
                     className="mt-1 rounded-lg border px-4 py-1.5 text-xs font-medium text-ash/60 transition-colors hover:text-bone"
                     style={{ borderColor: theme.border }}
                   >
-                    Retry
+                    {t('common.retry', {}, 'Retry')}
                   </button>
                 </div>
               </motion.div>
@@ -268,7 +276,7 @@ export default function NewsPage() {
                     style={{ backgroundColor: `${theme.surface}66`, borderColor: `${accent.hex}66`, borderWidth: 2, borderStyle: 'solid', borderRadius: '1.2em' }}
                   >
                     <AlertCircle size={20} className="mr-2.5" style={{ color: accent.hex }} />
-                    No releases found on GitHub yet.
+                    {t('news.noReleases', {}, 'No releases found on GitHub yet.')}
                   </p>
                 )}
                 {releases.length > 0 && filteredEntries.length === 0 && (
@@ -278,7 +286,7 @@ export default function NewsPage() {
                   >
                     <Search size={28} className="text-ash/30" />
                     <p className="text-sm font-medium text-ash/60">
-                      No patch notes match
+                      {t('news.noMatches', {}, 'No patch notes match')}
                       {search && <span className="ml-1 text-bone/70">"{search}"</span>}
                       {tagFilter !== 'all' && <span className="ml-1 text-bone/70">in <span style={{ color: accent.hex }}>{tagFilter}</span></span>}
                     </p>
@@ -287,7 +295,7 @@ export default function NewsPage() {
                       onClick={() => { setSearch(''); setTagFilter('all'); }}
                       className="text-[11px] font-medium text-ash/50 underline transition-colors hover:text-bone/70"
                     >
-                      Clear filters
+                      {t('news.clearFilters', {}, 'Clear filters')}
                     </button>
                   </div>
                 )}
@@ -325,6 +333,8 @@ export default function NewsPage() {
 // ── Release card ───────────────────────────────────────────────────────────────
 
 function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
+  const { t } = useTranslation();
+
   const stabilityColor =
     entry.title.toLowerCase().includes('alpha') ? '#ef4444'
     : entry.title.toLowerCase().includes('beta') ? '#facc15'
@@ -336,20 +346,20 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
     : '#22c55e20';
 
   const stabilityLabel =
-    entry.title.toLowerCase().includes('alpha') ? 'Alpha'
-    : entry.title.toLowerCase().includes('beta') ? 'Beta'
-    : 'Stable';
+    entry.title.toLowerCase().includes('alpha') ? t('news.stability.alpha', {}, 'Alpha')
+    : entry.title.toLowerCase().includes('beta') ? t('news.stability.beta', {}, 'Beta')
+    : t('news.stability.stable', {}, 'Stable');
 
   const recommendation =
     isLatest
-      ? 'This is the latest release and is recommended for all users.'
+      ? t('news.recLatest', {}, 'This is the latest release and is recommended for all users.')
       : entry.tags.includes('major')
-      ? 'Stable major release. We always recommend using the latest version.'
+      ? t('news.recMajor', {}, 'Stable major release. We always recommend using the latest version.')
       : entry.title.toLowerCase().includes('alpha')
-      ? 'Experimental build. Not recommended for everyday use.'
+      ? t('news.recAlpha', {}, 'Experimental build. Not recommended for everyday use.')
       : entry.title.toLowerCase().includes('beta')
-      ? 'Preview build. Bugs or incomplete features may exist.'
-      : 'Stable release. Updating to the latest version is recommended.';
+      ? t('news.recBeta', {}, 'Preview build. Bugs or incomplete features may exist.')
+      : t('news.recStable', {}, 'Stable release. Updating to the latest version is recommended.');
 
   return (
     <motion.div
@@ -358,7 +368,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
       transition={{ duration: 0.3, delay: index * 0.04 }}
     >
       <GlassLayer
-        borderRadius={40}
+        borderRadius={30}
         distortionScale={-180}
         blur={40}
         className="flex flex-col overflow-hidden h-full"
@@ -372,7 +382,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
           </div>
         )}
 
-        <div className="flex flex-1 flex-col px-6 py-4 bg-black/10 rounded-[2.5em]">
+        <div className="flex flex-1 flex-col px-7 py-8 bg-black/10">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="text-xl font-medium tracking-tight text-bone" style={{ fontFamily: 'Apple Garamond' }}>
               v{entry.title}
@@ -389,7 +399,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
                   className="rounded-lg border border-transparent px-3 py-[5px] text-[9px] font-bold uppercase tracking-wide"
                   style={{ backgroundColor: accent.hex, color: accent.on }}
                 >
-                  Latest
+                  {t('news.latest', {}, 'Latest')}
                 </span>
               )}
               {entry.tags.map((tag) => (
@@ -410,7 +420,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
               style={{ borderColor: theme.border, background: `${theme.surface}99` }}
             >
               <h3 className="text-[15px] font-medium text-bone" style={{ fontFamily: 'Apple Garamond' }}>
-                Release Info
+                {t('news.releaseInfo', {}, 'Release Info')}
               </h3>
               <span
                 className="rounded-lg px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide"
@@ -422,21 +432,25 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
 
             <div className="space-y-4 px-5 py-4">
               <div className="flex flex-col gap-y-2 text-xs">
-                <span className="text-ash/50">Recommendation</span>
+                <span className="text-ash/50">{t('news.recommendation', {}, 'Recommendation')}</span>
                 <span className="text-bone/80 font-medium text-[15px] mb-1 -mt-1" style={{ fontFamily: 'Apple Garamond', lineHeight: '1.3' }}>
                   {recommendation}
                 </span>
-                <span className="text-ash/50">Download</span>
-                <span className="text-bone/80">Available from the official GitHub Releases page.</span>
+                <span className="text-ash/50">{t('news.download', {}, 'Download')}</span>
+                <span className="text-bone/80">{t('news.downloadHint', {}, 'Available from the official GitHub Releases page.')}</span>
               </div>
               <a
                 href={entry.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border px-5 py-2 text-[13px] font-medium transition-all hover:scale-[1.02]"
+                className={`inline-flex items-center gap-2 rounded-xl border px-5 py-2 text-[13px] font-medium transition-all hover:scale-[1.02] ${
+                  (isLatest || entry.title.toLowerCase().includes('alpha') || entry.title.toLowerCase().includes('beta'))
+                    ? 'opacity-0 pointer-events-none'
+                    : 'block'
+                }`}
                 style={{ borderColor: `${accent.hex}55`, color: accent.hex, fontFamily: 'Apple Garamond', backgroundColor: `${accent.hex}10` }}
               >
-                <ExternalLink size={12} /> Download this Version
+                <ExternalLink size={12} /> {t('news.downloadThisVersion', {}, 'Download this Version')}
               </a>
             </div>
           </div>
@@ -448,7 +462,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
               className="w-full rounded-xl border py-2.5 text-[14px] font-medium tracking-wide transition-colors hover:text-bone"
               style={{ borderColor: `${accent.hex}55`, color: accent.hex, backgroundColor: `${accent.hex}10`, fontFamily: 'Apple Garamond' }}
             >
-              View Full Notes
+              {t('news.viewFullNotes', {}, 'View Full Notes')}
             </button>
           </div>
         </div>
@@ -460,6 +474,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
 // ── Release modal ──────────────────────────────────────────────────────────────
 
 function ReleaseModal({ entry, theme, accent, onClose }) {
+  const { t } = useTranslation();
   return (
     <motion.div
       key="modal-backdrop"
@@ -545,7 +560,7 @@ function ReleaseModal({ entry, theme, accent, onClose }) {
               </ReactMarkdown>
             </div>
           ) : (
-            <p className="text-sm text-ash/50">No release notes provided.</p>
+            <p className="text-sm text-ash/50">{t('news.noNotesProvided', {}, 'No release notes provided.')}</p>
           )}
         </div>
       </motion.div>

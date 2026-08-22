@@ -1,32 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
+import { useTranslation, SUPPORTED_LANGUAGES } from '../i18n/index.jsx';
 import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
 import VIDEO_GAMING from './videos/Gaming.mp4';
 import VIDEO_DRAGON_TRAVELLER from './videos/Xuanwu - Dragon Traveler.mp4';
 import VIDEO_LUCY from './videos/Lucy Cyberpunk.mp4';
 import VIDEO_KALTSIT from './videos/Kaltsit.mp4';
 import VIDEO_ROSSI from './videos/rossi.mp4'
-/**
- * Add these once to your index.html <head> (or import via CSS @import) so the
- * type treatment below renders correctly:
- *
- * <link rel="preconnect" href="https://fonts.googleapis.com">
- * <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
- * <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
- *
- * Manrope carries the display/headings, Inter carries labels and body text.
- * Nothing here uses a monospace face anymore.
- */
 
 const SECTIONS = [
-  { id: 'appearance', label: 'Appearance', icon: IconAppearance },
-  { id: 'behavior',   label: 'Behavior',   icon: IconBehavior },
-  { id: 'privacy',    label: 'Privacy',     icon: IconPrivacy },
-  { id: 'storage',    label: 'Storage',     icon: IconStorage },
-  { id: 'advanced',   label: 'Advanced',    icon: IconAdvanced },
-  { id: 'hotkeys',    label: 'Hotkeys',     icon: IconKeyboard },
-  { id: 'about',      label: 'About',       icon: IconAbout },
+  { id: 'language',   label: 'Language',   key: 'settings.tabs.language',   icon: IconLanguage },
+  { id: 'appearance', label: 'Appearance', key: 'settings.tabs.appearance', icon: IconAppearance },
+  { id: 'behavior',   label: 'Behavior',   key: 'settings.tabs.behavior',   icon: IconBehavior },
+  { id: 'privacy',    label: 'Privacy',    key: 'settings.tabs.privacy',    icon: IconPrivacy },
+  { id: 'storage',    label: 'Storage',    key: 'settings.tabs.storage',    icon: IconStorage },
+  { id: 'advanced',   label: 'Advanced',   key: 'settings.tabs.advanced',   icon: IconAdvanced },
+  { id: 'hotkeys',    label: 'Hotkeys',    key: 'settings.tabs.hotkeys',    icon: IconKeyboard },
+  { id: 'about',      label: 'About',      key: 'settings.tabs.about',      icon: IconAbout },
 ];
 
 const BG_VIDEO_PRESETS = [
@@ -147,6 +138,7 @@ function StorageItemSkeleton({ theme }) {
 
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const {
     settings,
     update,
@@ -379,12 +371,13 @@ async function handleCheckUpdate() {
       {/* Left section nav */}
       <div className="w-56 shrink-0 border-r px-4 py-7" style={{ borderColor: theme.border }}>
         <h2 className="mb-6 px-2 text-[1.85em] font-medium tracking-tight text-bone" style={{ fontFamily: 'Apple Garamond'}}>
-          Settings
+          {t('settings.title', {}, 'Settings')}
         </h2>
         <nav className="flex flex-col gap-1">
           {SECTIONS.map((s) => {
             const Icon = s.icon;
             const active = activeSection === s.id;
+            const label = s.key ? t(s.key, {}, s.label) : s.label;
             return (
               <button
                 key={s.id}
@@ -399,7 +392,7 @@ async function handleCheckUpdate() {
                   className={`h-4 w-4 shrink-0 ${active ? '' : 'text-ash/70'}`}
                   style={{ color: active ? accent.on : undefined }}
                 />
-                {s.label}
+                {label}
               </button>
             );
           })}
@@ -420,15 +413,138 @@ async function handleCheckUpdate() {
             exit={motionOn ? { opacity: 0, y: -8 } : {}}
             transition={{ duration: 0.22, ease: 'easeOut' }}
           >
+        {activeSection === 'language' && (
+          <Section
+            title={t('settings.language.title', {}, 'Language & Localization')}
+            description={t('settings.language.description', {}, 'Choose your preferred language for the launcher user interface.')}
+          >
+            <div className="col-span-full flex flex-col gap-5">
+              {/* Active language banner */}
+              <div
+                className="flex items-center justify-between rounded-2xl border p-5 transition-all"
+                style={{
+                  borderColor: theme.border,
+                  backgroundColor: `${theme.bg}99`,
+                }}
+              >
+                <div className="flex items-center gap-4">
+                  <span className="text-3xl select-none">
+                    {SUPPORTED_LANGUAGES.find((l) => l.code === (settings.language || 'en'))?.flag || '🌐'}
+                  </span>
+                  <div>
+                    <p className="text-xs uppercase tracking-wider font-semibold text-ash/50">
+                      {t('settings.language.current', {}, 'Current Language')}
+                    </p>
+                    <p className="text-base font-bold text-bone mt-0.5">
+                      {SUPPORTED_LANGUAGES.find((l) => l.code === (settings.language || 'en'))?.nativeName || 'English'}
+                      <span className="ml-2 text-xs font-normal text-ash/60">
+                        ({SUPPORTED_LANGUAGES.find((l) => l.code === (settings.language || 'en'))?.name || 'English'})
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider"
+                  style={{
+                    backgroundColor: `${accent.hex}22`,
+                    color: accent.hex,
+                    border: `1px solid ${accent.hex}44`,
+                  }}
+                >
+                  {(settings.language || 'en').toUpperCase()}
+                </div>
+              </div>
+
+              {/* Grid of languages */}
+              <div>
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/50">
+                  {t('settings.language.select', {}, 'Available Languages')}
+                </p>
+                <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {SUPPORTED_LANGUAGES.map((lang) => {
+                    const isSelected = (settings.language || 'en') === lang.code;
+                    return (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        onClick={() => {
+                          update({ language: lang.code });
+                          setToast(`${lang.nativeName} (${lang.name})`);
+                        }}
+                        className="group relative flex items-center justify-between rounded-xl border p-4 text-left transition-all hover:scale-[1.01] active:scale-[0.99]"
+                        style={{
+                          borderColor: isSelected ? accent.hex : theme.border,
+                          backgroundColor: isSelected ? `${accent.hex}14` : `${theme.bg}66`,
+                          boxShadow: isSelected ? `0 0 16px ${accent.hex}25` : 'none',
+                        }}
+                      >
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <span className="text-2xl shrink-0 select-none">{lang.flag}</span>
+                          <div className="min-w-0">
+                            <p
+                              className="text-[13px] font-semibold truncate transition-colors"
+                              style={{ color: isSelected ? accent.hex : theme.text }}
+                            >
+                              {lang.nativeName}
+                            </p>
+                            <p className="text-[11px] text-ash/50 truncate">{lang.name}</p>
+                          </div>
+                        </div>
+
+                        {isSelected && (
+                          <div
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+                            style={{ backgroundColor: accent.hex, color: accent.on }}
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </Section>
+        )}
+
         {activeSection === 'appearance' && (
-          <Section title="Appearance" description="How the launcher looks on your screen.">
+          <Section title={t('settings.appearance.title', {}, 'Appearance')} description={t('settings.appearance.description', {}, 'How the launcher looks on your screen.')}>
           {/* Two-column layout: settings left, preview right */}
           <div className="col-span-full flex gap-6 items-start">
 
             {/* LEFT — all settings + carousel */}
             <div className="flex-1 min-w-0 flex flex-col gap-3" style={{ maxWidth: '680px' }}>
 
-            <SettingRow label="Theme" hint="OLED Black is the default and recommended.">
+            <SettingRow
+              label={t('settings.language.select', {}, 'Interface Language')}
+              hint={t('settings.language.description', {}, 'Change the language of the launcher interface.')}
+            >
+              <select
+                value={settings.language || 'en'}
+                onChange={(e) => {
+                  update({ language: e.target.value });
+                  const found = SUPPORTED_LANGUAGES.find((l) => l.code === e.target.value);
+                  if (found) setToast(`${found.nativeName} (${found.name})`);
+                }}
+                className="rounded-lg border px-3 py-1.5 text-[12px] font-medium outline-none transition-colors"
+                style={{
+                  backgroundColor: theme.bg,
+                  borderColor: theme.border,
+                  color: theme.text,
+                }}
+              >
+                {SUPPORTED_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code} style={{ backgroundColor: '#181818', color: '#fff' }}>
+                    {l.flag} {l.nativeName} ({l.name})
+                  </option>
+                ))}
+              </select>
+            </SettingRow>
+
+            <SettingRow label={t('settings.appearance.theme', {}, 'Theme')} hint={t('settings.appearance.themeDesc', {}, 'OLED Black is the default and recommended.')}>
               <div className="flex flex-col items-end gap-2">
                 <div className="grid grid-cols-6 justify-end gap-2" style={{ maxWidth: '100%' }}>
                   {Object.entries(THEMES).map(([key, t]) => (
@@ -451,7 +567,7 @@ async function handleCheckUpdate() {
               </div>
             </SettingRow>
 
-            <SettingRow label="Accent color">
+            <SettingRow label={t('settings.appearance.accent', {}, 'Accent color')}>
               <div className="flex flex-col items-end gap-2">
                 <div className="flex flex-wrap justify-end gap-3" style={{ maxWidth: '260px' }}>
                   {Object.entries(ACCENTS).map(([key, a]) => (
@@ -473,7 +589,7 @@ async function handleCheckUpdate() {
               </div>
             </SettingRow>
 
-            <SettingRow label="UI scale">
+            <SettingRow label={t('settings.appearance.uiScale', {}, 'UI scale')}>
               <Dropdown
                 value={settings.uiScale}
                 onChange={(v) => update({ uiScale: v })}
@@ -488,7 +604,7 @@ async function handleCheckUpdate() {
               />
             </SettingRow>
 
-            <SettingRow label="Text size">
+            <SettingRow label={t('settings.appearance.fontSize', {}, 'Text size')}>
               <Dropdown
                 value={settings.fontSize}
                 onChange={(v) => update({ fontSize: v })}
@@ -502,16 +618,16 @@ async function handleCheckUpdate() {
               />
             </SettingRow>
 
-            <SettingRow label="Show animations">
+            <SettingRow label={t('settings.appearance.animations', {}, 'Show animations')}>
               <Toggle checked={settings.animations} onChange={(checked) => update({ animations: checked })} />
             </SettingRow>
 
-            <SettingRow label="Reduce motion" hint="Minimizes transitions for motion sensitivity.">
+            <SettingRow label={t('settings.appearance.reduceMotion', {}, 'Reduce motion')} hint={t('settings.appearance.reduceMotionDesc', {}, 'Minimizes transitions for motion sensitivity.')}>
               <Toggle checked={settings.reduceMotion} onChange={(checked) => update({ reduceMotion: checked })} />
             </SettingRow>
 
             <SettingRow
-  label="Interface Style"
+  label={t('settings.appearance.navStyle', {}, 'Interface Style')}
   hint={
     <>
       Choose the visual appearance of the launcher interface. <br />
@@ -561,7 +677,7 @@ async function handleCheckUpdate() {
   </div>
 </SettingRow>
 
-            <SettingRow label="Background quality" hint="SD compresses the video to a lower resolution. Static shows only a still frame.">
+            <SettingRow label={t('settings.appearance.backgroundQuality', {}, 'Background quality')} hint={t('settings.appearance.backgroundQualityDesc', {}, 'SD compresses the video to a lower resolution. Static shows only a still frame.')}>
               <div className="flex gap-1.5">
                 {VIDEO_QUALITY_OPTIONS.map((q) => {
                   const isActive = (settings.backgroundQuality ?? 'hd') === q.id;
@@ -587,7 +703,7 @@ async function handleCheckUpdate() {
             {/* ── Background video carousel ── */}
             <div>
                 <div className="mb-3 mt-4 flex items-center justify-between">
-                  <p className="text-[14px] font-medium text-bone/90">Background video</p>
+                  <p className="text-[14px] font-medium text-bone/90">{t('settings.appearance.backgroundVideo', {}, 'Background video')}</p>
                     <div className='flex gap-3'>
                                           <button
                       type="button"
@@ -598,7 +714,7 @@ async function handleCheckUpdate() {
                         borderRadius: '7px', padding: '4px 14px', cursor: 'pointer',
                       }}
                     >
-                      Browse all
+                      {t('common.browseAll', {}, 'Browse all')}
                     </button>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -922,72 +1038,72 @@ async function handleCheckUpdate() {
         )}
 
         {activeSection === 'behavior' && (
-          <Section title="Behavior" description="How the launcher runs on your machine.">
-            <SettingRow label="Launch on startup" hint="Start the launcher when Windows starts.">
+          <Section title={t('settings.sections.behavior', {}, 'Behavior')} description={t('settings.sections.behaviorDesc', {}, 'How the launcher runs on your machine.')}>
+            <SettingRow label={t('settings.behavior.launchOnStartup', {}, 'Launch on startup')} hint={t('settings.behavior.launchOnStartupDesc', {}, 'Start the launcher when Windows starts.')}>
               <Toggle
                 checked={settings.launchOnStartup}
                 onChange={(checked) => update({ launchOnStartup: checked })}
                 />
             </SettingRow>
 
-            <SettingRow label="Minimize to tray" hint="Keep the launcher running in the system tray.">
+            <SettingRow label={t('settings.behavior.minimizeToTray', {}, 'Minimize to tray')} hint={t('settings.behavior.minimizeToTrayDesc', {}, 'Keep the launcher running in the system tray.')}>
               <Toggle
                 checked={settings.minimizeToTray}
                 onChange={(checked) => update({ minimizeToTray: checked })}
               />
             </SettingRow>
 
-            <SettingRow label="Close to tray" hint="Closing the window sends it to the tray instead of quitting.">
+            <SettingRow label={t('settings.behavior.closeToTray', {}, 'Close to tray')} hint={t('settings.behavior.closeToTrayDesc', {}, 'Closing the window sends it to the tray instead of quitting.')}>
               <Toggle checked={settings.closeToTray} onChange={(checked) => update({ closeToTray: checked })} />
             </SettingRow>
 
-            <SettingRow label="Hardware acceleration">
+            <SettingRow label={t('settings.behavior.hardwareAcceleration', {}, 'Hardware acceleration')}>
               <Toggle
                 checked={settings.hardwareAcceleration}
                 onChange={(checked) => update({ hardwareAcceleration: checked })}
               />
             </SettingRow>
 
-            <SettingRow label="Desktop notifications" hint="Update and news alerts.">
+            <SettingRow label={t('settings.behavior.desktopNotifications', {}, 'Desktop notifications')} hint={t('settings.behavior.desktopNotificationsDesc', {}, 'Update and news alerts.')}>
               <Toggle
                 checked={settings.desktopNotifications}
                 onChange={(checked) => update({ desktopNotifications: checked })}
               />
             </SettingRow>
 
-            <SettingRow label="Automatic updates">
+            <SettingRow label={t('settings.behavior.autoUpdate', {}, 'Automatic updates')}>
               <Toggle checked={settings.autoUpdate} onChange={(checked) => update({ autoUpdate: checked })} />
             </SettingRow>
 
-            <SettingRow label="Update channel">
+            <SettingRow label={t('settings.behavior.updateChannel', {}, 'Update channel')}>
               <Dropdown
                 value={settings.updateChannel}
                 onChange={(v) => update({ updateChannel: v })}
                 theme={theme}
                 accent={accent}
                 options={[
-                  { value: 'stable', label: 'Stable' },
+                  { value: 'stable', label: t('settings.about.stable', {}, 'Stable') },
                   { value: 'beta', label: 'Beta' },
                 ]}
               />
             </SettingRow>
-            <SettingRow label="Fullscreen on launch" hint="Automatically enters fullscreen after the splash screen finishes.">
+            <SettingRow label={t('settings.behavior.fullscreenOnLaunch', {}, 'Fullscreen on launch')} hint={t('settings.behavior.fullscreenOnLaunchDesc', {}, 'Automatically enters fullscreen after the splash screen finishes.')}>
               <Toggle
                 checked={settings.fullscreenOnLaunch ?? false}
                 onChange={(checked) => {
                   update({ fullscreenOnLaunch: checked });
-                  window.launcherAPI?.setFullscreen?.(checked);  // ← add this
+                  window.launcherAPI?.setFullscreen?.(checked);
                 }}
               />
             </SettingRow>
             <div className='mt-6'>
-              <p className='text-gray-500 text-sm font-bold font-[Manrope] mb-2'>Faye AI</p>
+              <p className='text-gray-500 text-sm font-bold font-[Manrope] mb-2'>{t('faye.title', {}, 'Faye AI')}</p>
 
             <SettingRow
-  label="Faye AI Model"
+  label={t('faye.model', {}, 'Faye AI Model')}
   hint={
     <>
-      Choose the Faye AI model based on your system's available RAM.
+      {t('faye.modelHint', {}, "Choose the Faye AI model based on your system's available RAM.")}
       <p
     style={{
       fontSize: 12,
@@ -995,10 +1111,10 @@ async function handleCheckUpdate() {
       marginTop: 3,
     }}
     >
-    Detected RAM: {ramGB ?? '…'} GB
+    {t('faye.detectedRam', { ram: ramGB ?? '…' }, `Detected RAM: ${ramGB ?? '…'} GB`)}
   </p>
       <span className="block mt-3" style={{ color: '#fbbf24' }}>
-        ⚠️ Balanced uses more RAM and Quality requires significantly more RAM. Lower-end systems may experience reduced performance.
+        {t('faye.ramWarning', {}, '⚠️ Balanced uses more RAM and Quality requires significantly more RAM. Lower-end systems may experience reduced performance.')}
       </span>
         
     </>
@@ -1062,11 +1178,11 @@ async function handleCheckUpdate() {
           }}
           title={
             disabled
-            ? `Needs more RAM (you have ~${ramGB} GB)`
-            : m.desc
+              ? `Needs more RAM (you have ~${ramGB} GB)`
+              : m.desc
           }
           >
-          <div>{m.label}</div>
+          <div>{t(`faye.${m.id}`, {}, m.label)}</div>
 
           <div style={{ fontSize: '10px', opacity: 0.7, marginTop: 2 }}>
             {m.displayModel}
@@ -1084,20 +1200,20 @@ async function handleCheckUpdate() {
     style={{ borderColor: modelDownloadState === 'error' ? '#ef4444' : accent.hex + '55', backgroundColor: `${accent.hex}0d` }}
   >
     {modelDownloadState === 'checking' && (
-      <p className="text-[13px] text-bone/70">Checking if <span style={{ color: accent.hex }}>{pendingModel.label}</span> is available…</p>
+      <p className="text-[13px] text-bone/70">{t('faye.checkingModel', { model: pendingModel.label }, `Checking if ${pendingModel.label} is available…`)}</p>
     )}
 
     {modelDownloadState === 'not-found' && (
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[13px] font-semibold text-bone">
-            <span style={{ color: accent.hex }}>{pendingModel.label}</span> model not downloaded
+            <span style={{ color: accent.hex }}>{pendingModel.label}</span> {t('faye.notDownloaded', {}, 'model not downloaded')}
           </p>
           <p className="mt-1 text-[12px] text-ash/60">
-            {pendingModel.displayModel} needs to be downloaded before Faye can use it.
+            {t('faye.needDownload', { model: pendingModel.displayModel }, `${pendingModel.displayModel} needs to be downloaded before Faye can use it.`)}
             {settings.fayeModel && settings.fayeModel !== pendingModel.id && (
               <span className="block mt-1" style={{ color: '#fbbf24' }}>
-                ⚠️ Your current model will be removed to free up space.
+                {t('faye.replaceWarning', {}, '⚠️ Your current model will be removed to free up space.')}
               </span>
             )}
           </p>
@@ -1109,7 +1225,7 @@ async function handleCheckUpdate() {
             className="rounded-lg px-3 py-1.5 text-[12px] text-ash/60 hover:text-bone transition-colors"
             style={{ background: 'rgba(255,255,255,0.05)' }}
           >
-            Cancel
+            {t('common.cancel', {}, 'Cancel')}
           </button>
           <button
             type="button"
@@ -1141,7 +1257,7 @@ async function handleCheckUpdate() {
             className="rounded-lg px-4 py-1.5 text-[12px] font-semibold transition-colors"
             style={{ background: accent.hex, color: accent.on }}
           >
-            Download
+            {t('common.download', {}, 'Download')}
           </button>
         </div>
       </div>
@@ -1150,7 +1266,7 @@ async function handleCheckUpdate() {
     {modelDownloadState === 'downloading' && (
       <div>
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[13px] text-bone/80">Downloading <span style={{ color: accent.hex }}>{pendingModel.label}</span>…</p>
+          <p className="text-[13px] text-bone/80">{t('faye.downloadingModel', { model: pendingModel.label }, `Downloading ${pendingModel.label}…`)}</p>
           <p className="text-[12px] text-ash/60">{modelDownloadProgress}%</p>
         </div>
         <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
@@ -1159,23 +1275,23 @@ async function handleCheckUpdate() {
             style={{ width: `${modelDownloadProgress}%`, backgroundColor: accent.hex }}
           />
         </div>
-        <p className="mt-2 text-[11px] text-ash/40">This may take a few minutes depending on your connection.</p>
+        <p className="mt-2 text-[11px] text-ash/40">{t('faye.downloadTime', {}, 'This may take a few minutes depending on your connection.')}</p>
       </div>
     )}
 
     {modelDownloadState === 'done' && (
-      <p className="text-[13px]" style={{ color: accent.hex }}>✓ {pendingModel.label} ready — Faye will use it on next launch.</p>
+      <p className="text-[13px]" style={{ color: accent.hex }}>{t('faye.modelReady', { model: pendingModel.label }, `✓ ${pendingModel.label} ready — Faye will use it on next launch.`)}</p>
     )}
 
     {modelDownloadState === 'error' && (
       <div className="flex items-center justify-between">
-        <p className="text-[13px] text-red-400">Download failed. Check your connection or Ollama install.</p>
+        <p className="text-[13px] text-red-400">{t('faye.downloadError', {}, 'Download failed. Check your connection or Ollama install.')}</p>
         <button
           type="button"
           onClick={() => { setModelDownloadState('idle'); setPendingModel(null); }}
           className="text-[12px] text-ash/50 hover:text-bone transition-colors"
         >
-          Dismiss
+          {t('common.dismiss', {}, 'Dismiss')}
         </button>
       </div>
     )}
@@ -1187,14 +1303,14 @@ async function handleCheckUpdate() {
         )}
 
         {activeSection === 'privacy' && (
-          <Section title="Privacy" description="Control what launcher checks, scans, and reports.">
+          <Section title={t('settings.sections.privacy', {}, 'Privacy')} description={t('settings.sections.privacyDesc', {}, 'Control what launcher checks, scans, and reports.')}>
 
             {/* Game integrity */}
             <div className="col-span-full">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">Game integrity</p>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">{t('settings.privacy.gameIntegrity', {}, 'Game integrity')}</p>
             </div>
 
-            <SettingRow label="Verify game files" hint="Scans your install folder and cross-checks file hashes against the manifest.">
+            <SettingRow label={t('settings.privacy.verifyFiles', {}, 'Verify game files')} hint={t('settings.privacy.verifyFilesDesc', {}, 'Scans your install folder and cross-checks file hashes against the manifest.')}>
               <ScanButton
                 state={scanState.gameFiles}
                 onScan={async () => {
@@ -1204,13 +1320,13 @@ async function handleCheckUpdate() {
                   setScanState(s => ({ ...s, gameFiles: ok ? 'done' : 'error' }));
                   setToast(ok ? 'Game files verified — all good' : 'Some files failed verification');
                 }}
-                doneLabel="Verified"
-                scanLabel="Verify now"
+                doneLabel={t('settings.privacy.verified', {}, 'Verified')}
+                scanLabel={t('settings.privacy.verifyNow', {}, 'Verify now')}
                 accent={accent}
               />
             </SettingRow>
 
-            <SettingRow label="Locate games via Steam" hint="Searches your Steam library paths for zyphor titles. Useful if you moved the install.">
+            <SettingRow label={t('settings.privacy.findSteam', {}, 'Locate games via Steam')} hint={t('settings.privacy.findSteamDesc', {}, 'Searches your Steam library paths for zyphor titles. Useful if you moved the install.')}>
               <ScanButton
                 state={scanState.steamExe}
                 onScan={async () => {
@@ -1220,13 +1336,13 @@ async function handleCheckUpdate() {
                   setScanState(s => ({ ...s, steamExe: path ? 'done' : 'error' }));
                   setToast(path ? `Found: ${path}` : 'STAY.exe not found in Steam library');
                 }}
-                doneLabel="Found"
-                scanLabel="Search Steam"
+                doneLabel={t('settings.privacy.found', {}, 'Found')}
+                scanLabel={t('settings.privacy.searchSteam', {}, 'Search Steam')}
                 accent={accent}
               />
             </SettingRow>
 
-            <SettingRow label="Malware scan" hint="Runs a quick hash check of launcher binaries against known-good signatures.">
+            <SettingRow label={t('settings.privacy.malwareScan', {}, 'Malware scan')} hint={t('settings.privacy.malwareScanDesc', {}, 'Runs a quick hash check of launcher binaries against known-good signatures.')}>
               <ScanButton
                 state={scanState.malware}
                 onScan={async () => {
@@ -1236,8 +1352,8 @@ async function handleCheckUpdate() {
                   setScanState(s => ({ ...s, malware: clean ? 'done' : 'error' }));
                   setToast(clean ? 'No threats detected' : 'Suspicious files found — check logs');
                 }}
-                doneLabel="Clean"
-                scanLabel="Scan now"
+                doneLabel={t('settings.privacy.clean', {}, 'Clean')}
+                scanLabel={t('settings.privacy.scanNow', {}, 'Scan now')}
                 accent={accent}
                 dangerOnError
               />
@@ -1245,31 +1361,31 @@ async function handleCheckUpdate() {
 
             {/* Data & analytics */}
             <div className="col-span-full mt-2">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">Data &amp; analytics</p>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">{t('settings.privacy.dataAnalytics', {}, 'Data & analytics')}</p>
             </div>
 
-            <SettingRow label="User analytics" hint="Shares anonymous usage data to help improve the launcher experience.">
+            <SettingRow label={t('settings.privacy.analytics', {}, 'User analytics')} hint={t('settings.privacy.analyticsDesc', {}, 'Shares anonymous usage data to help improve the launcher experience.')}>
               <Toggle
                 checked={settings.userAnalytics ?? false}
                 onChange={(checked) => { update({ userAnalytics: checked }); setToast(checked ? 'Analytics enabled' : 'Analytics disabled'); }}
               />
             </SettingRow>
 
-            <SettingRow label="Crash reports" hint="Automatically sends crash logs so issues can be investigated faster.">
+            <SettingRow label={t('settings.privacy.crashReports', {}, 'Crash reports')} hint={t('settings.privacy.crashReportsDesc', {}, 'Automatically sends crash logs so issues can be investigated faster.')}>
               <Toggle
                 checked={settings.crashReports ?? true}
                 onChange={(checked) => { update({ crashReports: checked }); setToast(checked ? 'Crash reports enabled' : 'Crash reports disabled'); }}
               />
             </SettingRow>
 
-            <SettingRow label="Hardware diagnostics" hint="Sends GPU, CPU, and RAM info alongside crash reports.">
+            <SettingRow label={t('settings.privacy.diagnostics', {}, 'Hardware diagnostics')} hint={t('settings.privacy.diagnosticsDesc', {}, 'Sends GPU, CPU, and RAM info alongside crash reports.')}>
               <Toggle
                 checked={settings.hardwareId}
                 onChange={(checked) => { update({ hardwareId: checked }); setToast(checked ? 'Hardware diagnostics on' : 'Hardware diagnostics off'); }}
               />
             </SettingRow>
 
-            <SettingRow label="Personalised news &amp; offers" hint="Shows content tailored to your play history in the launcher home screen.">
+            <SettingRow label={t('settings.privacy.personalised', {}, 'Personalised news & offers')} hint={t('settings.privacy.personalisedDesc', {}, 'Shows content tailored to your play history in the launcher home screen.')}>
               <Toggle
                 checked={settings.personalisedContent ?? true}
                 onChange={(checked) => { update({ personalisedContent: checked }); setToast(checked ? 'Personalised content on' : 'Personalised content off'); }}
@@ -1278,17 +1394,17 @@ async function handleCheckUpdate() {
 
             {/* Session */}
             <div className="col-span-full mt-2">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">Session</p>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">{t('settings.privacy.session', {}, 'Session')}</p>
             </div>
 
-            <SettingRow label="Remember login" hint="Keeps you signed in between launcher restarts.">
+            <SettingRow label={t('settings.privacy.rememberLogin', {}, 'Remember login')} hint={t('settings.privacy.rememberLoginDesc', {}, 'Keeps you signed in between launcher restarts.')}>
               <Toggle
                 checked={settings.rememberLogin ?? true}
                 onChange={(checked) => { update({ rememberLogin: checked }); setToast(checked ? 'Login will be remembered' : 'Login will not be remembered'); }}
               />
             </SettingRow>
 
-            <SettingRow label="Clear session data" hint="Signs you out and removes all cached login tokens.">
+            <SettingRow label={t('settings.privacy.clearSession', {}, 'Clear session data')} hint={t('settings.privacy.clearSessionDesc', {}, 'Signs you out and removes all cached login tokens.')}>
               <ActionButton
                 variant="danger"
                 onClick={() => {
@@ -1296,7 +1412,7 @@ async function handleCheckUpdate() {
                   setToast('Session data cleared');
                 }}
               >
-                Clear now
+                {t('common.clear', {}, 'Clear now')}
               </ActionButton>
             </SettingRow>
 
@@ -1308,8 +1424,8 @@ async function handleCheckUpdate() {
             {/* Header */}
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h3 className="font-['Manrope'] text-lg font-bold tracking-tight text-bone">Storage</h3>
-                <p className="mt-0.5 text-[13px] text-ash/60">See where disk space is used and remove instances</p>
+                <h3 className="font-['Manrope'] text-lg font-bold tracking-tight text-bone">{t('settings.sections.storage', {}, 'Storage')}</h3>
+                <p className="mt-0.5 text-[13px] text-ash/60">{t('settings.sections.storageDesc', {}, 'See where disk space is used and remove instances')}</p>
               </div>
               <button
                 type="button"
@@ -1318,23 +1434,23 @@ async function handleCheckUpdate() {
                 className="rounded-lg border px-3 py-1.5 text-[11px] font-medium text-ash transition-colors hover:text-bone disabled:cursor-wait disabled:opacity-60"
                 style={{ borderColor: theme.border }}
               >
-                {diskStatus === 'loading' ? 'Scanning…' : 'Rescan'}
+                {diskStatus === 'loading' ? t('common.loading', {}, 'Scanning…') : t('common.retry', {}, 'Rescan')}
               </button>
             </div>
 
             {diskStatus === 'unavailable' && (
               <div className="rounded-xl border border-dashed p-5 text-center" style={{ borderColor: theme.border }}>
-                <p className="text-[13px] font-medium text-bone/80">Storage info isn't available</p>
+                <p className="text-[13px] font-medium text-bone/80">{t('settings.storage.unavailable', {}, "Storage info isn't available")}</p>
                 <p className="mt-1 text-[12px] text-ash/50">
-                  Needs <code className="text-ash/70">getDiskItems</code> / <code className="text-ash/70">getDiskSpace</code> APIs.
+                  {t('settings.storage.unavailableDesc', {}, 'Needs storage APIs.')}
                 </p>
               </div>
             )}
 
             {diskStatus === 'error' && (
               <div className="rounded-xl border p-5 text-center" style={{ borderColor: theme.border }}>
-                <p className="text-[13px] font-medium text-rust">Couldn't read disk usage</p>
-                <p className="mt-1 text-[12px] text-ash/50">Check that the install folder still exists, then rescan.</p>
+                <p className="text-[13px] font-medium text-rust">{t('settings.storage.readError', {}, "Couldn't read disk usage")}</p>
+                <p className="mt-1 text-[12px] text-ash/50">{t('settings.storage.readErrorDesc', {}, 'Check that the install folder still exists, then rescan.')}</p>
               </div>
             )}
 
@@ -1348,12 +1464,12 @@ async function handleCheckUpdate() {
                       <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: theme.border }}>
                         <IconStorage className="h-4 w-4 text-bone" />
                       </div>
-                      <p className="text-[13px] font-semibold text-bone">Location</p>
+                      <p className="text-[13px] font-semibold text-bone">{t('settings.storage.location', {}, 'Location')}</p>
                     </div>
                     <span className="text-[12px] font-medium text-ash/60">
                       {hasDiskTotals
-                        ? `${(diskFreeMB / 1024).toFixed(1)} GB free of ${(diskTotalMB / 1024).toFixed(1)} GB`
-                        : 'Calculating…'}
+                        ? `${(diskFreeMB / 1024).toFixed(1)} GB ${t('settings.storage.free', {}, 'free')} / ${(diskTotalMB / 1024).toFixed(1)} GB`
+                        : t('common.loading', {}, 'Calculating…')}
                     </span>
                   </div>
 
@@ -1379,9 +1495,9 @@ async function handleCheckUpdate() {
                         </div>
                       </div>
                       <div className="mt-2.5 flex items-center gap-5 text-[11px]">
-                        <LegendDot color={usedColor} label="Used" value={`${(usedMB / 1024).toFixed(1)} GB`} />
-                        <LegendDot color={accent.hex} label="Launcher" value={`${launcherMB.toFixed(0)} MB`} />
-                        <LegendDot color="rgba(255,255,255,0.2)" label="Free" value={`${(diskFreeMB / 1024).toFixed(1)} GB`} />
+                        <LegendDot color={usedColor} label={t('settings.storage.used', {}, 'Used')} value={`${(usedMB / 1024).toFixed(1)} GB`} />
+                        <LegendDot color={accent.hex} label={t('settings.storage.launcher', {}, 'Launcher')} value={`${launcherMB.toFixed(0)} MB`} />
+                        <LegendDot color="rgba(255,255,255,0.2)" label={t('settings.storage.free', {}, 'Free')} value={`${(diskFreeMB / 1024).toFixed(1)} GB`} />
                       </div>
                     </div>
                     );
@@ -1392,7 +1508,7 @@ async function handleCheckUpdate() {
                 <div className="mt-6">
                   <div className="mb-3 flex items-center justify-between">
                     <p className="text-[13px] font-semibold text-bone">
-                      Items <span className="ml-1 text-ash/50">{items.length}</span>
+                      {t('settings.storage.items', {}, 'Items')} <span className="ml-1 text-ash/50">{items.length}</span>
                     </p>
                     <div className="flex items-center gap-2">
                       <Dropdown
@@ -1402,8 +1518,8 @@ async function handleCheckUpdate() {
                         accent={accent}
                         className="w-36"
                         options={[
-                          { value: 'size', label: 'Size on disk' },
-                          { value: 'name', label: 'Name' },
+                          { value: 'size', label: t('settings.storage.sizeOnDisk', {}, 'Size on disk') },
+                          { value: 'name', label: t('settings.storage.name', {}, 'Name') },
                         ]}
                       />
 
@@ -1412,7 +1528,7 @@ async function handleCheckUpdate() {
 
                   {items.length === 0 && diskStatus === 'ready' && (
                     <p className="mt-3 text-[12px] text-ash/50">
-                      Nothing found — try Rescan after the game finishes installing.
+                      {t('settings.storage.nothingFound', {}, 'Nothing found — try Rescan after the game finishes installing.')}
                     </p>
                   )}
 
@@ -1443,14 +1559,14 @@ async function handleCheckUpdate() {
                                   <p className="text-[13px] font-medium text-bone/90 truncate">{item.name}</p>
                                   {item.required && (
                                     <span className="flex shrink-0 items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ash/50">
-                                      <IconLock className="h-2.5 w-2.5" /> Required
+                                      <IconLock className="h-2.5 w-2.5" /> {t('settings.storage.required', {}, 'Required')}
                                     </span>
                                   )}
                                 </div>
                                 <p className="mt-0.5 text-[11px] text-ash/40 truncate">
                                   {item.path}
                                   {item.lastPlayed && (
-                                    <span className="ml-2">Last played {item.lastPlayed}</span>
+                                    <span className="ml-2">{t('settings.storage.lastPlayed', { date: item.lastPlayed }, `Last played ${item.lastPlayed}`)}</span>
                                   )}
                                 </p>
                               </div>
@@ -1486,20 +1602,20 @@ async function handleCheckUpdate() {
 
             {/* Bottom utilities */}
             <div className="mt-6 flex flex-col gap-3">
-              <SettingRow label="Download cache" hint="Temporary files used while updating.">
+              <SettingRow label={t('settings.storage.clearCache', {}, 'Download cache')} hint={t('settings.storage.clearCacheDesc', {}, 'Temporary files used while updating.')}>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-ash">{cacheSize} MB</span>
-                  <ActionButton onClick={clearCache} variant="danger">Clear cache</ActionButton>
+                  <ActionButton onClick={clearCache} variant="danger">{t('settings.storage.clearCacheBtn', {}, 'Clear cache')}</ActionButton>
                 </div>
               </SettingRow>
-              <SettingRow label="Logs" hint="Crash and debug logs.">
-                <ActionButton onClick={openLogsFolder}>Open logs folder</ActionButton>
+              <SettingRow label={t('settings.storage.logs', {}, 'Logs')} hint={t('settings.storage.logsDesc', {}, 'Crash and debug logs.')}>
+                <ActionButton onClick={openLogsFolder}>{t('settings.storage.openLogs', {}, 'Open logs folder')}</ActionButton>
               </SettingRow>
-              <SettingRow label="Backup settings" hint="Save or load your launcher configuration as a file.">
+              <SettingRow label={t('settings.storage.backup', {}, 'Backup settings')} hint={t('settings.storage.backupDesc', {}, 'Save or load your launcher configuration as a file.')}>
                 <div className="flex items-center gap-2">
-                  <ActionButton onClick={exportSettings}>Export</ActionButton>
+                  <ActionButton onClick={exportSettings}>{t('common.export', {}, 'Export')}</ActionButton>
                   <label>
-                    <ActionButton as="span">Import</ActionButton>
+                    <ActionButton as="span">{t('common.import', {}, 'Import')}</ActionButton>
                     <input type="file" accept="application/json" onChange={importSettings} className="hidden" />
                   </label>
                 </div>
@@ -1509,20 +1625,20 @@ async function handleCheckUpdate() {
         )}
 
         {activeSection === 'advanced' && (
-          <Section title="Advanced" description="For debugging and troubleshooting.">
-            <SettingRow label="Developer mode" hint="Shows extra debug information.">
+          <Section title={t('settings.sections.advanced', {}, 'Advanced')} description={t('settings.sections.advancedDesc', {}, 'For debugging and troubleshooting.')}>
+            <SettingRow label={t('settings.advanced.developerMode', {}, 'Developer mode')} hint={t('settings.advanced.developerModeDesc', {}, 'Shows extra debug information.')}>
               <Toggle checked={settings.devMode} onChange={(checked) => update({ devMode: checked })} />
             </SettingRow>
 
-            <SettingRow label="Check for updates on launch">
+            <SettingRow label={t('settings.advanced.checkUpdatesOnLaunch', {}, 'Check for updates on launch')}>
               <Toggle checked={settings.checkUpdates} onChange={(checked) => update({ checkUpdates: checked })} />
             </SettingRow>
 
-            <SettingRow label="Send hardware diagnostics" hint="Anonymous crash and performance data.">
+            <SettingRow label={t('settings.privacy.diagnostics', {}, 'Send hardware diagnostics')} hint={t('settings.privacy.diagnosticsDesc', {}, 'Anonymous crash and performance data.')}>
               <Toggle checked={settings.hardwareId} onChange={(checked) => update({ hardwareId: checked })} />
             </SettingRow>
 
-            <SettingRow label="Reset all settings" hint="This cannot be undone.">
+            <SettingRow label={t('settings.advanced.resetDefaults', {}, 'Reset all settings')} hint={t('settings.advanced.resetDefaultsDesc', {}, 'This cannot be undone.')}>
               <button
                 type="button"
                 onClick={handleReset}
@@ -1533,51 +1649,51 @@ async function handleCheckUpdate() {
                     : 'border-rust/40 text-rust/80 hover:bg-rust/10 hover:text-rust'
                 }`}
               >
-                {confirmingReset ? 'Click again to confirm' : 'Reset to defaults'}
+                {confirmingReset ? t('settings.advanced.confirmReset', {}, 'Click again to confirm') : t('settings.advanced.resetDefaults', {}, 'Reset to defaults')}
               </button>
             </SettingRow>
           </Section>
         )}
 
         {activeSection === 'hotkeys' && (
-          <Section title="Hotkeys" description="Keyboard shortcuts available throughout the launcher.">
+          <Section title={t('hotkeys.title', {}, 'Hotkeys')} description={t('hotkeys.description', {}, 'Keyboard shortcuts available throughout the launcher.')}>
             <div className="col-span-full flex flex-col gap-6">
 
               {/* Navigation */}
-              <HotkeyGroup label="Navigation" accent={accent} theme={theme} rows={[
-                { keys: ['Ctrl', '1–5'],        desc: 'Go to Home / News / Friends / Achievements / Screenshots' },
-                { keys: ['Ctrl', ','],           desc: 'Open Settings' },
-                { keys: ['Ctrl', 'Tab'],         desc: 'Cycle pages forward' },
-                { keys: ['Ctrl', 'Shift', 'Tab'], desc: 'Cycle pages backward' },
+              <HotkeyGroup label={t('hotkeys.groups.navigation', {}, 'Navigation')} accent={accent} theme={theme} rows={[
+                { keys: ['Ctrl', '1–5'],        desc: t('hotkeys.navPages', {}, 'Go to Home / News / Friends / Achievements / Screenshots') },
+                { keys: ['Ctrl', ','],           desc: t('hotkeys.openSettings', {}, 'Open Settings') },
+                { keys: ['Ctrl', 'Tab'],         desc: t('hotkeys.cycleForward', {}, 'Cycle pages forward') },
+                { keys: ['Ctrl', 'Shift', 'Tab'], desc: t('hotkeys.cycleBackward', {}, 'Cycle pages backward') },
               ]} />
 
               {/* Launcher actions */}
-              <HotkeyGroup label="Launcher" accent={accent} theme={theme} rows={[
-                { keys: ['Ctrl', 'R'],           desc: 'Reload Launcher' },
-                { keys: ['Ctrl', 'Shift', 'S'],  desc: 'Open screenshots folder' },
-                { keys: ['Ctrl', 'H'],           desc: 'Go home from anywhere' },
-                { keys: ['Ctrl', 'Shift', 'U'],  desc: 'Check for updates' },
-                { keys: ['Ctrl', 'Shift', 'X'],  desc: 'Quit launcher' },
+              <HotkeyGroup label={t('hotkeys.groups.launcher', {}, 'Launcher')} accent={accent} theme={theme} rows={[
+                { keys: ['Ctrl', 'R'],           desc: t('hotkeys.reloadLauncher', {}, 'Reload Launcher') },
+                { keys: ['Ctrl', 'Shift', 'S'],  desc: t('hotkeys.openScreenshotsFolder', {}, 'Open screenshots folder') },
+                { keys: ['Ctrl', 'H'],           desc: t('hotkeys.goHome', {}, 'Go home from anywhere') },
+                { keys: ['Ctrl', 'Shift', 'U'],  desc: t('hotkeys.checkUpdates', {}, 'Check for updates') },
+                { keys: ['Ctrl', 'Shift', 'X'],  desc: t('hotkeys.quitLauncher', {}, 'Quit launcher') },
               ]} />
 
               {/* Screenshots */}
-              <HotkeyGroup label="Screenshots page" accent={accent} theme={theme} rows={[
-                { keys: ['Ctrl', 'A'],           desc: 'Select all screenshots' },
-                { keys: ['Ctrl', 'D'],           desc: 'Deselect all' },
-                { keys: ['Delete'],              desc: 'Delete selected screenshots' },
+              <HotkeyGroup label={t('hotkeys.groups.screenshots', {}, 'Screenshots page')} accent={accent} theme={theme} rows={[
+                { keys: ['Ctrl', 'A'],           desc: t('hotkeys.selectAll', {}, 'Select all screenshots') },
+                { keys: ['Ctrl', 'D'],           desc: t('hotkeys.deselectAll', {}, 'Deselect all') },
+                { keys: ['Delete'],              desc: t('hotkeys.deleteSelected', {}, 'Delete selected screenshots') },
               ]} />
 
               {/* Account */}
-              <HotkeyGroup label="Account" accent={accent} theme={theme} rows={[
-                { keys: ['Ctrl', 'Shift', 'A'],  desc: 'Toggle account popover' },
-                { keys: ['Ctrl', 'Shift', 'C'],  desc: 'Copy UID to clipboard' },
+              <HotkeyGroup label={t('hotkeys.groups.account', {}, 'Account')} accent={accent} theme={theme} rows={[
+                { keys: ['Ctrl', 'Shift', 'A'],  desc: t('hotkeys.toggleAccount', {}, 'Toggle account popover') },
+                { keys: ['Ctrl', 'Shift', 'C'],  desc: t('hotkeys.copyUid', {}, 'Copy UID to clipboard') },
               ]} />
 
               {/* Appearance */}
-              <HotkeyGroup label="Appearance" accent={accent} theme={theme} rows={[
-                { keys: ['Ctrl', 'Shift', 'D'],  desc: 'Cycle theme (OLED → Dark → More)' },
-                { keys: ['Ctrl', 'Shift', 'E'], desc: 'Cycle accent color' },
-                { keys: ['Ctrl', 'Shift', 'Q'],  desc: 'Cycle background quality (HD → SD → Static)' },
+              <HotkeyGroup label={t('hotkeys.groups.appearance', {}, 'Appearance')} accent={accent} theme={theme} rows={[
+                { keys: ['Ctrl', 'Shift', 'D'],  desc: t('hotkeys.cycleTheme', {}, 'Cycle theme (OLED → Dark → More)') },
+                { keys: ['Ctrl', 'Shift', 'E'], desc: t('hotkeys.cycleAccent', {}, 'Cycle accent color') },
+                { keys: ['Ctrl', 'Shift', 'Q'],  desc: t('hotkeys.cycleBgQuality', {}, 'Cycle background quality (HD → SD → Static)') },
               ]} />
 
             </div>
@@ -1585,33 +1701,33 @@ async function handleCheckUpdate() {
         )}
 
         {activeSection === 'about' && (
-        <Section title="About" description="App version, build, and update settings.">
+        <Section title={t('settings.sections.about', {}, 'About')} description={t('settings.sections.aboutDesc', {}, 'App version, build, and update settings.')}>
 
           {/* Application */}
           <div className="col-span-full">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">Application</p>
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">{t('settings.about.application', {}, 'Application')}</p>
             <div className="rounded-xl border p-5" style={{ borderColor: theme.border }}>
               <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                 <div>
-                  <p className="text-[11px] text-ash/50">Launcher Name</p>
+                  <p className="text-[11px] text-ash/50">{t('settings.about.launcherName', {}, 'Launcher Name')}</p>
                   <p className="mt-0.5 text-[13px] font-semibold text-bone">Zyphor Launcher</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-ash/50">Version</p>
+                  <p className="text-[11px] text-ash/50">{t('settings.about.version', {}, 'Version')}</p>
                   <p className="mt-0.5 text-[13px] font-semibold text-bone">v{CURRENT_VERSION}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-ash/50">Build channel</p>
-                  <p className="mt-0.5 text-[13px] font-semibold text-bone">Stable</p>
+                  <p className="text-[11px] text-ash/50">{t('settings.about.buildChannel', {}, 'Build channel')}</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-bone">{t('settings.about.stable', {}, 'Stable')}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-ash/50">Operating system</p>
+                  <p className="text-[11px] text-ash/50">{t('settings.about.os', {}, 'Operating system')}</p>
                   <p className="mt-0.5 text-[13px] font-semibold text-bone">
                     {window.launcherAPI?.platform?.() ?? 'Windows'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-ash/50">Architecture</p>
+                  <p className="text-[11px] text-ash/50">{t('settings.about.arch', {}, 'Architecture')}</p>
                   <p className="mt-0.5 text-[13px] font-semibold text-bone">
                     {window.launcherAPI?.arch?.() ?? 'x64'}
                   </p>
@@ -1622,15 +1738,15 @@ async function handleCheckUpdate() {
 
           {/* Updates */}
           <div className="col-span-full mt-2">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">Updates</p>
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">{t('settings.about.updates', {}, 'Updates')}</p>
             <div className="rounded-xl border p-5" style={{ borderColor: theme.border }}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[13px] font-semibold text-bone">Check for updates</p>
+                  <p className="text-[13px] font-semibold text-bone">{t('settings.about.checkUpdates', {}, 'Check for updates')}</p>
                   <p className="mt-0.5 text-[12px] text-ash/50">
-                    {updateState === 'idle'        && 'Check for the latest version'}
-                    {updateState === 'checking'    && 'Checking for updates…'}
-                    {updateState === 'up-to-date'  && "You're up to date"}
+                    {updateState === 'idle'        && t('settings.about.checkDesc', {}, 'Check for the latest version')}
+                    {updateState === 'checking'    && t('home.checkUpdates', {}, 'Checking for updates…')}
+                    {updateState === 'up-to-date'  && t('settings.about.upToDate', {}, "You're up to date")}
                     {updateState === 'available'   && `v${updateInfo?.version} is available`}
                     {updateState === 'downloading' && `Downloading… ${downloadProgress}%`}
                     {updateState === 'downloaded'  && 'Update ready — restart to install'}
@@ -1679,7 +1795,7 @@ async function handleCheckUpdate() {
                     disabled={['checking', 'downloading', 'downloaded'].includes(updateState)}
                     className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] font-medium text-bone/80 transition-all hover:bg-white/10 hover:text-bone disabled:opacity-40"
                   >
-                    {updateState === 'checking' ? 'Checking…' : 'Check now'}
+                    {updateState === 'checking' ? 'Checking…' : t('settings.about.checkNow', {}, 'Check now')}
                   </button>
                 </div>
               </div>
@@ -1688,13 +1804,11 @@ async function handleCheckUpdate() {
 
           {/* Found a bug */}
           <div className="col-span-full mt-2">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">Found a bug?</p>
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">{t('settings.about.foundBug', {}, 'Found a bug?')}</p>
             <div className="rounded-xl border p-5" style={{ borderColor: theme.border }}>
               <div className="flex items-center justify-between gap-6">
                 <p className="text-[12px] leading-relaxed text-ash/60">
-                  If something looks broken or behaves unexpectedly, let us know on our Discord.
-                  Describe what you did, what you expected, and include your launcher version so
-                  we can reproduce and fix it faster.
+                  {t('settings.about.foundBugDesc', {}, 'If something looks broken or behaves unexpectedly, let us know on our Discord. Describe what you did, what you expected, and include your launcher version so we can reproduce and fix it faster.')}
                 </p>
                 <a
                   href="https://discord.gg/your-invite"
@@ -1706,7 +1820,7 @@ async function handleCheckUpdate() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z"/>
                   </svg>
-                  Report on Discord
+                  {t('settings.about.reportDiscord', {}, 'Report on Discord')}
                 </a>
               </div>
             </div>
@@ -1714,10 +1828,10 @@ async function handleCheckUpdate() {
 
           {/* Launcher logs */}
           <div className="col-span-full mt-2">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">Launcher logs</p>
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ash/40">{t('settings.about.launcherLogs', {}, 'Launcher logs')}</p>
             <div className="rounded-xl border p-5" style={{ borderColor: theme.border }}>
               <div className="flex items-center justify-between">
-                <p className="text-[12px] text-ash/60">Share your log on mclo.gs to get help</p>
+                <p className="text-[12px] text-ash/60">{t('settings.about.shareLogsDesc', {}, 'Share your log on mclo.gs to get help')}</p>
                 <button
                   type="button"
                   onClick={openLogsFolder}
@@ -1726,7 +1840,7 @@ async function handleCheckUpdate() {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                     <path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  Share launcher logs
+                  {t('settings.about.shareLogs', {}, 'Share launcher logs')}
                 </button>
               </div>
             </div>
@@ -1779,8 +1893,13 @@ function Section({ title, description, children }) {
 }
 
 function StatusPill({ status }) {
+  const { t } = useTranslation();
   if (status === 'idle' || status === 'loading') return null;
-  const label = { saving: 'Saving…', saved: 'Saved', error: 'Could not save' }[status];
+  const label = {
+    saving: t('common.saving', {}, 'Saving…'),
+    saved: t('common.saved', {}, 'Saved'),
+    error: t('common.saveError', {}, 'Could not save'),
+  }[status];
   const color = status === 'error' ? 'text-rust' : 'text-ash';
   return <span className={`text-[11px] font-medium ${color}`}>{label}</span>;
 }
@@ -1854,6 +1973,7 @@ function ActionButton({ onClick, children, variant = 'default', as: Tag = 'butto
 }
 
 function ScanButton({ state, onScan, scanLabel, doneLabel, accent, dangerOnError = false }) {
+  const { t } = useTranslation();
   const isScanning = state === 'scanning';
   const isDone     = state === 'done';
   const isError    = state === 'error';
@@ -1869,9 +1989,9 @@ function ScanButton({ state, onScan, scanLabel, doneLabel, accent, dangerOnError
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 500, color: dangerOnError ? '#e05c5c' : '#f4a261' }}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="7" cy="9.5" r="0.6" fill="currentColor"/></svg>
-        {dangerOnError ? 'Issue found' : 'Not found'}
+        {dangerOnError ? t('settings.privacy.issueFound', {}, 'Issue found') : t('settings.privacy.notFound', {}, 'Not found')}
       </span>
-      <button type="button" onClick={onScan} style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>retry</button>
+      <button type="button" onClick={onScan} style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>{t('common.retry', {}, 'retry')}</button>
     </div>
   );
 
@@ -1898,7 +2018,7 @@ function ScanButton({ state, onScan, scanLabel, doneLabel, accent, dangerOnError
             <circle cx="6" cy="6" r="4.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" fill="none"/>
             <path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
           </svg>
-          Scanning…
+          {t('common.loading', {}, 'Scanning…')}
         </>
       ) : scanLabel}
     </button>
@@ -2007,6 +2127,15 @@ function LegendDot({ color, label, value }) {
 }
 
 /* --- Section icons: small, single-weight strokes, no icon library dependency --- */
+
+function IconLanguage({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M3.5 12h17M12 3.5a13 13 0 010 17M12 3.5a13 13 0 000 17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 function IconAppearance({ className }) {
   return (

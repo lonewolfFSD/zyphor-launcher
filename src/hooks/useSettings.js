@@ -32,6 +32,7 @@ export const ACCENTS = {
 };
 
 const DEFAULTS = {
+  language: 'en',
   theme: 'oled',
   accent: 'bulb',
   uiScale: '100',

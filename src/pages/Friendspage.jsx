@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
+import { useTranslation } from '../i18n/index.jsx';
 import { ExternalLink } from 'lucide-react';
 
 const DEFAULT_AVATAR = 'https://i.ibb.co/8h8W4F2/Untitled-Project-10.jpg';
@@ -23,6 +24,7 @@ function openProfile(uid) {
 }
 
 export default function FriendsPage({ profile }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const theme       = THEMES[settings?.theme]  || THEMES.oled;
   const accent      = ACCENTS[settings?.accent] || ACCENTS.bulb;
@@ -204,9 +206,9 @@ export default function FriendsPage({ profile }) {
   };
 
   const TABS = [
-    { id: 'friends',  label: 'Your Allies',      icon: faUsers },
-    { id: 'requests', label: 'Pending Requests',    icon: faUserPlus, badge: pendingRequests.length },
-    { id: 'search',   label: 'Global Scan', icon: faMagnifyingGlass },
+    { id: 'friends',  label: t('friends.title', {}, 'Allies'), icon: faUsers },
+    { id: 'requests', label: t('friends.pendingRequests', {}, 'Pending Requests'), icon: faUserPlus, badge: pendingRequests.length },
+    { id: 'search',   label: t('friends.addFriend', {}, 'Find Operatives'), icon: faMagnifyingGlass },
   ];
 
   return (
@@ -219,7 +221,7 @@ export default function FriendsPage({ profile }) {
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">SOCIAL NETWORK</p>
           <h1 className="text-3xl font-medium uppercase leading-tight tracking-wide" style={{ color: accentColor, fontFamily: 'Apple Garamond' }}>
-            Allied Operatives
+            {t('friends.title', {}, 'Allied Operatives')}
           </h1>
         </div>
         <div
@@ -227,7 +229,7 @@ export default function FriendsPage({ profile }) {
           style={{ borderColor: theme.border, backgroundColor: `${theme.bg}88` }}
         >
           <FontAwesomeIcon icon={faBolt} style={{ color: accentColor, fontSize: 10 }} />
-          {onlineCount} online · {friendsList.length} total
+          {onlineCount} {t('friends.online', {}, 'online')} · {friendsList.length} {t('common.total', {}, 'total')}
         </div>
       </div>
 
@@ -274,19 +276,24 @@ export default function FriendsPage({ profile }) {
             >
               {/* Filter pills */}
               <div className="flex gap-2 overflow-x-auto shrink-0 pb-0.5 no-scrollbar">
-                {['all', 'online', 'ingame', 'offline'].map(f => (
+                {[
+                  { id: 'all', label: t('achievements.all', {}, 'All') },
+                  { id: 'online', label: t('friends.online', {}, 'Online') },
+                  { id: 'ingame', label: t('friends.inGame', {}, 'In Game') },
+                  { id: 'offline', label: t('friends.offline', {}, 'Offline') },
+                ].map(f => (
                   <button
-                    key={f}
-                    onClick={() => setFriendFilter(f)}
+                    key={f.id}
+                    onClick={() => setFriendFilter(f.id)}
                     className="rounded-lg border px-3 py-1 text-[9px] font-black uppercase tracking-widest transition-all"
                     style={{
-                      borderColor: friendFilter === f ? accentColor : theme.border,
-                      backgroundColor: friendFilter === f ? `${accentColor}22` : 'transparent',
-                      color: friendFilter === f ? accentColor : undefined,
-                      opacity: friendFilter === f ? 1 : 0.4,
+                      borderColor: friendFilter === f.id ? accentColor : theme.border,
+                      backgroundColor: friendFilter === f.id ? `${accentColor}22` : 'transparent',
+                      color: friendFilter === f.id ? accentColor : undefined,
+                      opacity: friendFilter === f.id ? 1 : 0.4,
                     }}
                   >
-                    {f}
+                    {f.label}
                   </button>
                 ))}
               </div>
