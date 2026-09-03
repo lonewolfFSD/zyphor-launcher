@@ -343,8 +343,11 @@ export default function HomePage({ profile }) {
   setShowLaunchModal(true)
 
   try {
-    // already have ownership info on profile, no need for IPC verify
-    const hasAccess = Boolean(profile?.isVip || profile?.steamOwnsGame || profile?.hasGame)
+    // Check if Steam client is active
+    const steamStatus = await window.launcherAPI?.steam?.getStatus?.();
+    const effectiveSteamId = profile?.steamId || (steamStatus?.initialized ? steamStatus.steamId64 : null);
+
+    const hasAccess = Boolean(profile?.isVip || profile?.steamOwnsGame || profile?.hasGame || steamStatus?.initialized);
 
     if (!hasAccess) {
       setLaunchState('idle')
@@ -352,7 +355,7 @@ export default function HomePage({ profile }) {
       return
     }
 
-    if (!profile?.steamId) {
+    if (!effectiveSteamId) {
       setShowSteamLinkModal(true)
       setLaunchState('idle')
       setShowLaunchModal(false)

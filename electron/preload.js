@@ -44,8 +44,13 @@ contextBridge.exposeInMainWorld('launcherAPI', {
     loadContext:    ()    => ipcRenderer.invoke('faye:loadContext'),
   },
 
+  steam: {
+    getStatus:     () => ipcRenderer.invoke('steam:getStatus'),
+    getAuthTicket: () => ipcRenderer.invoke('steam:getAuthTicket'),
+  },
+
   verifySteamOwnership: (uid) => ipcRenderer.invoke('verify-steam-ownership', uid),
-launchGame: (args) => ipcRenderer.invoke('launch-game', args),
+  launchGame: (args) => ipcRenderer.invoke('launch-game', args),
 
 readGameSettings: () => ipcRenderer.invoke('settings:readFromGame'),
 

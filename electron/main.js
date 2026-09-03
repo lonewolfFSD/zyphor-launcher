@@ -233,6 +233,60 @@ ipcMain.handle('faye:pullModel', async (_e, model = 'phi3:mini') => {
   });
 });
 
+// ── Steamworks Client Integration ──────────────────────────────────────────
+const STEAM_APP_ID = 4956550;
+let steamClient = null;
+
+function initSteamworks() {
+  if (steamClient) return steamClient;
+  try {
+    const steamworks = require('steamworks.js');
+    steamworks.init(STEAM_APP_ID);
+    steamClient = steamworks;
+    console.log('[Steamworks] Initialized successfully for AppID:', STEAM_APP_ID);
+  } catch (err) {
+    console.warn('[Steamworks] Failed to initialize (Steam client may not be running):', err.message);
+    steamClient = null;
+  }
+  return steamClient;
+}
+
+ipcMain.handle('steam:getStatus', async () => {
+  const client = initSteamworks();
+  if (!client) return { initialized: false };
+  try {
+    const steamId = client.localplayer.getSteamId();
+    const name = client.localplayer.getName();
+    return {
+      initialized: true,
+      steamId64: steamId.steamId64.toString(),
+      name,
+    };
+  } catch (err) {
+    console.error('[steam:getStatus] Error:', err);
+    return { initialized: false, error: err.message };
+  }
+});
+
+ipcMain.handle('steam:getAuthTicket', async () => {
+  const client = initSteamworks();
+  if (!client) return { ok: false, reason: 'steam_not_running' };
+  try {
+    const ticketObj = await client.auth.getAuthTicketForWebApi('zyphor_backend');
+    const buf = ticketObj.getBytes();
+    const hex = buf.toString('hex');
+    const steamId = client.localplayer.getSteamId().steamId64.toString();
+    return {
+      ok: true,
+      ticket: hex,
+      steamId,
+    };
+  } catch (err) {
+    console.error('[steam:getAuthTicket] Error:', err);
+    return { ok: false, reason: 'ticket_error', error: err.message };
+  }
+});
+
 // Expose verifySteamOwnership to renderer
 ipcMain.handle('verify-steam-ownership', async (_, uid) => {
   try {
@@ -284,6 +338,8 @@ function getGameExecutablePath() {
   return null;
 }
 
+const TOKEN_SECRET_KEY = "zyphor_secret_token_key_stay_2026";
+
 ipcMain.handle('launch-game', async (_, args = []) => {
   const gamePath = getGameExecutablePath();
   console.log('[launch-game] path:', gamePath);
@@ -294,7 +350,33 @@ ipcMain.handle('launch-game', async (_, args = []) => {
     return { ok: false, reason: 'exe_not_found' };
   }
 
-  const child = spawn(gamePath, args, {
+  // Extract UID from args if passed from renderer
+  const uidArg = args.find(a => a.startsWith('--zyphor-uid='));
+  const uid = uidArg ? uidArg.split('=')[1] : null;
+
+  const extraArgs = [...args];
+
+  // If steam client is active, generate ephemeral HMAC-SHA256 signed launch token
+  try {
+    const client = initSteamworks();
+    if (client && uid) {
+      const crypto = require('crypto');
+      const steamId = client.localplayer.getSteamId().steamId64.toString();
+      const ts = Math.floor(Date.now() / 1000).toString();
+      const payload = `${uid}:${steamId}:${STEAM_APP_ID}:${ts}`;
+      const sig = crypto.createHmac('sha256', TOKEN_SECRET_KEY).update(payload).digest('hex');
+
+      extraArgs.push(`--zyphor-token=1`);
+      extraArgs.push(`--zyphor-token-sig=${sig}`);
+      extraArgs.push(`--zyphor-token-ts=${ts}`);
+      extraArgs.push(`--zyphor-steamid=${steamId}`);
+      console.log('[launch-game] Generated signed launch token for SteamID:', steamId);
+    }
+  } catch (err) {
+    console.warn('[launch-game] Could not generate launch token:', err.message);
+  }
+
+  const child = spawn(gamePath, extraArgs, {
     detached: true,
     stdio: 'ignore',
     cwd: path.dirname(gamePath), // Unity needs CWD to be the game folder
