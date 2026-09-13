@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import TitleBar from './components/TitleBar.jsx';
@@ -9,7 +9,7 @@ import HomePage from './pages/HomePage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import NewsPage from './pages/NewsPage.jsx';
 import AchievementsPage from './pages/AchievementsPage.jsx';
-import FriendsPage from './pages/FriendsPage.jsx';
+import FriendsPage from './pages/Friendspage.jsx';
 import { useSettings, THEMES, ACCENTS } from './hooks/useSettings.js';
 import { loadUid, saveUid, clearSession } from './lib/authSession.js';
 import ScreenshotsPage from './pages/ScreenshotsPage.jsx';
@@ -18,40 +18,15 @@ import Logo from './Logo/icon.png';
 import { useHotkeys } from './hooks/useHotkeys.js';
 
 import UpdateTourPage, { useUpdateTourCheck } from './pages/UpdateTourPage.jsx';
-
-import OnboardingPage, { useOnboardingCheck } from './pages/OnboardingPage.jsx';
+import UninstallPage from './pages/UninstallPage.jsx';
+import InstallPage from './pages/InstallPage.jsx';
 
 import DEFAULT_BACKGROUND_VIDEO from './pages/videos/test_video.mp4';
 import SplashScreen from './components/SplashScreen.jsx';
 import { I18nProvider } from './i18n/index.jsx';
 
-import VIDEO_ROSSI from './pages/videos/rossi.mp4';
-import VIDEO_GAMING from './pages/videos/gaming.mp4';
-import VIDEO_DRAGON_TRAVELLER from './pages/videos/Xuanwu - Dragon Traveler.mp4';
-import VIDEO_LUCY from './pages/videos/Lucy Cyberpunk.mp4';
-import VIDEO_KALTSIT from './pages/videos/Kaltsit.mp4';
-
-import ROSSI_FRAME from './pages/videos/frames/rossi frame.png';
-import KALTSIT_FRAME from './pages/videos/frames/kaltsit frame.png';
-import XUANWU_FRAME from './pages/videos/frames/xuanwu frame.png';
-import FIREFLY_FRAME from './pages/videos/frames/firefly frame.png';
-import LUCY_FRAME from './pages/videos/frames/lucy frame.png';
-
-const PRESET_VIDEO_MAP = {
-  'preset-gaming':           VIDEO_GAMING,
-  'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
-  'preset-lucy':             VIDEO_LUCY,
-  'preset-kaltsit':          VIDEO_KALTSIT,
-  'preset-rossi':            VIDEO_ROSSI,
-};
-
-const PRESET_STATIC_MAP = {
-  'preset-gaming':           new URL(FIREFLY_FRAME,  import.meta.url).href,
-  'preset-dragon-traveller': new URL(XUANWU_FRAME,   import.meta.url).href,
-  'preset-lucy':             new URL(LUCY_FRAME,     import.meta.url).href,
-  'preset-kaltsit':          new URL(KALTSIT_FRAME,  import.meta.url).href,
-  'preset-rossi':            new URL(ROSSI_FRAME,    import.meta.url).href,
-};
+const PRESET_VIDEO_MAP = {};
+const PRESET_STATIC_MAP = {};
 
 const PAGE_ORDER = {
   home: 0,
@@ -67,18 +42,19 @@ const PAGE_ORDER = {
 
   
 // ─── Global background video ──────────────────────────────────────────────────
-function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticPoster = null }) {
+function BackgroundVideo({ src, previewSrc, active, quality = 'hd', videoStyle = {} }) {
   const ref = useRef(null);
 
   useEffect(() => {
+    if (quality === 'static') return;
     const el = ref.current;
-    if (!el || quality === 'static') return;
+    if (!el) return;
     if (active) el.play().catch(() => {});
     else el.pause();
   }, [active, quality, src]);
 
   useEffect(() => {
-    if (!active || quality === 'static') return;
+    if (quality === 'static' || !active) return;
     const el = ref.current;
     if (!el) return;
     function handleVisibilityChange() {
@@ -89,21 +65,41 @@ function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticP
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [active, quality]);
 
+  if (!src && !previewSrc) return null;
+
+  const handleVideoError = (e) => {
+    console.warn('[BackgroundVideo] failed to load:', src, e.target?.error);
+    if (e.target && e.target.src !== DEFAULT_BACKGROUND_VIDEO) {
+      // Fallback to default background video so screen is never black
+      e.target.src = DEFAULT_BACKGROUND_VIDEO;
+      e.target.play().catch(() => {});
+    }
+  };
+
+  // Static mode: Use uploaded / Steam Workshop preview image, or still frame
   if (quality === 'static') {
-    if (!staticPoster) return null;
+    if (previewSrc) {
+      return (
+        <img
+          src={previewSrc}
+          alt="Static Background"
+          className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover"
+          style={videoStyle}
+        />
+      );
+    }
     return (
-      <div
-        className="pointer-events-none fixed inset-0 -z-20 h-full w-full"
-        style={{
-          backgroundImage: `url(${staticPoster})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
+      <video
+        ref={ref}
+        src={src}
+        muted
+        playsInline
+        onError={handleVideoError}
+        className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover"
+        style={videoStyle}
       />
     );
   }
-
-  if (!src) return null;
 
   if (quality === 'sd') {
     return (
@@ -112,7 +108,7 @@ function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticP
           ref={ref}
           src={src}
           autoPlay muted loop playsInline
-          onError={(e) => console.error('[BackgroundVideo] failed to load:', src, e.target.error)}
+          onError={handleVideoError}
           style={{ width: '40%', height: '40%', objectFit: 'cover', transform: 'scale(2.6)', transformOrigin: 'top left', filter: 'blur(0.5px)' }}
         />
       </div>
@@ -124,7 +120,7 @@ function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticP
       ref={ref}
       src={src}
       autoPlay muted loop playsInline
-      onError={(e) => console.error('[BackgroundVideo] failed to load:', src, e.target.error)}
+      onError={handleVideoError}
       onLoadedData={() => console.log('[BackgroundVideo] loaded ok:', src)}
       className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover"
       style={videoStyle}
@@ -179,9 +175,34 @@ export default function App() {
   const [pageDirection, setPageDirection] = useState(1);
   const directionRef = useRef(1);
 
-// at the top of the component
-const { shouldShowOnboarding, markOnboardingComplete } = useOnboardingCheck();
-const [showOnboarding, setShowOnboarding] = useState(() => shouldShowOnboarding());
+  const [isUninstallMode, setIsUninstallMode] = useState(() => {
+    return window.location.search.includes('uninstall') || window.location.hash.includes('uninstall');
+  });
+
+  const [isInstallMode, setIsInstallMode] = useState(() => {
+    return window.location.search.includes('install') || window.location.hash.includes('install');
+  });
+
+  useEffect(() => {
+    window.launcherAPI?.uninstall?.isMode?.().then((res) => {
+      if (res) setIsUninstallMode(true);
+    }).catch(() => {});
+
+    window.launcherAPI?.install?.isMode?.().then((res) => {
+      if (res) setIsInstallMode(true);
+    }).catch(() => {});
+
+    const handlePreviewUninstall = () => setIsUninstallMode(true);
+    const handlePreviewInstall = () => setIsInstallMode(true);
+
+    window.addEventListener('launcher:preview-uninstall', handlePreviewUninstall);
+    window.addEventListener('launcher:preview-install', handlePreviewInstall);
+
+    return () => {
+      window.removeEventListener('launcher:preview-uninstall', handlePreviewUninstall);
+      window.removeEventListener('launcher:preview-install', handlePreviewInstall);
+    };
+  }, []);
 
 const { shouldShow: shouldShowUpdate, markSeen } = useUpdateTourCheck();
 const [showUpdateTour, setShowUpdateTour] = useState(() => shouldShowUpdate());
@@ -192,6 +213,15 @@ const [showUpdateTour, setShowUpdateTour] = useState(() => shouldShowUpdate());
     setPageDirection(dir);
     setActivePage(newPage);
   }
+
+  useEffect(() => {
+    const unsub = window.launcherAPI?.onNavigate?.((page) => {
+      if (page && PAGE_ORDER[page] !== undefined) {
+        navigateTo(page);
+      }
+    });
+    return () => unsub?.();
+  }, [activePage]);
 
   // ── Dev info overlay ──────────────────────────────────────────────────────
   const [showDevInfo, setShowDevInfo] = useState(false);
@@ -264,26 +294,25 @@ function handleCycleAccent() {
 
   // ── Derive background video source from settings ──────────────────────────
   const backgroundVideoType = settings?.backgroundVideoType ?? 'default';
-  const backgroundQuality   = settings?.backgroundQuality   ?? 'hd';
+  const backgroundQuality   = settings?.backgroundQuality ?? 'hd';
+  const backgroundPreviewUrl = settings?.backgroundPreviewUrl ?? null;
 
   const backgroundVideoSrc =
-    backgroundVideoType === 'none' || backgroundQuality === 'static'
+    backgroundVideoType === 'none'
       ? null
+      : backgroundVideoType === 'workshop'
+      ? settings?.backgroundVideoPath
+        ? `media:///${encodeURI(settings.backgroundVideoPath.replace(/\\/g, '/').replace(/^\/+/, ''))}`
+        : DEFAULT_BACKGROUND_VIDEO
       : backgroundVideoType === 'custom'
       ? settings?.backgroundVideoPath
-        ? `file://${settings.backgroundVideoPath}`
+        ? `media:///${encodeURI(settings.backgroundVideoPath.replace(/\\/g, '/').replace(/^\/+/, ''))}`
         : null
-      : backgroundVideoType?.startsWith('preset-')
-      ? PRESET_VIDEO_MAP[backgroundVideoType] ?? DEFAULT_BACKGROUND_VIDEO
       : DEFAULT_BACKGROUND_VIDEO;
 
   const bgVideoStyle = backgroundQuality === 'sd'
     ? { filter: 'blur(0px)', imageRendering: 'auto', transform: 'scale(1.05)', opacity: 1 }
     : {};
-
-  const bgStaticPoster = backgroundQuality === 'static'
-    ? (PRESET_STATIC_MAP[backgroundVideoType] ?? null)
-    : null;
 
   // ── Timers & auth ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -292,14 +321,14 @@ function handleCycleAccent() {
   }, []);
 
 useEffect(() => {
-  const isSpecialScreen = !minSplashDone || !profile || showOnboarding || showUpdateTour;
+  const isSpecialScreen = !minSplashDone || !profile || showUpdateTour;
   
   if (!isSpecialScreen && settings?.fullscreenOnLaunch) {
     window.launcherAPI?.setFullscreen?.(true);
   } else {
     window.launcherAPI?.setFullscreen?.(false);
   }
-}, [minSplashDone, profile, showOnboarding, showUpdateTour, settings?.fullscreenOnLaunch]);
+}, [minSplashDone, profile, showUpdateTour, settings?.fullscreenOnLaunch]);
 
   useEffect(() => {
     if (!settings) return;
@@ -332,6 +361,56 @@ useEffect(() => {
         // Re-persist the UID so the session survives hot-reloads and restarts.
         // Without this, saveUid() was never called from App and the key went stale.
         saveUid(uid);
+
+        let steamInfo = null;
+        try {
+          steamInfo = await window.launcherAPI?.steam?.getStatus?.();
+        } catch {}
+
+        const steamConnected = Boolean(steamInfo?.initialized);
+        const resolvedSteamId = d.steamId || (steamConnected ? steamInfo.steamId64 : '');
+        const resolvedOwnsGame = Boolean(d.steamOwnsGame || d.hasGame || steamInfo?.ownsGame || steamConnected);
+
+        if (steamConnected && (!d.steamId || !d.steamOwnsGame)) {
+          setDoc(
+            doc(db, 'users', uid),
+            {
+              steamId: resolvedSteamId,
+              steamName: steamInfo?.name || '',
+              steamOwnsGame: resolvedOwnsGame,
+              hasGame: resolvedOwnsGame,
+            },
+            { merge: true }
+          ).catch((e) => console.warn('Background steam link failed:', e));
+        }
+
+        if (d?.activeWallpaperId) {
+          window.launcherAPI?.workshop?.getItemState?.(d.activeWallpaperId).then((st) => {
+            if (st?.isInstalled && st?.videoPath) {
+              updateSettings?.({
+                backgroundVideoType: 'workshop',
+                backgroundWorkshopId: d.activeWallpaperId,
+                backgroundVideoPath: st.videoPath,
+                backgroundVideoName: st.title || 'Steam Workshop',
+              });
+            } else {
+              window.launcherAPI?.workshop?.downloadItem?.(d.activeWallpaperId, true).then(() => {
+                setTimeout(async () => {
+                  const nextSt = await window.launcherAPI?.workshop?.getItemState?.(d.activeWallpaperId);
+                  if (nextSt?.isInstalled && nextSt?.videoPath) {
+                    updateSettings?.({
+                      backgroundVideoType: 'workshop',
+                      backgroundWorkshopId: d.activeWallpaperId,
+                      backgroundVideoPath: nextSt.videoPath,
+                      backgroundVideoName: nextSt.title || 'Steam Workshop',
+                    });
+                  }
+                }, 3000);
+              }).catch(() => {});
+            }
+          }).catch(() => {});
+        }
+
         setProfile({
           uid,
           email:        d.email        ?? '',
@@ -341,12 +420,13 @@ useEffect(() => {
           timezone:     d.timezone     ?? 'UTC',
           gender:       d.gender       ?? '',
           isVip:        Boolean(d.isVip),
-          hasGame:      Boolean(d.hasGame || d.steamOwnsGame),
-          steamOwnsGame: Boolean(d.steamOwnsGame),
-          steamId:      d.steamId      ?? '',
+          hasGame:      resolvedOwnsGame,
+          steamOwnsGame: resolvedOwnsGame,
+          steamId:      resolvedSteamId,
           rememberMe:   Boolean(d.rememberMe),
           totpLinked:   Boolean(d.totpLinked),
           hasPasskey:   Boolean(d.hasPasskey),
+          activeWallpaperId: d.activeWallpaperId ?? null,
           raw: d,
         });
       } catch (err) {
@@ -360,18 +440,41 @@ useEffect(() => {
     tryAutoLogin();
   }, [settings]);
 
-  // ── Splash ────────────────────────────────────────────────────────────────
-  
-  useEffect(() => {
-  if (minSplashDone && !checking && settings && profile && shouldShowOnboarding()) {
-    // Small delay so the transition from splash isn't jarring
-    const timer = setTimeout(() => setShowOnboarding(true), 400);
-    return () => clearTimeout(timer);
-  }
-}, [minSplashDone, checking, settings, profile]);
-  
-
   const ActivePageComponent = PAGES[activePage];
+
+  if (isInstallMode) {
+    return (
+      <I18nProvider language={settings?.language || 'en'} onLanguageChange={(lang) => updateSettings?.({ language: lang })}>
+        <InstallPage
+          onCancel={() => {
+            setIsInstallMode(false);
+            if (window.history?.replaceState) {
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+          }}
+          onComplete={({ launchAfterInstall }) => {
+            setIsInstallMode(false);
+            if (window.history?.replaceState) {
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+          }}
+        />
+      </I18nProvider>
+    );
+  }
+
+  if (isUninstallMode) {
+    return (
+      <I18nProvider language={settings?.language || 'en'} onLanguageChange={(lang) => updateSettings?.({ language: lang })}>
+        <UninstallPage onCancel={() => {
+          setIsUninstallMode(false);
+          if (window.history?.replaceState) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        }} />
+      </I18nProvider>
+    );
+  }
 
   return (
     <I18nProvider language={settings?.language || 'en'} onLanguageChange={(lang) => updateSettings?.({ language: lang })}>
@@ -384,14 +487,6 @@ useEffect(() => {
         {/* Auth or app — splash covers this until ready */}
         {!profile ? (
           <AuthGate onAuthSuccess={(p) => { saveUid(p.uid); setProfile(p); }} />
-        ) : showOnboarding ? (
-          <OnboardingPage
-            profile={profile}
-            onComplete={() => {
-              markOnboardingComplete();
-              setShowOnboarding(false);
-            }}
-          />
         ) : showUpdateTour && minSplashDone ? (
           <UpdateTourPage
             onComplete={() => {
@@ -403,12 +498,12 @@ useEffect(() => {
           <>
             {/* ── Global background — rendered once, persists across page transitions ── */}
             <BackgroundVideo
-              key={backgroundVideoSrc + backgroundQuality}
+              key={backgroundVideoSrc + (backgroundPreviewUrl || '') + backgroundQuality}
               src={backgroundVideoSrc}
+              previewSrc={backgroundPreviewUrl}
               active={motionOn}
               quality={backgroundQuality}
               videoStyle={bgVideoStyle}
-              staticPoster={bgStaticPoster}
             />
             <AnimatedGrid accent={accent} active={motionOn} />
 

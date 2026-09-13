@@ -219,13 +219,13 @@ export default function FriendsPage({ profile }) {
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">SOCIAL NETWORK</p>
-          <h1 className="text-3xl font-medium uppercase leading-tight tracking-wide" style={{ color: accentColor, fontFamily: 'Apple Garamond' }}>
+          <p className="text-[10px] font-mono font-medium uppercase tracking-[0.25em] opacity-40">SOCIAL NETWORK</p>
+          <h1 className="text-3xl font-display font-bold uppercase leading-tight tracking-tight" style={{ color: accentColor }}>
             {t('friends.title', {}, 'Allied Operatives')}
           </h1>
         </div>
         <div
-          className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest"
+          className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-mono font-medium uppercase tracking-wider"
           style={{ borderColor: theme.border, backgroundColor: `${theme.bg}88` }}
         >
           <FontAwesomeIcon icon={faBolt} style={{ color: accentColor, fontSize: 10 }} />
@@ -239,21 +239,19 @@ export default function FriendsPage({ profile }) {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className="relative flex-1 flex items-center justify-center gap-1.5 py-3 text-[12px] uppercase tracking-widest transition-all"
+            className="relative flex-1 flex items-center justify-center gap-2 py-3 text-xs font-display font-semibold uppercase tracking-wider transition-all"
             style={{
               backgroundColor: tab === t.id ? accentColor : 'transparent',
               color: tab === t.id ? (profile?.isVip ? '#000' : accent.on) : undefined,
-              fontFamily: 'Apple Garamond',
-              fontWeight: tab === t.id ? '800' : '400',
               opacity: tab === t.id ? 1 : 0.45,
             }}
           >
-            <FontAwesomeIcon icon={t.icon} style={{ fontSize: 11 }} />
+            <FontAwesomeIcon icon={t.icon} style={{ fontSize: 12 }} />
             {t.label}
             {t.badge > 0 && (
               <span
-                className="absolute top-1 right-2 h-4 w-4 rounded-full flex items-center justify-center text-[12px] font-black"
-                style={{ backgroundColor: '#ef4444', color: '#fff',  }}
+                className="absolute top-1 right-2 h-4 w-4 rounded-full flex items-center justify-center text-[10px] font-mono font-bold"
+                style={{ backgroundColor: '#ef4444', color: '#fff' }}
               >
                 {t.badge}
               </span>
@@ -285,12 +283,12 @@ export default function FriendsPage({ profile }) {
                   <button
                     key={f.id}
                     onClick={() => setFriendFilter(f.id)}
-                    className="rounded-lg border px-3 py-1 text-[9px] font-black uppercase tracking-widest transition-all"
+                    className="rounded-lg border px-3 py-1.5 text-[11px] font-display font-semibold uppercase tracking-wider transition-all"
                     style={{
                       borderColor: friendFilter === f.id ? accentColor : theme.border,
                       backgroundColor: friendFilter === f.id ? `${accentColor}22` : 'transparent',
                       color: friendFilter === f.id ? accentColor : undefined,
-                      opacity: friendFilter === f.id ? 1 : 0.4,
+                      opacity: friendFilter === f.id ? 1 : 0.45,
                     }}
                   >
                     {f.label}
@@ -305,7 +303,7 @@ export default function FriendsPage({ profile }) {
                   style={{ borderColor: theme.border, backgroundColor: `${theme.bg}66` }}
                 >
                   <FontAwesomeIcon icon={faUsers} style={{ fontSize: 28 }} className="opacity-15" />
-                  <p className="text-xs font-black uppercase tracking-widest opacity-40 mt-1">
+                  <p className="text-xs font-display font-medium uppercase tracking-wider opacity-40 mt-1">
                     {friendFilter !== 'all'
                       ? `No ${friendFilter} operatives`
                       : '0 allied operatives'}
@@ -313,7 +311,7 @@ export default function FriendsPage({ profile }) {
                   {friendFilter === 'all' && (
                     <button
                       onClick={() => setTab('search')}
-                      className="mt-2 rounded-xl border px-4 py-2 text-[9px] font-black uppercase tracking-widest transition-all hover:opacity-80"
+                      className="mt-2 rounded-xl border px-4 py-2 text-xs font-display font-semibold uppercase tracking-wider transition-all hover:opacity-80"
                       style={{ borderColor: accentColor, color: accentColor }}
                     >
                       Find Operatives
@@ -350,11 +348,11 @@ export default function FriendsPage({ profile }) {
                   style={{ borderColor: theme.border, backgroundColor: `${theme.bg}66` }}
                 >
                   <FontAwesomeIcon icon={faClock} style={{ fontSize: 28 }} className="opacity-15" />
-                  <p className="text-xs font-black uppercase tracking-widest opacity-40 mt-1">No pending requests</p>
+                  <p className="text-xs font-display font-medium uppercase tracking-wider opacity-40 mt-1">No pending requests</p>
                 </div>
               ) : (
                 <>
-                  <p className="text-[9px] font-black uppercase tracking-widest opacity-40">
+                  <p className="text-[11px] font-mono font-medium uppercase tracking-wider opacity-40">
                     {pendingRequests.length} incoming request{pendingRequests.length !== 1 ? 's' : ''}
                   </p>
                   {pendingRequests.map(req => (
@@ -391,7 +389,7 @@ export default function FriendsPage({ profile }) {
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   placeholder="SEARCH BY DISPLAY NAME OR ZYPHOR ID..."
-                  className="flex-1 bg-transparent text-xs font-black tracking-widest outline-none placeholder:opacity-30"
+                  className="flex-1 bg-transparent text-xs font-body tracking-wider outline-none placeholder:opacity-30 placeholder:font-body"
                   style={{ color: theme.text }}
                 />
                 {isSearching && (
@@ -404,28 +402,29 @@ export default function FriendsPage({ profile }) {
               </div>
 
               {/* Count label */}
-              <p className="text-[9px] font-black uppercase tracking-widest opacity-40 shrink-0">
+              <p className="text-[11px] font-mono font-medium uppercase tracking-wider opacity-40 shrink-0">
                 {searchQuery.trim().length >= 2
                   ? `${searchResults.length} result${searchResults.length !== 1 ? 's' : ''}`
                   : `${defaultUsers.length} operatives found`}
               </p>
 
-              {/* Grid — 3 cols default, 4 cols on large screens */}
+              {/* Grid — sleek horizontal card grid */}
               {displaySearch.length === 0 && !isSearching ? (
                 <div
-                  className="flex flex-col items-center gap-2 rounded-xl border px-4 py-10 text-center"
+                  className="flex flex-col items-center gap-2 rounded-2xl border px-4 py-12 text-center"
                   style={{ borderColor: theme.border, backgroundColor: `${theme.bg}66` }}
                 >
-                  <FontAwesomeIcon icon={faMagnifyingGlass} style={{ fontSize: 24 }} className="opacity-15" />
-                  <p className="text-xs font-black uppercase tracking-widest opacity-40 mt-1">No operatives found</p>
+                  <FontAwesomeIcon icon={faMagnifyingGlass} style={{ fontSize: 28 }} className="opacity-15" />
+                  <p className="text-xs font-display font-medium uppercase tracking-wider opacity-40 mt-1">No operatives found</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 xl:grid-cols-8 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 gap-3">
                   {displaySearch.map(user => (
                     <SearchCard
                       key={user.id}
                       user={user}
                       accentColor={accentColor}
+                      accentOn={profile?.isVip ? '#000' : accent.on}
                       theme={theme}
                       alreadyFriend={friendIds.has(user.id)}
                       alreadySent={sentTo.has(user.id)}
@@ -454,11 +453,11 @@ function FriendRow({ friend, accentColor, theme, onUnfriend }) {
   return (
     <motion.div
       layout
-      className="flex items-center gap-3 rounded-xl border px-3.5 py-3"
-      style={{ borderColor: theme.border, backgroundColor: `${theme.bg}66` }}
+      className="group flex items-center gap-3 rounded-2xl border px-3.5 py-3 transition-all duration-150 hover:bg-white/[0.03]"
+      style={{ borderColor: theme.border, backgroundColor: `${theme.surface}88` }}
     >
       <div
-        className="h-14 w-14 shrink-0 rounded-xl overflow-hidden border flex items-center justify-center font-black text-sm"
+        className="h-12 w-12 shrink-0 rounded-xl overflow-hidden border flex items-center justify-center font-display font-bold text-sm shadow-sm"
         style={{ borderColor: `${accentColor}33`, backgroundColor: `${accentColor}18`, color: accentColor }}
       >
         {friend.photoURL
@@ -468,30 +467,26 @@ function FriendRow({ friend, accentColor, theme, onUnfriend }) {
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          {friend.isVip && <span className="text-[8px] font-black" style={{ color: '#FDB515' }}>✦</span>}
-          <p className="text-[13px] font-black uppercase tracking-wider truncate">{friend.displayName ?? 'UNKNOWN'}</p>
+          {friend.isVip && <span className="text-[9px] font-bold" style={{ color: '#FDB515' }}>✦</span>}
+          <p className="text-[13px] font-display font-semibold tracking-tight truncate text-white">{friend.displayName ?? 'UNKNOWN'}</p>
         </div>
         {friend.currentGame ? (
-          <p className="text-[9px] truncate" style={{ color: '#3b82f6' }}>
-            <FontAwesomeIcon icon={faGamepad} style={{ fontSize: 8, marginRight: 4 }} />
+          <p className="text-[10px] font-medium truncate mt-0.5" style={{ color: '#3b82f6' }}>
+            <FontAwesomeIcon icon={faGamepad} style={{ fontSize: 9, marginRight: 4 }} />
             {friend.currentGame}
           </p>
         ) : (
-          <p className="text-[9px] mt-0.5 uppercase tracking-widest" style={{ color: dotColor }}>
+          <p className="text-[10px] font-mono uppercase tracking-wider mt-0.5 flex items-center gap-1.5" style={{ color: dotColor }}>
+            <span className="h-1.5 w-1.5 rounded-full inline-block" style={{ backgroundColor: dotColor }} />
             {friend.status ?? 'offline'}
           </p>
         )}
       </div>
 
-      <div
-        className="h-2.5 w-2.5 rounded-full shrink-0"
-        style={{ backgroundColor: dotColor, boxShadow: friend.status !== 'offline' ? `0 0 6px ${dotColor}88` : 'none' }}
-      />
-
       {/* View profile button */}
       <button
         onClick={() => openProfile(friend.id)}
-        className="rounded-lg border p-2 text-[12px] opacity-30 hover:opacity-80 transition-all shrink-0"
+        className="rounded-xl border p-2 text-xs opacity-40 hover:opacity-100 hover:bg-white/10 transition-all shrink-0"
         style={{ borderColor: theme.border }}
         title="View profile"
       >
@@ -502,14 +497,14 @@ function FriendRow({ friend, accentColor, theme, onUnfriend }) {
         <div className="flex gap-1.5 shrink-0">
           <button
             onClick={() => { onUnfriend(); setShowConfirm(false); }}
-            className="rounded-lg border px-2 py-1 text-[12px] font-black uppercase tracking-widest transition-all hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-400"
+            className="rounded-xl border px-2.5 py-1 text-[11px] font-display font-semibold uppercase tracking-wider transition-all hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-400"
             style={{ borderColor: theme.border }}
           >
             Confirm
           </button>
           <button
             onClick={() => setShowConfirm(false)}
-            className="rounded-lg border px-2 py-1 text-[12px] font-black opacity-40 hover:opacity-80"
+            className="rounded-xl border px-2 py-1 text-[11px] font-semibold opacity-40 hover:opacity-100"
             style={{ borderColor: theme.border }}
           >
             <FontAwesomeIcon icon={faXmark} />
@@ -518,7 +513,7 @@ function FriendRow({ friend, accentColor, theme, onUnfriend }) {
       ) : (
         <button
           onClick={() => setShowConfirm(true)}
-          className="rounded-lg border p-2 text-[12px] text-red-400 opacity-35 hover:opacity-80 hover:border-red-500/40 hover:text-red-400 transition-all shrink-0"
+          className="rounded-xl border p-2 text-xs text-red-400 opacity-40 hover:opacity-100 hover:border-red-500/40 hover:bg-red-500/10 transition-all shrink-0"
           style={{ borderColor: theme.border }}
           title="Remove ally"
         >
@@ -535,11 +530,11 @@ function RequestRow({ req, accentColor, theme, onAccept, onDecline }) {
     <motion.div
       layout
       initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-      className="flex items-center gap-3 rounded-xl border px-3.5 py-3"
-      style={{ borderColor: `${accentColor}44`, backgroundColor: `${accentColor}08` }}
+      className="flex items-center gap-3 rounded-2xl border px-4 py-3.5 shadow-sm"
+      style={{ borderColor: `${accentColor}44`, backgroundColor: `${accentColor}0a` }}
     >
       <div
-        className="h-14 w-14 shrink-0 rounded-xl overflow-hidden border flex items-center justify-center font-black text-sm"
+        className="h-12 w-12 shrink-0 rounded-xl overflow-hidden border flex items-center justify-center font-display font-bold text-sm"
         style={{ borderColor: `${accentColor}33`, backgroundColor: `${accentColor}18`, color: accentColor }}
       >
         {sp.photoURL
@@ -547,12 +542,12 @@ function RequestRow({ req, accentColor, theme, onAccept, onDecline }) {
           : (sp.displayName ?? '?').charAt(0).toUpperCase()}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-black uppercase tracking-wider truncate">{sp.displayName ?? 'UNKNOWN'}</p>
-        <p className="text-[9px] uppercase tracking-widest opacity-40">Wants to ally</p>
+        <p className="text-[13px] font-display font-semibold tracking-tight truncate text-white">{sp.displayName ?? 'UNKNOWN'}</p>
+        <p className="text-[10px] font-body text-zinc-400 mt-0.5">Wants to ally with you</p>
       </div>
       <button
         onClick={() => openProfile(req.senderId)}
-        className="rounded-lg border p-2 text-[10px] opacity-30 hover:opacity-80 transition-all shrink-0"
+        className="rounded-xl border p-2 text-xs opacity-40 hover:opacity-100 hover:bg-white/10 transition-all shrink-0"
         style={{ borderColor: theme.border }}
         title="View profile"
       >
@@ -561,14 +556,14 @@ function RequestRow({ req, accentColor, theme, onAccept, onDecline }) {
       <div className="flex gap-1.5 shrink-0">
         <button
           onClick={onAccept}
-          className="rounded-xl border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all hover:opacity-80"
-          style={{ borderColor: accentColor, backgroundColor: `${accentColor}22`, color: accentColor }}
+          className="rounded-xl border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all hover:brightness-110 shadow-sm"
+          style={{ borderColor: accentColor, backgroundColor: `${accentColor}25`, color: accentColor }}
         >
           <FontAwesomeIcon icon={faCheck} />
         </button>
         <button
           onClick={onDecline}
-          className="rounded-xl border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest opacity-40 hover:opacity-80 transition-all"
+          className="rounded-xl border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider opacity-50 hover:opacity-100 hover:bg-white/10 transition-all"
           style={{ borderColor: theme.border }}
         >
           <FontAwesomeIcon icon={faXmark} />
@@ -578,8 +573,8 @@ function RequestRow({ req, accentColor, theme, onAccept, onDecline }) {
   );
 }
 
-// Card layout for global scan grid
-function SearchCard({ user, accentColor, theme, alreadyFriend, alreadySent, onSend }) {
+// Card layout for global scan grid — clean horizontal operative row
+function SearchCard({ user, accentColor, accentOn, theme, alreadyFriend, alreadySent, onSend }) {
   const [sending, setSending] = useState(false);
   const letter = (user.displayName ?? '?').charAt(0).toUpperCase();
 
@@ -592,65 +587,103 @@ function SearchCard({ user, accentColor, theme, alreadyFriend, alreadySent, onSe
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}
-      className="flex flex-col items-center gap-2 rounded-3xl border px-4 py-4 text-center"
-      style={{ borderColor: theme.border, backgroundColor: `${theme.bg}66` }}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      className="group flex items-center gap-3.5 rounded-2xl border px-3.5 py-3 transition-all duration-150 hover:bg-white/[0.04] hover:border-white/20"
+      style={{
+        borderColor: theme.border,
+        backgroundColor: `${theme.surface}88`,
+      }}
     >
-      {/* Avatar */}
-      <div
-        className="h-26 w-26 rounded-3xl overflow-hidden border flex items-center justify-center font-black text-lg shrink-0"
-        style={{ borderColor: `${accentColor}33`, backgroundColor: `${accentColor}18`, color: accentColor }}
-      >
-        {user.photoURL
-          ? <img src={user.photoURL} alt="" className="h-full w-full object-cover" />
-          : letter}
-      </div>
-
-      {/* Name */}
-      <div className="w-full min-w-0">
-        <div className="flex items-center justify-center gap-1">
-          {user.isVip && <span className="text-[8px] font-black" style={{ color: '#FDB515' }}>✦</span>}
-          <p className="text-[12px] font-black uppercase tracking-wider mt-1 truncate">{user.displayName ?? 'UNKNOWN'}</p>
+      {/* Avatar Container */}
+      <div className="relative shrink-0">
+        <div
+          className="h-12 w-12 rounded-xl overflow-hidden border flex items-center justify-center font-display font-bold text-sm shadow-sm"
+          style={{
+            borderColor: `${accentColor}33`,
+            backgroundColor: `${accentColor}18`,
+            color: accentColor,
+          }}
+        >
+          {user.photoURL ? (
+            <img src={user.photoURL} alt="" className="h-full w-full object-cover" />
+          ) : (
+            letter
+          )}
         </div>
-        <p className="text-[10px] opacity-25 truncate font-mono mt-0.5">{user.id?.slice(0, 22)}…</p>
+        {user.isVip && (
+          <span
+            className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold shadow"
+            style={{
+              backgroundColor: '#FDB515',
+              color: '#000',
+            }}
+            title="VIP Member"
+          >
+            ✦
+          </span>
+        )}
       </div>
 
-      {/* Action buttons */}
-      <div className="flex flex-col gap-1.5 w-full mt-1">
-        {/* View */}
+      {/* Name & Operative Label */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          {user.isVip && <span className="text-[9px] font-bold" style={{ color: '#FDB515' }}>✦</span>}
+          <p
+            className="text-[13px] font-display font-semibold tracking-tight text-white truncate group-hover:text-white"
+            title={user.displayName ?? 'UNKNOWN'}
+          >
+            {user.displayName ?? 'UNKNOWN'}
+          </p>
+        </div>
+        <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 mt-0.5">
+          Operative
+        </p>
+      </div>
+
+      {/* Actions (Flex row, View Profile + Icon Action) */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {/* View Profile Button */}
         <button
           onClick={() => openProfile(user.id)}
-          className="flex-1 flex items-center justify-center gap-1 rounded-xl border py-3 text-[9.5px] font-black uppercase tracking-widest transition-all hover:opacity-80"
-          style={{ borderColor: theme.border, opacity: 0.5, backgroundColor: `${accentColor}22` }}
-          title="View profile"
+          className="h-8 px-4 flex items-center justify-center gap-1.5 rounded-xl border text-[10px] font-display font-semibold uppercase tracking-wider transition-all duration-150 hover:bg-white/10 active:scale-95 text-zinc-300 hover:text-white"
+          style={{
+            borderColor: theme.border,
+            backgroundColor: `${theme.bg}88`,
+          }}
+          title="View Profile"
         >
-          View Profile
+          Profile
         </button>
 
-       {/* Add / Ally / Sent / Sending */}
+        {/* Action Button (Icon only) */}
         {alreadyFriend ? (
           <span
-            className="flex-1 flex hidden items-center justify-center gap-1 rounded-lg border py-3 text-[9px] font-black uppercase tracking-widest"
-            style={{ borderColor: '#22c55e44', color: '#22c55e', backgroundColor: '#22c55e18' }}
+            className="h-8 w-8 flex items-center justify-center rounded-xl border text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
+            title="Allied Operative"
           >
-            
+            <FontAwesomeIcon icon={faUserCheck} style={{ fontSize: 12 }} />
           </span>
         ) : alreadySent || sending ? (
           <span
-            className="flex-1 flex items-center justify-center gap-1 rounded-lg border py-3 text-[9px] font-black uppercase tracking-widest opacity-50"
-            style={{ borderColor: accentColor, color: accentColor, backgroundColor: `${accentColor}18` }}
+            className="h-8 w-8 flex items-center justify-center rounded-xl border text-amber-300 bg-amber-500/15 border-amber-500/30 opacity-75 animate-pulse"
+            title={sending ? 'Sending friend request…' : 'Request Pending'}
           >
-            <FontAwesomeIcon icon={faClock} style={{ fontSize: 8 }} />
-            {sending ? 'Sending…' : 'Sent'}
+            <FontAwesomeIcon icon={faClock} style={{ fontSize: 12 }} />
           </span>
         ) : (
           <button
             onClick={handleAdd}
-            className="flex-1 flex items-center justify-center gap-1 rounded-lg border py-3 text-[9px] font-black uppercase tracking-widest transition-all hover:opacity-80"
-            style={{ borderColor: accentColor, color: accentColor, backgroundColor: `${accentColor}18` }}
+            className="h-8 w-8 flex items-center justify-center rounded-xl border transition-all duration-150 hover:brightness-110 active:scale-95 shadow-sm"
+            style={{
+              borderColor: accentColor,
+              backgroundColor: accentColor,
+              color: accentOn || '#000',
+            }}
+            title="Add Operative"
           >
-            <FontAwesomeIcon icon={faUserPlus} style={{ fontSize: 8 }} />
-            Add
+            <FontAwesomeIcon icon={faUserPlus} style={{ fontSize: 11 }} />
           </button>
         )}
       </div>

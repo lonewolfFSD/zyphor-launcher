@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ['./index.html', './src/**/*.{js,jsx}'],
+  content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
       screens: {
@@ -22,8 +22,10 @@ module.exports = {
         rust: '#8a3a30',
       },
       fontFamily: {
-        display: ['"Playfair Display"', 'Georgia', 'serif'],
-        body: ['"Inter"', 'system-ui', 'sans-serif'],
+        sans: ['"Manrope"', '"Inter"', 'system-ui', 'sans-serif'],
+        display: ['"Clash Display"', '"Manrope"', 'system-ui', 'sans-serif'],
+        heading: ['"Clash Display"', '"Manrope"', 'system-ui', 'sans-serif'],
+        body: ['"Manrope"', '"Inter"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'Consolas', 'monospace'],
       },
       letterSpacing: {

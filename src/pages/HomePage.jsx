@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
@@ -17,7 +17,7 @@ import {
 } from '@fortawesome/free-brands-svg-icons';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import { useTranslation } from '../i18n/index.jsx';
-import { doc, getDoc, collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import Logo from '../../build-resources/logo.png';
 import GlassSurface from '../effects/GlassSurface.tsx';
@@ -37,55 +37,20 @@ const fadeUp = {
   animate: { opacity: 1, y: 0 },
 };
 
-// ── Dynamic greeting ───────────────────────────────────────────────────────────
-const GREETINGS = {
-  // 5am–11:59am
-  morning: [
-    (n) => `Good morning, ${n}.`,
-    (n) => `Rise and shine, ${n}.`,
-    (n) => `Morning, ${n}. Ready to play?`,
-    (n) => `Early bird, ${n}.`,
-    (n) => `Hey ${n}, morning.`,
-    (n) => `Good morning, operative ${n}.`,
-  ],
-  // 12pm–4:59pm
-  afternoon: [
-    (n) => `Good afternoon, ${n}.`,
-    (n) => `Hey ${n}, afternoon already.`,
-    (n) => `What's up, ${n}?`,
-    (n) => `Afternoon, ${n}. Loading up?`,
-    (n) => `Welcome back, ${n}.`,
-    (n) => `Good to see you, ${n}.`,
-  ],
-  // 5pm–8:59pm
-  evening: [
-    (n) => `Good evening, ${n}.`,
-    (n) => `Evening, ${n}. Time to play?`,
-    (n) => `Hey ${n}, evening session?`,
-    (n) => `Welcome back, ${n}.`,
-    (n) => `Evening, operative ${n}.`,
-    (n) => `Good evening, ${n}. Ready?`,
-  ],
-  // 9pm–4:59am
-  night: [
-    (n) => `Still up, ${n}?`,
-    (n) => `Late night session, ${n}?`,
-    (n) => `Night owl mode, ${n}.`,
-    (n) => `Hey ${n}, burning the midnight oil?`,
-    (n) => `Dark hours, ${n}. Let's go.`,
-    (n) => `Late night, ${n}. Welcome.`,
-  ],
-};
-
-function getGreeting(displayName) {
-  const name = (displayName ?? 'Operative').split(' ')[0];
+function getGreeting(t, displayName, variant = 1) {
+  const op = t('home.greetings.operative', {}, 'Operative');
+  const name = (displayName ?? op).split(' ')[0];
   const h = new Date().getHours();
   const bucket =
     h >= 5  && h < 12 ? 'morning'   :
     h >= 12 && h < 17 ? 'afternoon' :
     h >= 17 && h < 21 ? 'evening'   : 'night';
-  const pool = GREETINGS[bucket];
-  return pool[Math.floor(Math.random() * pool.length)](name);
+  const v = ((Math.abs(variant) - 1) % 3) + 1;
+  return t(
+    `home.greetings.${bucket}_${v}`,
+    { name },
+    t(`home.greetings.${bucket}`, { name }, `Welcome back, ${name}.`)
+  );
 }
 
 let homeVisited = false;
@@ -177,9 +142,17 @@ export default function HomePage({ profile }) {
   const accent  = ACCENTS[settings?.accent] || ACCENTS.bulb;
   const motionOn = settings ? settings.animations && !settings.reduceMotion : true;
 
-  const hasGame = Boolean(profile?.hasGame || profile?.steamOwnsGame || profile?.steamId);
+  const [steamStatus, setSteamStatus]       = useState(null);
+  const hasGame = Boolean(
+    profile?.hasGame ||
+    profile?.steamOwnsGame ||
+    profile?.steamId ||
+    steamStatus?.ownsGame ||
+    steamStatus?.initialized
+  );
 
   const [launchState, setLaunchState]       = useState('idle');
+  const [launchError, setLaunchError]       = useState(null);
   const [showLaunchModal, setShowLaunchModal] = useState(false);
   const [news, setNews]                     = useState([]);
   const [bannerIndex, setBannerIndex]       = useState(0);
@@ -195,7 +168,8 @@ export default function HomePage({ profile }) {
   const [showSteamLinkModal, setShowSteamLinkModal] = useState(false);
 
   const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
-  const [greeting] = useState(() => getGreeting(profile?.displayName));
+  const [greetingVariant] = useState(() => Math.floor(Math.random() * 3) + 1);
+  const greeting = useMemo(() => getGreeting(t, profile?.displayName, greetingVariant), [t, profile?.displayName, greetingVariant]);
 
   const pageRef  = useRef(null);
   const didIntro = useRef(homeVisited);
@@ -207,6 +181,30 @@ export default function HomePage({ profile }) {
   };
 
   useEffect(() => { (async () => {
+    // 1. Direct Steam check from Steamworks
+    try {
+      const s = await window.launcherAPI?.steam?.getStatus?.();
+      if (s) {
+        setSteamStatus(s);
+        if (s.initialized && profile?.uid) {
+          const resolvedSteamId = profile.steamId || s.steamId64;
+          const owns = Boolean(profile.steamOwnsGame || profile.hasGame || s.ownsGame || s.initialized);
+          setDoc(
+            doc(db, 'users', profile.uid),
+            {
+              steamId: resolvedSteamId,
+              steamName: s.name || '',
+              steamOwnsGame: owns,
+              hasGame: owns,
+            },
+            { merge: true }
+          ).catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.warn('[HomePage] Steam status check error:', err);
+    }
+
     try {
       const q = query(collection(db, 'news'), orderBy('date', 'desc'), limit(5));
       const snap = await getDocs(q);
@@ -236,17 +234,17 @@ export default function HomePage({ profile }) {
       setUpdateStatus('current');
     }
 
-      // Steam link check on mount
-      // Steam link check on mount — check Firestore directly
-      if (profile?.uid) {
-        try {
-          const snap = await getDoc(doc(db, 'users', profile.uid));
-          const data = snap.data();
-          if (!data?.steamId) {
-            setShowSteamLinkModal(true);
-          }
-        } catch {}
-      }
+    // Steam link check on mount — only prompt if neither profile nor active Steam client is available
+    if (profile?.uid) {
+      try {
+        const snap = await getDoc(doc(db, 'users', profile.uid));
+        const data = snap.data();
+        const s = await window.launcherAPI?.steam?.getStatus?.();
+        if (!data?.steamId && !s?.initialized) {
+          setShowSteamLinkModal(true);
+        }
+      } catch {}
+    }
   })(); }, []);
 
   useEffect(() => {
@@ -321,7 +319,17 @@ export default function HomePage({ profile }) {
   }
 
   const pollRef = useRef(null);
-  useEffect(() => () => clearInterval(pollRef.current), []);
+  useEffect(() => {
+    const unsub = window.launcherAPI?.onGameExit?.(() => {
+      clearInterval(pollRef.current);
+      setLaunchState('idle');
+      setLaunchError(null);
+    });
+    return () => {
+      clearInterval(pollRef.current);
+      unsub?.();
+    };
+  }, []);
 
   function startGamePolling() {
     clearInterval(pollRef.current);
@@ -337,65 +345,82 @@ export default function HomePage({ profile }) {
   }
 
   async function handlePlay() {
-  console.log('[handlePlay] fired')
-  
-  setLaunchState('launching')
-  setShowLaunchModal(true)
+    console.log('[handlePlay] fired');
+    
+    setLaunchError(null);
+    setLaunchState('launching');
+    setShowLaunchModal(true);
 
-  try {
-    // Check if Steam client is active
-    const steamStatus = await window.launcherAPI?.steam?.getStatus?.();
-    const effectiveSteamId = profile?.steamId || (steamStatus?.initialized ? steamStatus.steamId64 : null);
+    try {
+      // Check if Steam client is active
+      const curSteam = steamStatus || (await window.launcherAPI?.steam?.getStatus?.());
+      const effectiveSteamId = profile?.steamId || (curSteam?.initialized ? curSteam.steamId64 : null);
 
-    const hasAccess = Boolean(profile?.isVip || profile?.steamOwnsGame || profile?.hasGame || steamStatus?.initialized);
+      const hasAccess = Boolean(
+        profile?.isVip ||
+        profile?.steamOwnsGame ||
+        profile?.hasGame ||
+        curSteam?.ownsGame ||
+        curSteam?.initialized
+      );
 
-    if (!hasAccess) {
-      setLaunchState('idle')
-      setShowLaunchModal(false)
-      return
+      if (!hasAccess) {
+        if (!curSteam?.initialized) {
+          setLaunchError('Steam client is not running. Please start Steam in the background so we can verify your copy of STAY.');
+        } else {
+          setLaunchError('Your active Steam account does not own STAY, or access has not been verified.');
+        }
+        setLaunchState('error');
+        return;
+      }
+
+      if (!effectiveSteamId) {
+        setShowSteamLinkModal(true);
+        setLaunchState('idle');
+        setShowLaunchModal(false);
+        return;
+      }
+
+      const launchArgs = [
+        '--zyphor-access-verified',
+        `--zyphor-uid=${profile.uid ?? ''}`,
+        `--zyphor-name=${profile.displayName ?? ''}`,
+        `--zyphor-vip=${profile.isVip ? '1' : '0'}`,
+        `--zyphor-avatar=${profile.photoURL ?? ''}`,
+        `--zyphor-location=${profile.location ?? ''}`,
+        `--zyphor-timezone=${profile.timezone ?? ''}`,
+        `--zyphor-gender=${profile.gender ?? ''}`,
+      ];
+
+      const result = await window.launcherAPI?.launchGame?.(launchArgs);
+      console.log('[handlePlay] launch result:', result);
+
+      if (!result?.ok) {
+        const errorMsg = result?.error || result?.message || (result?.reason === 'exe_not_found'
+          ? 'Game executable (STAY.exe) could not be found. Please check your game installation folder.'
+          : 'Failed to launch game process.');
+        setLaunchError(errorMsg);
+        setLaunchState('error');
+        // Do NOT minimize launcher!
+        return;
+      }
+
+      // Game launched successfully
+      setLaunchState('running');
+      setShowLaunchModal(false);
+      setLaunchError(null);
+      startGamePolling();
+
+      // Minimize the launcher window now that launch actually succeeded
+      window.launcherAPI?.minimizeWindow?.();
+
+    } catch (e) {
+      console.error('[handlePlay] error:', e);
+      setLaunchError(e?.message || 'An unexpected error occurred while launching.');
+      setLaunchState('error');
+      // Do NOT minimize launcher!
     }
-
-    if (!effectiveSteamId) {
-      setShowSteamLinkModal(true)
-      setLaunchState('idle')
-      setShowLaunchModal(false)
-      return
-    }
-
-    const launchArgs = [
-      '--zyphor-access-verified',
-      `--zyphor-uid=${profile.uid}`,
-      `--zyphor-name=${profile.displayName}`,
-      `--zyphor-vip=${profile.isVip ? '1' : '0'}`,
-      `--zyphor-avatar=${profile.photoURL ?? ''}`,
-      `--zyphor-location=${profile.location ?? ''}`,
-      `--zyphor-timezone=${profile.timezone ?? ''}`,
-      `--zyphor-gender=${profile.gender ?? ''}`,
-    ]
-
-    const result = await window.launcherAPI.launchGame(launchArgs)
-    console.log('[handlePlay] launch result:', result)
-
-    if (result?.reason === 'exe_not_found') {
-      setLaunchState('idle')
-      setShowLaunchModal(false)
-      return
-    }
-
-    setTimeout(() => {
-      setLaunchState('running')
-      setShowLaunchModal(false)
-      startGamePolling()
-      window.launcherAPI?.minimizeToTray?.()
-      window.launcherAPI?.minimize?.()
-    }, 3000)
-
-  } catch (e) {
-    console.error('[handlePlay] error:', e)
-    setLaunchState('idle')
-    setShowLaunchModal(false)
   }
-}
 
   async function handleStop() {
     clearInterval(pollRef.current);
@@ -411,8 +436,15 @@ export default function HomePage({ profile }) {
 
   function handlePlayToggle() {
     if (launchState === 'running') handleStop();
-    else if (launchState === 'idle') handlePlay();
+    else if (launchState === 'idle' || launchState === 'error') handlePlay();
   }
+
+  useEffect(() => {
+    const unsub = window.launcherAPI?.onPlayRequested?.(() => {
+      handlePlayToggle();
+    });
+    return () => unsub?.();
+  }, [launchState, hasGame]);
 
   useGSAP(() => {
     if (!pageReady || !pageRef.current || didIntro.current) return;
@@ -430,7 +462,7 @@ export default function HomePage({ profile }) {
   }, [pageReady]);
 
   return (
-    <div ref={pageRef} className="relative flex h-full gap-4" style={{ color: 'inherit', fontFamily: 'Apple Garamond' }}>
+    <div ref={pageRef} className="relative flex h-full gap-4" style={{ color: 'inherit' }}>
       {/* Background and grid are now rendered globally in App.jsx */}
 
       <AnimatePresence>
@@ -455,11 +487,13 @@ export default function HomePage({ profile }) {
 
       <LaunchModal
         visible={showLaunchModal}
-        gameName={STAY_GAME_NAME}
+        gameName={t('home.gameTitle', {}, STAY_GAME_NAME)}
+        error={launchError}
         onCancel={() => {
           clearInterval(pollRef.current);
           setShowLaunchModal(false);
           setLaunchState('idle');
+          setLaunchError(null);
         }}
         accent={accent}
         theme={theme}
@@ -496,7 +530,7 @@ export default function HomePage({ profile }) {
           <Divider theme={theme} />
           <StatusChip
             icon={serverStatus === 'online' ? faWifi : faTriangleExclamation}
-            label={serverStatus === 'online' ? t('home.serverStatus', {}, 'Servers online') : serverStatus === 'checking' ? 'Checking servers…' : 'Servers offline'}
+            label={serverStatus === 'online' ? t('home.serverStatus', {}, 'Servers online') : serverStatus === 'checking' ? t('home.checkingServers', {}, 'Checking servers…') : t('home.serversOffline', {}, 'Servers offline')}
             tone={serverStatus === 'offline' ? '#c1633a' : accent.hex}
           />
           {playtime != null && (
@@ -556,7 +590,7 @@ export default function HomePage({ profile }) {
 
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 py-10 px-12">
-            <h2 className="mt-1 text-[2.1em] font-medium text-bone">
+            <h2 className="mt-1 text-[1.9em] font-medium text-bone">
               {banner?.title ?? greeting}
             </h2>
             {banner?.date && <p className="mt-1 text-[13px] text-ash/60">{banner.date}</p>}
@@ -581,10 +615,12 @@ export default function HomePage({ profile }) {
 
         <hr className="mt-4 border-ash/20" />
 
-        <h3 className='hp-section-title text-2xl font-medium mt-4 font-["Apple Garamond"]'>
-          STAY: Possession • Obsession • Permanence{' '}
+        <h3 className="hp-section-title text-2xl font-semibold mt-4">
+          {t('home.gameTitle', {}, STAY_GAME_NAME)}{' '}
           <span className="text-ash/40 px-0.5">|</span>{' '}
-          <span className="text-xs font-extrabold font-[Manrope]" style={{ color: accent.hex }}>SERIES</span>
+          <span className="text-xs font-extrabold font-mono tracking-wider" style={{ color: accent.hex }}>
+            {t('home.series', {}, 'SERIES')}
+          </span>
         </h3>
 
         <motion.div {...fadeUp} transition={{ delay: 0.1, duration: 0.4 }}>
@@ -597,7 +633,7 @@ export default function HomePage({ profile }) {
             >
               <img
                 src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/4956550/5987fca53a2c7e7bc87bc460bbe59b761dc02251/capsule_616x353.jpg?t=1784562601"
-                alt="STAY"
+                alt={t('home.gameTitle', {}, 'STAY')}
                 className="absolute inset-0 h-full w-full object-cover"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
@@ -614,7 +650,7 @@ export default function HomePage({ profile }) {
                   <button
                     type="button"
                     onClick={handlePlayToggle}
-                    disabled={launchState === 'launching' || launchState === 'error'}
+                    disabled={launchState === 'launching'}
                     className="flex h-[60px] w-[60px] items-center justify-center rounded-2xl shadow-lg transition-transform duration-200 scale-90 group-hover:scale-100 disabled:cursor-wait bg-transparent backdrop-blur-sm"
                     style={{ border: `3px solid ${accent.hex}88`, backgroundColor: `${accent.hex}22` }}
                   >
@@ -637,11 +673,11 @@ export default function HomePage({ profile }) {
                     style={{ backgroundColor: '#1b2838', color: '#c7d5e0', border: '1px solid #4c6b8a' }}
                   >
                     <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 11 }} />
-                    Buy on Steam
+                    {t('home.buyOnSteam', {}, 'Buy on Steam')}
                   </button>
                 )}
                 <span className="text-[10px] font-black uppercase tracking-widest text-white/70">
-                  {hasGame ? '' : 'Not owned'}
+                  {hasGame ? '' : t('home.notOwned', {}, 'Not owned')}
                 </span>
               </div>
 
@@ -654,7 +690,7 @@ export default function HomePage({ profile }) {
               className="hp-game-card flex h-[151px] w-[262px] flex-col items-center justify-center rounded-3xl border border-dashed backdrop-blur-glass text-ash/40 transition-colors hover:text-ash/60"
               style={{ backgroundColor: `${theme.surface}90`, border: `2px dashed ${accent.hex}95` }}
             >
-              <p className="text-xs font-['Manrope'] text-ash/40">More titles coming soon</p>
+              <p className="text-xs font-['Manrope'] text-ash/40">{t('home.moreComingSoon', {}, 'More titles coming soon')}</p>
               
             </div>
             
@@ -664,22 +700,22 @@ export default function HomePage({ profile }) {
 
       {/* ── RIGHT: News sidebar ── */}
       <motion.aside
-        className="hp-aside relative flex w-80 shrink-0 flex-col overflow-hidden rounded-[1.8em] border transition-opacity duration-300"
+        className="hp-aside relative flex w-80 shrink-0 flex-col overflow-hidden rounded-[1.2em] border transition-opacity duration-300"
         style={{ borderColor: theme.border, backgroundColor: `${theme.surface}99`, opacity: pageReady ? 1 : 0 }}
       >
         <div className="absolute inset-0 -z-10">
   <GlassLayer borderRadius={20} distortionScale={-180} blur={60} />
 </div>
-        <div className="flex shrink-0 items-center gap-2.5 border-b px-6 py-3.5" style={{ borderColor: theme.border }}>
-          <h2 className="text-[18.5px] mt-0.5 font-medium tracking-tight text-bone" style={{ fontFamily: 'Apple Garamond' }}>
+        <div className="flex shrink-0 items-center gap-2.5 border-b px-5 py-3" style={{ borderColor: theme.border }}>
+          <h2 className="text-[16px] font-semibold tracking-tight text-bone">
             {t('home.latestNews', {}, "What's New?")}
           </h2>
-          <span
+          {/* <span
             className="ml-auto rounded-lg px-2 py-1 text-[10px] font-bold"
             style={{ backgroundColor: `${accent.hex}22`, color: `#${accent.hex}99`, border: `2px solid ${accent.hex}66` }}
           >
             {banners.length}
-          </span>
+          </span> */}
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -722,14 +758,14 @@ export default function HomePage({ profile }) {
               style={{ borderColor: theme.border, backgroundColor: `${theme.surface}60` }}
             >
               <p className="px-3 py-2.5 text-[11px] leading-relaxed text-ash/50">
-                Follow development, report bugs, and stay up to date with everything STAY. <br />
+                {t('home.communityCardText', {}, 'Follow development, report bugs, and stay up to date with everything STAY.')} <br />
                 <hr className="my-1.5 border-ash/20" />
                 <a
                   href="https://store.steampowered.com/app/4956550"
                   className="underline font-semibold text-[10px]"
                   style={{ color: accent.hex }}
                 >
-                  Click here to join the Steam community hub{' '}
+                  {t('home.joinSteamCommunity', {}, 'Click here to join the Steam community hub')}{' '}
                   <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="ml-1 text-[9px]" />
                 </a>
               </p>
@@ -780,6 +816,7 @@ export default function HomePage({ profile }) {
 }
 
 function SteamLinkModal({ visible, uid, accent, theme, onClose }) {
+  const { t } = useTranslation();
   return (
     <AnimatePresence>
       {visible && (
@@ -811,9 +848,9 @@ function SteamLinkModal({ visible, uid, accent, theme, onClose }) {
             </div>
 
             <div>
-              <h2 className="text-2xl font-medium text-bone">Link your Steam account</h2>
+              <h2 className="text-2xl font-medium text-bone">{t('home.steamLink.title', {}, 'Link your Steam account')}</h2>
               <p className="mt-2 text-sm text-ash/60 leading-relaxed font-[Manrope]">
-                To verify your copy of STAY and unlock the launcher, you need to connect your Steam account. This only takes a moment.
+                {t('home.steamLink.desc', {}, 'To verify your copy of STAY and unlock the launcher, you need to connect your Steam account. This only takes a moment.')}
               </p>
             </div>
 
@@ -827,7 +864,7 @@ function SteamLinkModal({ visible, uid, accent, theme, onClose }) {
                 className="flex-1 rounded-2xl py-4 text-[13px] font-semibold font-[Manrope] transition hover:opacity-90 active:scale-[0.98]"
                 style={{ backgroundColor: '#1b2838', color: '#c7d5e0', border: '1px solid #4c6b8a' }}
               >
-                Connect Steam
+                {t('home.steamLink.connect', {}, 'Connect Steam')}
               </button>
               <button
                 type="button"
@@ -835,7 +872,7 @@ function SteamLinkModal({ visible, uid, accent, theme, onClose }) {
                 className="rounded-xl px-5 py-3 text-sm underline font-[Manrope] font-medium transition hover:bg-white/5"
                 style={{ color: `${theme.text}60` }}
               >
-                Later
+                {t('home.steamLink.later', {}, 'Later')}
               </button>
             </div>
 
@@ -852,7 +889,8 @@ function SteamLinkModal({ visible, uid, accent, theme, onClose }) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
+function LaunchModal({ visible, gameName, error, onCancel, accent, theme }) {
+  const { t } = useTranslation();
   return (
     <AnimatePresence>
       {visible && (
@@ -870,7 +908,11 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
             exit={{ scale: 0.95, opacity: 0, y: 20 }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             className="relative flex overflow-hidden rounded-[2rem] border shadow-2xl"
-            style={{ width: 680, backgroundColor: `${theme.surface}f0`, borderColor: theme.border }}
+            style={{
+              width: 680,
+              backgroundColor: `${theme.surface}f0`,
+              borderColor: error ? 'rgba(239, 68, 68, 0.4)' : theme.border,
+            }}
           >
             <div className="overflow-hidden" style={{ width: 220, aspectRatio: '2 / 3' }}>
               <img
@@ -882,25 +924,39 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
             <div className="flex flex-1 flex-col justify-between p-7">
               <div>
                 <h2 className="text-2xl font-medium text-bone mt-3">{gameName}</h2>
-                <p className="mt-1 text-base text-ash/60">Preparing to launch via Steam…</p>
-                <div className="mt-6 flex items-center gap-3 font-[Manrope] text-xs text-ash/70">
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
-                    <path d="M4 12a8 8 0 018-8v8z" fill="currentColor" className="opacity-75" />
-                  </svg>
-                  <span>Handing off to Steam…</span>
-                </div>
+                {error ? (
+                  <>
+                    <p className="mt-1 text-sm font-semibold text-rose-400">{t('home.launch.failed', {}, 'Launch Failed')}</p>
+                    <div className="mt-4 flex items-start gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 font-[Manrope] text-xs text-rose-200 leading-relaxed">
+                      <FontAwesomeIcon icon={faTriangleExclamation} className="mt-0.5 shrink-0 text-sm text-rose-400" />
+                      <div className="flex-1 min-w-0 break-words">
+                        <span className="font-medium">{error}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-1 text-base text-ash/60">{t('home.launch.preparing', {}, 'Preparing to launch via Steam…')}</p>
+                    <div className="mt-6 flex items-center gap-3 font-[Manrope] text-xs text-ash/70">
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                        <path d="M4 12a8 8 0 018-8v8z" fill="currentColor" className="opacity-75" />
+                      </svg>
+                      <span>{t('home.launch.handoff', {}, 'Handing off to Steam…')}</span>
+                    </div>
+                  </>
+                )}
               </div>
               <button
                 onClick={onCancel}
                 className="self-end rounded-xl font-[Manrope] px-5 py-3 text-xs font-semibold text-ash/60 transition hover:bg-white/5 hover:text-bone"
               >
-                Cancel Launch
+                {error ? t('home.launch.dismiss', {}, 'Dismiss') : t('home.launch.cancel', {}, 'Cancel Launch')}
               </button>
             </div>
             <div
               className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full blur-3xl opacity-20"
-              style={{ backgroundColor: accent.hex }}
+              style={{ backgroundColor: error ? '#ef4444' : accent.hex }}
             />
           </motion.div>
         </motion.div>
@@ -910,6 +966,7 @@ function LaunchModal({ visible, gameName, onCancel, accent, theme }) {
 }
 
 function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose, onDownload, onInstall }) {
+  const { t } = useTranslation();
   const highlights = Array.isArray(info?.highlights) && info.highlights.length ? info.highlights : null;
 
   const notesText = !info?.releaseNotes
@@ -923,9 +980,9 @@ function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose,
     : null;
 
   const statusLabel =
-    dlState === 'downloaded'  ? 'Ready to install'
-    : dlState === 'downloading' ? 'Downloading'
-    : 'Update Available';
+    dlState === 'downloaded'  ? t('home.updateModal.readyToInstall', {}, 'Ready to install')
+    : dlState === 'downloading' ? t('home.updateModal.downloading', {}, 'Downloading')
+    : t('home.updateModal.updateAvailable', {}, 'Update Available');
 
   return (
     <AnimatePresence>
@@ -969,7 +1026,7 @@ function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose,
                   {info?.tagline ? (
                     <p className="text-[13px] mt-0.5 truncate" style={{ color: `${theme.text}60` }}>{info.tagline}</p>
                   ) : (
-                    <p className="text-[13px] mt-0.5" style={{ color: `${theme.text}55` }}>A newer build is ready for your launcher.</p>
+                    <p className="text-[13px] mt-0.5" style={{ color: `${theme.text}55` }}>{t('home.updateModal.newerBuildReady', {}, 'A newer build is ready for your launcher.')}</p>
                   )}
                 </div>
               </div>
@@ -1008,7 +1065,7 @@ function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose,
             <div className="relative min-h-0 flex-1 overflow-y-auto p-6">
               {highlights && dlState === 'idle' && (
                 <div className="mb-5">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-3" style={{ color: `${theme.text}40` }}>What's new</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-3" style={{ color: `${theme.text}40` }}>{t('home.updateModal.whatsNew', {}, "What's new")}</p>
                   <ul className="flex flex-col gap-2.5">
                     {highlights.slice(0, 5).map((h, i) => (
                       <li key={i} className="flex items-start gap-2.5 text-[13px]" style={{ color: `${theme.text}80` }}>
@@ -1022,7 +1079,7 @@ function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose,
 
               {notesText && !highlights && (
                 <div className="mb-5">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-3" style={{ color: `${theme.text}40` }}>What's new</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-3" style={{ color: `${theme.text}40` }}>{t('home.updateModal.whatsNew', {}, "What's new")}</p>
                   <p className="text-[13px] leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto" style={{ color: `${theme.text}70` }}>
                     {notesText}
                   </p>
@@ -1032,7 +1089,7 @@ function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose,
               {dlState === 'downloading' && (
                 <div className="mb-5">
                   <div className="flex justify-between text-[12px] mb-2" style={{ color: `${theme.text}55` }}>
-                    <span>Downloading update…</span>
+                    <span>{t('home.updateModal.downloadingProgress', {}, 'Downloading update…')}</span>
                     <span className="font-mono font-semibold" style={{ color: accent.hex }}>{Math.round(progress)}%</span>
                   </div>
                   <div className="h-[3px] w-full overflow-hidden rounded-full" style={{ backgroundColor: `${theme.text}12` }}>
@@ -1055,7 +1112,7 @@ function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose,
                   style={{ backgroundColor: `${accent.hex}12`, border: `0.5px solid ${accent.hex}33`, color: accent.hex }}
                 >
                   <FontAwesomeIcon icon={faCircleCheck} style={{ fontSize: 14, flexShrink: 0 }} />
-                  Download complete — ready to install.
+                  {t('home.updateModal.downloadComplete', {}, 'Download complete — ready to install.')}
                 </motion.div>
               )}
             </div>
@@ -1068,21 +1125,21 @@ function UpdateModal({ visible, info, dlState, progress, accent, theme, onClose,
                 className="rounded-xl px-4 py-2 text-[13px] font-medium transition hover:bg-white/6 disabled:opacity-30"
                 style={{ color: `${theme.text}60` }}
               >
-                {dlState === 'idle' ? 'Remind me later' : 'Close'}
+                {dlState === 'idle' ? t('home.updateModal.remindLater', {}, 'Remind me later') : t('home.updateModal.close', {}, 'Close')}
               </button>
               {dlState === 'idle' && (
                 <button type="button" onClick={onDownload} className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]" style={{ backgroundColor: accent.hex, color: accent.on }}>
-                  Download update
+                  {t('home.updateModal.downloadUpdate', {}, 'Download update')}
                 </button>
               )}
               {dlState === 'downloading' && (
                 <button type="button" disabled className="rounded-xl px-5 py-2 text-[13px] font-semibold opacity-45 cursor-not-allowed" style={{ backgroundColor: accent.hex, color: accent.on }}>
-                  Downloading… {Math.round(progress)}%
+                  {t('home.updateModal.downloadingBtn', { percent: Math.round(progress) }, `Downloading… ${Math.round(progress)}%`)}
                 </button>
               )}
               {dlState === 'downloaded' && (
                 <button type="button" onClick={onInstall} className="rounded-xl px-5 py-2 text-[13px] font-semibold transition hover:opacity-90 active:scale-[0.98]" style={{ backgroundColor: accent.hex, color: accent.on }}>
-                  Restart &amp; install
+                  {t('home.updateModal.restartAndInstall', {}, 'Restart & install')}
                 </button>
               )}
             </div>

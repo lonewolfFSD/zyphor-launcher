@@ -3,7 +3,6 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('launcherAPI', {
   getSettings:     () => ipcRenderer.invoke('settings:get'),
   saveSettings:    (s) => ipcRenderer.invoke('settings:save', s),
-  launchGame:      () => ipcRenderer.invoke('game:launch'),
   onGameExit:      (cb) => {
     const l = (_e, p) => cb(p);
     ipcRenderer.on('game:exit', l);
@@ -14,6 +13,11 @@ contextBridge.exposeInMainWorld('launcherAPI', {
     getAll:      (gameId)            => ipcRenderer.invoke('screenshots:getAll', gameId),
     openFolder:  (gameId)            => ipcRenderer.invoke('screenshots:openFolder', gameId),
     delete:      (gameId, fileNames) => ipcRenderer.invoke('screenshots:delete', gameId, fileNames),
+    onUpdated:   (cb) => {
+      const l = () => cb();
+      ipcRenderer.on('screenshots:updated', l);
+      return () => ipcRenderer.removeListener('screenshots:updated', l);
+    },
   },
 
   takeScreenshot: (gameId) => ipcRenderer.invoke('screenshots:take', gameId),
@@ -45,16 +49,33 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   },
 
   steam: {
-    getStatus:     () => ipcRenderer.invoke('steam:getStatus'),
-    getAuthTicket: () => ipcRenderer.invoke('steam:getAuthTicket'),
+    getStatus:          () => ipcRenderer.invoke('steam:getStatus'),
+    getAuthTicket:      () => ipcRenderer.invoke('steam:getAuthTicket'),
+    getAchievements:    (appId) => ipcRenderer.invoke('steam:getAchievements', appId),
+    getInstalledGames:  () => ipcRenderer.invoke('steam:getInstalledGames'),
+  },
+
+  workshop: {
+    getItems:           (params) => ipcRenderer.invoke('workshop:getItems', params),
+    getItem:            (id) => ipcRenderer.invoke('workshop:getItem', id),
+    getItemState:       (id) => ipcRenderer.invoke('workshop:getItemState', id),
+    downloadItem:       (id, highPriority) => ipcRenderer.invoke('workshop:downloadItem', id, highPriority),
+    subscribe:          (id) => ipcRenderer.invoke('workshop:subscribe', id),
+    unsubscribe:        (id) => ipcRenderer.invoke('workshop:unsubscribe', id),
+    getSubscribedItems: () => ipcRenderer.invoke('workshop:getSubscribedItems'),
+    publishItem:        (data) => ipcRenderer.invoke('workshop:publishItem', data),
+    getFileInfo:        (filePath) => ipcRenderer.invoke('workshop:getFileInfo', filePath),
+    checkNsfw:          (target) => ipcRenderer.invoke('workshop:checkNsfw', target),
+    pickVideoFile:      () => ipcRenderer.invoke('dialog:pickVideoFile'),
+    pickImageFile:      () => ipcRenderer.invoke('dialog:pickImageFile'),
   },
 
   verifySteamOwnership: (uid) => ipcRenderer.invoke('verify-steam-ownership', uid),
   launchGame: (args) => ipcRenderer.invoke('launch-game', args),
+  isGameRunning: () => ipcRenderer.invoke('game:isRunning'),
+  stopGame: () => ipcRenderer.invoke('game:stop'),
 
 readGameSettings: () => ipcRenderer.invoke('settings:readFromGame'),
-
-// Add inside the contextBridge.exposeInMainWorld('launcherAPI', { ... }) object:
 writeGameSettings: (settings) => ipcRenderer.invoke('settings:writeToGame', settings),
 
   fs: {
@@ -87,6 +108,7 @@ writeGameSettings: (settings) => ipcRenderer.invoke('settings:writeToGame', sett
   },
 
   checkOllamaModel: (model) => ipcRenderer.invoke('ollama:checkModel', model),
+  getInstalledOllamaModels: () => ipcRenderer.invoke('ollama:getInstalledModels'),
   pullOllamaModel:  (model) => ipcRenderer.invoke('ollama:pullModel', model),
   onOllamaPullProgress: (cb) => {
     const l = (_e, pct) => cb(pct);
@@ -110,10 +132,18 @@ writeGameSettings: (settings) => ipcRenderer.invoke('settings:writeToGame', sett
     return () => ipcRenderer.removeListener('faye:chunk', l);
   },
 
-  minimizeWindow:  () => ipcRenderer.send('window:minimize'),
-  maximizeWindow:  () => ipcRenderer.send('window:maximize'),
-  closeWindow:     () => ipcRenderer.send('window:close'),
-  showWindow:      () => ipcRenderer.send('window:show'),
+  minimizeWindow:     () => ipcRenderer.send('window:minimize'),
+  minimize:           () => ipcRenderer.send('window:minimize'),
+  minimizeToTray:     () => ipcRenderer.send('window:minimize'),
+  maximizeWindow:     () => ipcRenderer.send('window:maximize'),
+  isWindowMaximized:  () => ipcRenderer.invoke('window:isMaximized'),
+  onMaximizedChange:  (cb) => {
+    const l = (_e, isMax) => cb(isMax);
+    ipcRenderer.on('window:maximized-change', l);
+    return () => ipcRenderer.removeListener('window:maximized-change', l);
+  },
+  closeWindow:        () => ipcRenderer.send('window:close'),
+  showWindow:         () => ipcRenderer.send('window:show'),
 
   checkForUpdates:    () => ipcRenderer.invoke('updater:check'),
   downloadUpdate:     () => ipcRenderer.invoke('updater:download'),
@@ -130,7 +160,21 @@ writeGameSettings: (settings) => ipcRenderer.invoke('settings:writeToGame', sett
   openExternal:    (url) => ipcRenderer.send('shell:openExternal', url),
   getLauncherPath: ()    => ipcRenderer.invoke('app:getLauncherPath'),
   setFullscreen:   (flag)=> ipcRenderer.send('set-fullscreen', flag),
+  unmaximizeWindow:()    => ipcRenderer.send('window:unmaximize'),
   getRamGB:        ()    => ipcRenderer.invoke('system:getRamGB'),
+  getHardwareStats:()    => ipcRenderer.invoke('system:getHardwareStats'),
+  checkHDRSupport: ()    => ipcRenderer.invoke('system:checkHDRSupport'),
+
+  onNavigate: (cb) => {
+    const l = (_e, page) => cb(page);
+    ipcRenderer.on('nav:navigate', l);
+    return () => ipcRenderer.removeListener('nav:navigate', l);
+  },
+  onPlayRequested: (cb) => {
+    const l = () => cb();
+    ipcRenderer.on('launcher:play', l);
+    return () => ipcRenderer.removeListener('launcher:play', l);
+  },
 
   getDiskItems:        () => ipcRenderer.invoke('storage:getDiskItems'),
   getDiskSpace:        () => ipcRenderer.invoke('storage:getDiskSpace'),
@@ -149,5 +193,21 @@ writeGameSettings: (settings) => ipcRenderer.invoke('settings:writeToGame', sett
     const l = (_e, t) => cb(t);
     ipcRenderer.on('speech:result', l);
     return () => ipcRenderer.removeListener('speech:result', l);
+  },
+
+  uninstall: {
+    isMode:   ()        => ipcRenderer.invoke('uninstall:isMode'),
+    execute:  (options) => ipcRenderer.invoke('uninstall:execute', options),
+    cancel:   ()        => ipcRenderer.send('uninstall:cancel'),
+    quit:     ()        => ipcRenderer.send('uninstall:quit'),
+  },
+
+  install: {
+    isMode:         ()        => ipcRenderer.invoke('install:isMode'),
+    getDefaultPath: ()        => ipcRenderer.invoke('install:getDefaultPath'),
+    getDiskSpace:   (dirPath) => ipcRenderer.invoke('install:getDiskSpace', dirPath),
+    execute:        (options) => ipcRenderer.invoke('install:execute', options),
+    cancel:         ()        => ipcRenderer.send('install:cancel'),
+    launch:         (options) => ipcRenderer.send('install:launch', options),
   },
 });

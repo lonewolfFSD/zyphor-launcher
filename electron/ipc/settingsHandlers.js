@@ -9,18 +9,24 @@ function getSettingsFilePath() {
 }
 
 function loadDefaults() {
+  const baseDefaults = {
+    resolution: '1920x1080',
+    fullscreen: true,
+    graphicsQuality: 'High',
+    masterVolume: 80,
+    gamePath: '',
+    minimizeToTray: true,
+    closeToTray: false,
+    autoUpdate: true,
+    launchOnStartup: false,
+  };
+
   try {
-    return JSON.parse(fs.readFileSync(DEFAULTS_PATH, 'utf-8'));
+    const fileDefaults = JSON.parse(fs.readFileSync(DEFAULTS_PATH, 'utf-8'));
+    return { ...baseDefaults, ...fileDefaults };
   } catch (err) {
     console.error('[settings] failed to read bundled defaults:', err);
-    // Hard-coded last resort so the launcher never crashes on a missing file.
-    return {
-      resolution: '1920x1080',
-      fullscreen: true,
-      graphicsQuality: 'High',
-      masterVolume: 80,
-      gamePath: '',
-    };
+    return baseDefaults;
   }
 }
 
@@ -62,6 +68,11 @@ function writeSettings(nextSettings) {
 function registerSettingsHandlers() {
   ipcMain.handle('settings:get', () => readSettings());
   ipcMain.handle('settings:save', (_event, nextSettings) => writeSettings(nextSettings));
+  ipcMain.on('settings-changed', (_event, nextSettings) => {
+    if (nextSettings && typeof nextSettings === 'object') {
+      writeSettings(nextSettings);
+    }
+  });
 }
 
 module.exports = { registerSettingsHandlers, readSettings, writeSettings };

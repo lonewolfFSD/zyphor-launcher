@@ -3,5 +3,9 @@
   "fullscreen": true,
   "graphicsQuality": "High",
   "masterVolume": 80,
-  "gamePath": ""
+  "gamePath": "",
+  "minimizeToTray": true,
+  "closeToTray": false,
+  "autoUpdate": true,
+  "launchOnStartup": false
 }

@@ -285,6 +285,7 @@ function ContextMenu({ x, y, onClose, actions, theme, accent }) {
 }
 
 function Lightbox({ shot, shots, index, onClose, onNavigate, onDelete, accent, theme }) {
+  const { t } = useTranslation();
   // zoom/pan live in refs + gsap, not React state — dragging/wheel no longer
   // re-renders the whole lightbox (toolbar, info panel, etc) on every pixel.
   const imgRef = useRef(null);
@@ -419,16 +420,16 @@ function Lightbox({ shot, shots, index, onClose, onNavigate, onDelete, accent, t
         </div>
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {[
-            { icon: ZoomOut, label: 'Zoom out', action: () => setZoom(state.current.zoom - 0.25) },
+            { icon: ZoomOut, label: t('screenshots.zoomOut', {}, 'Zoom out'), action: () => setZoom(state.current.zoom - 0.25) },
             { icon: null, label: `${Math.round(zoomLabel * 100)}%`, action: resetView },
-            { icon: ZoomIn, label: 'Zoom in', action: () => setZoom(state.current.zoom + 0.25) },
-            { icon: RotateCcw, label: 'Reset', action: resetView },
-            { icon: Info, label: 'Info', action: () => setShowInfo((v) => !v), active: showInfo },
-            { icon: copied ? Check : Copy, label: 'Copy', action: copyImage },
-            { icon: Download, label: 'Save', action: saveImage },
-            { icon: Share2, label: 'Share', action: shareImage },
-            { icon: Trash2, label: 'Delete', action: () => onDelete(shot), danger: true },
-            { icon: X, label: 'Close', action: onClose },
+            { icon: ZoomIn, label: t('screenshots.zoomIn', {}, 'Zoom in'), action: () => setZoom(state.current.zoom + 0.25) },
+            { icon: RotateCcw, label: t('screenshots.reset', {}, 'Reset'), action: resetView },
+            { icon: Info, label: t('screenshots.info', {}, 'Info'), action: () => setShowInfo((v) => !v), active: showInfo },
+            { icon: copied ? Check : Copy, label: t('screenshots.copy', {}, 'Copy'), action: copyImage },
+            { icon: Download, label: t('screenshots.save', {}, 'Save'), action: saveImage },
+            { icon: Share2, label: t('screenshots.share', {}, 'Share'), action: shareImage },
+            { icon: Trash2, label: t('screenshots.delete', {}, 'Delete'), action: () => onDelete(shot), danger: true },
+            { icon: X, label: t('screenshots.close', {}, 'Close'), action: onClose },
           ].map((b, i) => (
             <button
               key={i}
@@ -491,19 +492,19 @@ function Lightbox({ shot, shots, index, onClose, onNavigate, onDelete, accent, t
           >
             <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-[13px] px-5 py-5">
               <div>
-                <p className="text-[10px] uppercase tracking-wider opacity-40">Filename</p>
+                <p className="text-[10px] uppercase tracking-wider opacity-40">{t('screenshots.filename', {}, 'Filename')}</p>
                 <p className="font-medium truncate">{shot.fileName || shot.name}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider opacity-40">Date</p>
+                <p className="text-[10px] uppercase tracking-wider opacity-40">{t('screenshots.date', {}, 'Date')}</p>
                 <p className="font-medium">{formatDate(shot.mtime)}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider opacity-40">Resolution</p>
+                <p className="text-[10px] uppercase tracking-wider opacity-40">{t('screenshots.resolution', {}, 'Resolution')}</p>
                 <p className="font-medium">{meta.w ? `${meta.w} × ${meta.h}` : '…'}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider opacity-40">Size</p>
+                <p className="text-[10px] uppercase tracking-wider opacity-40">{t('screenshots.size', {}, 'Size')}</p>
                 <p className="font-medium">{formatBytes(shot.size)}</p>
               </div>
             </div>
@@ -520,18 +521,19 @@ function Lightbox({ shot, shots, index, onClose, onNavigate, onDelete, accent, t
  * Supports HD (full quality), SD (downscale trick), and static (PNG first-frame) modes.
  * Automatically pauses when the tab is hidden (Page Visibility API).
  */
-function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticPoster = null }) {
+function BackgroundVideo({ src, previewSrc, active, quality = 'hd', videoStyle = {} }) {
   const ref = useRef(null);
 
   useEffect(() => {
+    if (quality === 'static') return;
     const el = ref.current;
-    if (!el || quality === 'static') return;
+    if (!el) return;
     if (active) el.play().catch(() => {});
     else el.pause();
   }, [active, quality]);
 
   useEffect(() => {
-    if (!active || quality === 'static') return;
+    if (quality === 'static' || !active) return;
     const el = ref.current;
     if (!el) return;
     function handleVisibilityChange() {
@@ -542,21 +544,31 @@ function BackgroundVideo({ src, active, quality = 'hd', videoStyle = {}, staticP
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [active, quality]);
 
+  if (!src && !previewSrc) return null;
+
   if (quality === 'static') {
-    if (!staticPoster) return null;
+    if (previewSrc) {
+      return (
+        <img
+          src={previewSrc}
+          alt="Static Background"
+          className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover opacity-[0.8]"
+          style={videoStyle}
+        />
+      );
+    }
     return (
-      <div
-        className="pointer-events-none fixed inset-0 -z-20 h-full w-full"
-        style={{
-          backgroundImage: `url(${staticPoster})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
+      <video
+        ref={ref}
+        src={src}
+        muted
+        playsInline
+        onError={(e) => console.error('[BackgroundVideo] failed to load:', src, e.target.error)}
+        className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover opacity-[0.8]"
+        style={videoStyle}
       />
     );
   }
-
-  if (!src) return null;
 
   if (quality === 'sd') {
     return (
@@ -624,6 +636,11 @@ export default function ScreenshotsPage() {
     setSelected(new Set());
     setSelectMode(false);
     loadShots();
+
+    const unsub = window.launcherAPI?.screenshots?.onUpdated?.(() => {
+      loadShots();
+    });
+    return () => unsub?.();
   }, [selectedGameId, loadShots]);
 
   const sorted = useMemo(() => {
@@ -693,7 +710,11 @@ useEffect(() => {
   async function deleteShots(fileNames) {
     const list = Array.isArray(fileNames) ? fileNames : [fileNames];
     if (!list.length) return;
-    const ok = window.confirm(list.length === 1 ? `Delete "${list[0]}"?` : `Delete ${list.length} screenshots?`);
+    const ok = window.confirm(
+      list.length === 1
+        ? t('screenshots.deleteConfirmSingle', { name: list[0] }, `Delete "${list[0]}"?`)
+        : t('screenshots.deleteConfirmMultiple', { count: list.length }, `Delete ${list.length} screenshots?`)
+    );
     if (!ok) return;
     const res = await window.launcherAPI?.screenshots?.delete?.(game.folderKey, list);
     if (res?.ok !== false) {
@@ -723,24 +744,24 @@ useEffect(() => {
   }
 
   const ctxActions = ctxMenu ? [
-    { icon: Maximize2, label: 'Open', action: () => {
+    { icon: Maximize2, label: t('screenshots.open', {}, 'Open'), action: () => {
       const i = sorted.findIndex((s) => s.fileName === ctxMenu.shot.fileName);
       if (i >= 0) setLightboxIndex(i);
     }},
-    { icon: Copy, label: 'Copy image', action: async () => {
+    { icon: Copy, label: t('screenshots.copy', {}, 'Copy image'), action: async () => {
       try {
         const res = await fetch(ctxMenu.shot.src);
         const blob = await res.blob();
         await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })]);
       } catch { /* ignore */ }
     }},
-    { icon: Download, label: 'Save', action: () => {
+    { icon: Download, label: t('screenshots.save', {}, 'Save'), action: () => {
       const a = document.createElement('a');
       a.href = ctxMenu.shot.src;
       a.download = ctxMenu.shot.fileName;
       a.click();
     }},
-    { icon: Share2, label: 'Share', action: async () => {
+    { icon: Share2, label: t('screenshots.share', {}, 'Share'), action: async () => {
       try {
         if (navigator.share) {
           const res = await fetch(ctxMenu.shot.src);
@@ -753,7 +774,7 @@ useEffect(() => {
       } catch { /* ignore */ }
     }},
     { divider: true },
-    { icon: Trash2, label: 'Delete', danger: true, action: () => deleteShots([ctxMenu.shot.fileName]) },
+    { icon: Trash2, label: t('screenshots.delete', {}, 'Delete'), danger: true, action: () => deleteShots([ctxMenu.shot.fileName]) },
   ] : [];
 
   return (
@@ -764,16 +785,16 @@ useEffect(() => {
       <div className="px-9 py-7">
         <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
           <div>
-            <h2 className="text-4xl font-medium tracking-tight" style={{ color: theme.text, fontFamily: 'Apple Garamond' }}>
+            <h2 className="text-3xl uppercase font-bold tracking-tight" style={{ color: theme.text }}>
               {t('screenshots.title', {}, 'Screenshots')}
             </h2>
-            <p className="mt-1 text-lg opacity-40" style={{ fontFamily: 'Apple Garamond'}}>
+            <p className="mt-1 text-sm opacity-50 font-body">
               {t('screenshots.subtitle', {}, 'Official captures from Zyphor Studio titles.')}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <GameSelector games={GAMES} selected={selectedGameId} onSelect={setSelectedGameId} accent={accent} theme={theme} />
-            <button type="button" onClick={loadShots} title="Refresh" className="flex h-10 w-10 items-center justify-center rounded-xl transition hover:opacity-80"
+            <button type="button" onClick={loadShots} title={t('screenshots.refresh', {}, 'Refresh')} className="flex h-10 w-10 items-center justify-center rounded-xl transition hover:opacity-80"
               style={{ backgroundColor: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }}>
               <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
             </button>
@@ -788,30 +809,30 @@ useEffect(() => {
           <>
             <GlassLayer className="rounded-2xl border mb-4" style={{ borderColor: theme.border }} borderRadius={20}>
               <div className="flex flex-wrap items-center gap-2 px-14 py-3">
-              <span className="text-[12px] opacity-40 px-1">Sort</span>
+              <span className="text-[12px] opacity-40 px-1">{t('screenshots.sort', {}, 'Sort')}</span>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
                 className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium outline-none"
                 style={{ backgroundColor: theme.bg, color: theme.text, border: `1px solid ${theme.border}` }}>
-                <option value="date-desc">Newest first</option>
-                <option value="date-asc">Oldest first</option>
-                <option value="name-asc">Name A–Z</option>
-                <option value="name-desc">Name Z–A</option>
+                <option value="date-desc">{t('screenshots.sortNewest', {}, 'Newest first')}</option>
+                <option value="date-asc">{t('screenshots.sortOldest', {}, 'Oldest first')}</option>
+                <option value="name-asc">{t('screenshots.sortNameAsc', {}, 'Name A–Z')}</option>
+                <option value="name-desc">{t('screenshots.sortNameDesc', {}, 'Name Z–A')}</option>
               </select>
 
               <div className="h-5 w-px mx-1" style={{ backgroundColor: theme.border }} />
-              <span className="text-[12px] opacity-40 px-1">Size</span>
+              <span className="text-[12px] opacity-40 px-1">{t('screenshots.size', {}, 'Size')}</span>
               {[
-                { id: 'sm', icon: Minimize2, label: 'Small' },
-                { id: 'md', icon: Image, label: 'Medium' },
-                { id: 'lg', icon: Maximize2, label: 'Large' },
-              ].map((t) => (
-                <button key={t.id} type="button" title={t.label} onClick={() => setTileSize(t.id)}
+                { id: 'sm', icon: Minimize2, label: t('screenshots.sizeSmall', {}, 'Small') },
+                { id: 'md', icon: Image, label: t('screenshots.sizeMedium', {}, 'Medium') },
+                { id: 'lg', icon: Maximize2, label: t('screenshots.sizeLarge', {}, 'Large') },
+              ].map((tile) => (
+                <button key={tile.id} type="button" title={tile.label} onClick={() => setTileSize(tile.id)}
                   className="flex h-8 w-8 items-center justify-center rounded-lg transition"
                   style={{
-                    backgroundColor: tileSize === t.id ? `${accent.hex}22` : 'transparent',
-                    color: tileSize === t.id ? accent.hex : `${theme.text}66`,
+                    backgroundColor: tileSize === tile.id ? `${accent.hex}22` : 'transparent',
+                    color: tileSize === tile.id ? accent.hex : `${theme.text}66`,
                   }}>
-                  <t.icon size={15} />
+                  <tile.icon size={15} />
                 </button>
               ))}
 
@@ -824,30 +845,34 @@ useEffect(() => {
                   color: selectMode ? accent.hex : theme.text,
                   border: `1px solid ${selectMode ? accent.hex + '44' : theme.border}`,
                 }}>
-                {selectMode ? 'Cancel select' : 'Select'}
+                {selectMode ? t('screenshots.cancelSelect', {}, 'Cancel select') : t('screenshots.select', {}, 'Select')}
               </button>
 
               {selectMode && (
                 <>
                   <button type="button" onClick={() => setSelected(new Set(sorted.map((s) => s.fileName)))}
-                    className="text-[12px] opacity-60 hover:opacity-100 px-2">All</button>
+                    className="text-[12px] opacity-60 hover:opacity-100 px-2">{t('screenshots.all', {}, 'All')}</button>
                   <button type="button" onClick={() => setSelected(new Set())}
-                    className="text-[12px] opacity-60 hover:opacity-100 px-2">None</button>
-                  <span className="text-[11px] opacity-40">{selected.size} selected</span>
+                    className="text-[12px] opacity-60 hover:opacity-100 px-2">{t('screenshots.none', {}, 'None')}</button>
+                  <span className="text-[11px] opacity-40">{t('screenshots.selectedCount', { count: selected.size }, `${selected.size} selected`)}</span>
                   <button type="button" disabled={selected.size === 0} onClick={bulkDownload}
                     className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold disabled:opacity-30"
                     style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>
-                    <Download size={12} /> Download
+                    <Download size={12} /> {t('screenshots.download', {}, 'Download')}
                   </button>
                   <button type="button" disabled={selected.size === 0} onClick={() => deleteShots([...selected])}
                     className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold disabled:opacity-30 text-red-400 hover:bg-red-500/10">
-                    <Trash2 size={12} /> Delete
+                    <Trash2 size={12} /> {t('screenshots.delete', {}, 'Delete')}
                   </button>
                 </>
               )}
 
               <span className="ml-auto text-[11px] opacity-30 font-mono">
-                {loading ? '…' : `${sorted.length} shot${sorted.length === 1 ? '' : 's'}`}
+                {loading
+                  ? '…'
+                  : sorted.length === 1
+                    ? t('screenshots.shotsCount_one', { count: sorted.length }, '1 shot')
+                    : t('screenshots.shotsCount_other', { count: sorted.length }, `${sorted.length} shots`)}
               </span>
               </div>
             </GlassLayer>
@@ -856,15 +881,16 @@ useEffect(() => {
               <GlassLayer className="rounded-[2.5rem] border opacity-80" style={{ borderColor: theme.border }} borderRadius={54}>
                 <div className="flex flex-col items-center justify-center py-14 gap-1">
                   <AlertTriangle size={40} className="mb-2 opacity-20" />
-                  <p className="text-[20px] font-medium" style={{ color: theme.text, fontFamily: 'Apple Garamond' }}>No screenshots found</p>
+                  <p className="text-[22px] font-semibold" style={{ color: theme.text, fontFamily: 'Clash Display' }}>
+                    {t('screenshots.noScreenshots', {}, 'No screenshots found')}
+                  </p>
                   <p className="text-[13px] opacity-40 mt-1.5 text-center max-w-sm">
-                    Press <code className="px-1.5 py-0.5 rounded text-[11px] font-mono"
-                      style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>F2</code> in-game to capture a moment. Your screenshots will appear here automatically.
+                    {t('screenshots.noScreenshotsHint', {}, 'Press F2 in-game to capture a moment. Your screenshots will appear here automatically.')}
                   </p>
                   <button type="button" onClick={openFolder}
                     className="mt-4 flex items-center gap-2 rounded-xl px-6 py-3 text-[12px] font-semibold"
                     style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>
-                    <FolderOpen size={15} /> Open screenshots folder
+                    <FolderOpen size={15} /> {t('screenshots.openFolder', {}, 'Open screenshots folder')}
                   </button>
                 </div>
               </GlassLayer>

@@ -5,7 +5,7 @@ import { useGSAP } from '@gsap/react';
 import {
   faHouse, faNewspaper, faGear, faTrophy, faRightFromBracket, faPlay,
   faShield, faGamepad, faCrown, faCopy, faCheck, faFingerprint,
-  faUsers, faImages
+  faUsers, faImages, faUserGear, faCircleQuestion
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { signOut } from 'firebase/auth';
@@ -273,7 +273,7 @@ const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
   const p = fullProfile ?? profile;
   const avatarLetter = (p?.displayName ?? p?.email ?? '?').charAt(0).toUpperCase();
   const isVip   = Boolean(p?.isVip);
-  const hasGame = Boolean(p?.steamOwnsGame);
+  const hasGame = Boolean(p?.steamOwnsGame || p?.hasGame);
   const vipGold = '#FDB515';
   const accentColor = isVip ? vipGold : accent.hex;
 
@@ -405,10 +405,10 @@ const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
             <div className="py-2">
               {[
                 {
-                  icon: faGear,
-                  label: t('settings.title', {}, 'Settings'),
-                  sub: t('settings.subtitle', {}, 'Launcher preferences'),
-                  action: () => { setAccountOpen(false); onNavigate('settings'); },
+                  icon: faUserGear,
+                  label: 'Manage Account',
+                  sub: 'Profile & subscription',
+                  action: () => { setAccountOpen(false); openExternal('https://zyphorstudios.com/profile'); },
                 },
                 {
                   icon: faGamepad,
@@ -423,10 +423,10 @@ const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
                   action: () => { setAccountOpen(false); openExternal('https://zyphorstudios.com/profile'); },
                 },
                 {
-                  icon: faFingerprint,
-                  label: 'Edit profile',
-                  sub: 'zyphorstudios.com/profile',
-                  action: () => { setAccountOpen(false); openExternal('https://zyphorstudios.com/profile'); },
+                  icon: faCircleQuestion,
+                  label: 'Help & Support',
+                  sub: 'zyphorstudios.com/support',
+                  action: () => { setAccountOpen(false); openExternal('https://zyphorstudios.com/support'); },
                 },
               ].map(({ icon, label, sub, action }) => (
                 <button

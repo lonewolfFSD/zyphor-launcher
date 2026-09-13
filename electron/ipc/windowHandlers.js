@@ -25,12 +25,25 @@ function registerWindowHandlers(getWindow) {
   }
 });
 
-  ipcMain.on('window:close', () => {
+  ipcMain.on('window:unmaximize', () => {
     const win = getWindow();
     if (!win) return;
+    if (win.isFullScreen()) win.setFullScreen(false);
+    if (win.isMaximized()) win.unmaximize();
+  });
+
+  ipcMain.on('window:close', () => {
+    const win = getWindow();
+    if (!win) {
+      app.quit();
+      return;
+    }
     const s = readSettings();
-    if (s.closeToTray) win.hide();
-    else win.close();
+    if (s.closeToTray) {
+      win.hide();
+    } else {
+      win.close();
+    }
   });
 
   ipcMain.on('window:show', () => {
@@ -42,6 +55,11 @@ function registerWindowHandlers(getWindow) {
 
   ipcMain.on('app:quit', () => {
     app.quit();
+  });
+
+  ipcMain.handle('window:isMaximized', () => {
+    const win = getWindow();
+    return Boolean(win && (win.isMaximized() || win.isFullScreen()));
   });
 
   ipcMain.handle('app:getVersion', () => app.getVersion());

@@ -54,6 +54,29 @@ gsap.registerPlugin(useGSAP);
 
 // ─── Game registry ────────────────────────────────────────────────────────────
 // To add a new game later: add an entry here. That's it.
+const STAY_ACHIEVEMENTS_META = {
+  JUSTICE_SERVED: {
+    displayName: 'Justice Served',
+    description: 'Face the consequences and settle what was left behind.',
+  },
+  MAKE_A_WISH: {
+    displayName: 'Make A Wish',
+    description: 'A silent plea in the dark where no one can hear you.',
+  },
+  EYES_EVERYWHERE: {
+    displayName: 'Eyes Everywhere',
+    description: 'You are never truly alone. Something is always watching.',
+  },
+  DINNER_TIME: {
+    displayName: 'Dinner Time',
+    description: 'Gather around the table for an unsettling feast.',
+  },
+  UNEXPECTED_VISITOR: {
+    displayName: 'Unexpected Visitor',
+    description: 'An uninvited guest arrives when least expected.',
+  },
+};
+
 const GAMES = [
   {
     id:        'stay',
@@ -152,30 +175,30 @@ function AchievementRow({ achievement, accent, theme, iconMap }) {
       {/* Text */}
       <div className="flex-1 min-w-0">
         <p
-          className="text-[15px] font-medium tracking-tight leading-snug truncate"
-          style={{ color: achieved ? theme.text : `${theme.text}55`, fontFamily: 'Apple Garamond' }}
+          className="text-[13px] font-semibold tracking-wide leading-snug truncate"
+          style={{ color: achieved ? theme.text : `${theme.text}66`, fontFamily: '"Clash Display", sans-serif' }}
         >
           {displayName}
         </p>
         {description && (
-          <p className="text-[11px] mt-0.5 leading-snug opacity-40 truncate">{description}</p>
+          <p className="text-[10px] mt-0.5 leading-snug opacity-40 truncate">{description}</p>
         )}
         {achieved && unlockDate && (
-          <p className="text-[9px] mt-0.5 font-mono" style={{ color: `${accent.hex}88` }}>
-            Unlocked {unlockDate}
+          <p className="text-[8.5px] mt-0.5 font-mono tracking-wider" style={{ color: `${accent.hex}aa` }}>
+            UNLOCKED {unlockDate.toUpperCase()}
           </p>
         )}
       </div>
 
       {/* Status pill */}
       <div
-        className="shrink-0 flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[9px] font-bold uppercase tracking-widest"
+        className="shrink-0 flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[8px] font-bold uppercase tracking-widest font-mono"
         style={{
           backgroundColor: achieved ? `${accent.hex}18` : 'rgba(255,255,255,0.04)',
-          color:           achieved ? accent.hex         : 'rgba(255,255,255,0.2)',
+          color:           achieved ? accent.hex         : 'rgba(255,255,255,0.25)',
         }}
       >
-        {achieved ? <><Unlock size={10} /> <span className='mt-0.5'>Achieved</span></> : <><Lock size={10} /> <span className='mt-0.5'>Locked</span></>}
+        {achieved ? <><Unlock size={9} /> <span className='mt-0.5'>Achieved</span></> : <><Lock size={9} /> <span className='mt-0.5'>Locked</span></>}
       </div>
     </>
   );
@@ -327,12 +350,40 @@ export default function AchievementsPage({ profile }) {
 
   // Steam state
   const [steamData,  setSteamData]  = useState(null);
+  const [localSteam, setLocalSteam] = useState(null);
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState('');
   const [filter,     setFilter]     = useState('all');
   const fetchIdRef = useRef(0);
 
-  const steamId = profile?.steamId ?? profile?.raw?.steamId ?? null;
+  const effectiveSteamId = profile?.steamId ?? profile?.raw?.steamId ?? localSteam?.steamId64 ?? null;
+
+  // Check local Steam status and achievements on mount or game change
+  useEffect(() => {
+    let active = true;
+    async function checkLocalSteam() {
+      try {
+        if (window.launcherAPI?.steam?.getStatus) {
+          const status = await window.launcherAPI.steam.getStatus();
+          if (!active) return;
+          let achRes = null;
+          if (status?.initialized && window.launcherAPI?.steam?.getAchievements) {
+            achRes = await window.launcherAPI.steam.getAchievements();
+          }
+          if (active) {
+            setLocalSteam({
+              ...status,
+              achievementsResult: achRes,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to query local Steam:', err);
+      }
+    }
+    checkLocalSteam();
+    return () => { active = false; };
+  }, [selectedGameId]);
 
   // GSAP intro state — skip on revisits
   const pageRef  = useRef(null);
@@ -385,24 +436,54 @@ export default function AchievementsPage({ profile }) {
   };
 
   useEffect(() => {
-    if (!steamId) return;
+    if (!effectiveSteamId) return;
     // Defer until after the nav transition paint — keeps navigation snappy
-    const cb = () => fetchSteam(steamId);
+    const cb = () => fetchSteam(effectiveSteamId);
     if ('requestIdleCallback' in window) {
       const id = requestIdleCallback(cb, { timeout: 400 });
       return () => cancelIdleCallback(id);
     }
     const id = setTimeout(cb, 100);
     return () => clearTimeout(id);
-  }, [steamId]);
+  }, [effectiveSteamId]);
 
   // Reset filter when game changes
   useEffect(() => { setFilter('all'); }, [selectedGameId]);
 
-  const ownsGame   = Boolean(steamData?.gameStats?.owns);
-  const achievements = steamData?.gameStats?.achievements ?? [];
-  const total      = steamData?.gameStats?.achievementsTotal    ?? achievements.length;
-  const unlocked   = steamData?.gameStats?.achievementsUnlocked ?? achievements.filter(a => a.achieved).length;
+  const ownsGame = Boolean(
+    steamData?.gameStats?.owns ||
+    localSteam?.ownsGame ||
+    (localSteam?.initialized && String(game.appId) === '4956550') ||
+    profile?.hasGame ||
+    profile?.steamOwnsGame ||
+    steamData?.recentGames?.some(g => String(g.appId) === String(game.appId))
+  );
+
+  const rawAchievements = steamData?.gameStats?.achievements;
+  const achievements = useMemo(() => {
+    if (Array.isArray(rawAchievements) && rawAchievements.length > 0) {
+      return rawAchievements;
+    }
+    // Fallback to local Steam client achievements or game registry achievements for STAY
+    if (game.id === 'stay' && game.achievementIcons) {
+      const localAchs = localSteam?.achievementsResult?.achievements || [];
+      const localMap = new Map(localAchs.map(a => [a.apiName, a.achieved]));
+      return Object.keys(game.achievementIcons).map((apiName) => {
+        const meta = STAY_ACHIEVEMENTS_META[apiName] || {};
+        return {
+          apiName,
+          displayName: meta.displayName || apiName,
+          description: meta.description || '',
+          achieved: Boolean(localMap.get(apiName)),
+          unlockTime: null,
+        };
+      });
+    }
+    return [];
+  }, [rawAchievements, game, localSteam]);
+
+  const total      = achievements.length;
+  const unlocked   = achievements.filter(a => a.achieved).length;
   const progress   = total > 0 ? Math.round((unlocked / total) * 100) : 0;
 
   const filtered = useMemo(() => {
@@ -431,14 +512,14 @@ export default function AchievementsPage({ profile }) {
         <div className="ap-header flex items-start justify-between gap-4 flex-wrap mb-7">
           <div>
             <h2
-              className="text-4xl font-medium tracking-tight"
-              style={{ color: theme.text, fontFamily: 'Apple Garamond' }}
+              className="text-3xl uppercase font-bold tracking-tight"
+              style={{ color: theme.text, fontFamily: '"Clash Display", sans-serif' }}
             >
               {t('achievements.title', {}, 'Achievements')}
             </h2>
-            <p className="mt-0 text-lg opacity-40"><span style={{
-              fontFamily: 'Apple Garamond'
-            }}>{t('achievements.subtitle', {}, 'Track your progress across Zyphor Studio games.')}</span></p>
+            <p className="mt-1 text-sm opacity-50 font-body">
+              {t('achievements.subtitle', {}, 'Track your progress across Zyphor Studio games.')}
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -466,7 +547,7 @@ export default function AchievementsPage({ profile }) {
         )}
 
         {/* ── No Steam linked ───────────────────────────────────────────────── */}
-        {game.status === 'released' && !steamId && !loading && (
+        {game.status === 'released' && !effectiveSteamId && !loading && (
           <div
             className="flex items-start gap-3 rounded-2xl px-5 py-4 border"
             style={{ backgroundColor: theme.surface, borderColor: `${accent.hex}33` }}
@@ -487,7 +568,7 @@ export default function AchievementsPage({ profile }) {
         )}
 
         {/* ── Error ─────────────────────────────────────────────────────────── */}
-        {game.status === 'released' && error && !loading && steamId && (
+        {game.status === 'released' && error && !loading && effectiveSteamId && !ownsGame && (
           <div
             className="flex items-center justify-between gap-4 rounded-2xl px-5 py-4 border"
             style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.25)' }}
@@ -497,7 +578,7 @@ export default function AchievementsPage({ profile }) {
               <p className="text-[13px] text-red-400">{error}</p>
             </div>
             <button
-              onClick={() => fetchSteam(steamId)}
+              onClick={() => fetchSteam(effectiveSteamId)}
               className="flex items-center gap-1.5 text-[11px] font-semibold rounded-lg px-3 py-1.5 transition hover:opacity-80"
               style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#f87171' }}
             >
@@ -507,7 +588,7 @@ export default function AchievementsPage({ profile }) {
         )}
 
         {/* ── Game not owned ────────────────────────────────────────────────── */}
-        {game.status === 'released' && steamId && !loading && !error && steamData && !ownsGame && (
+        {game.status === 'released' && effectiveSteamId && !loading && !error && steamData && !ownsGame && (
           <div
             className="flex items-start gap-3 rounded-2xl px-5 py-4 border"
             style={{ backgroundColor: theme.surface, borderColor: `${accent.hex}33` }}
@@ -525,7 +606,7 @@ export default function AchievementsPage({ profile }) {
         )}
 
         {/* ── Main content ──────────────────────────────────────────────────── */}
-        {game.status === 'released' && steamId && (loading || ownsGame) && (
+        {game.status === 'released' && effectiveSteamId && (loading || ownsGame) && (
           <div className="space-y-5">
 
             {/* Game banner + progress */}
@@ -556,17 +637,19 @@ export default function AchievementsPage({ profile }) {
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-end justify-between mt-2 mb-3 px-2.5 font-[Manrope]">
-                      <div>
-                        <span className="text-7xl font-medium z-[100]" style={{ color: accent.hex, fontFamily: 'Apple Garamond' }}>{unlocked}</span>
-                        <span className="text-4xl opacity-30 ml-1" style={{
-                          fontFamily: 'Apple Garamond'
-                        }}>/ {total}</span>
-                        <span className="text-[18px] opacity-40 ml-2" style={{
-                          fontFamily: 'Apple Garamond'
-                        }}>achievements</span>
+                    <div className="flex items-end justify-between mt-2 mb-3 px-2.5">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-6xl font-bold tracking-tight z-[100]" style={{ color: accent.hex, fontFamily: '"Clash Display", sans-serif' }}>
+                          {unlocked}
+                        </span>
+                        <span className="text-3xl opacity-30 font-semibold" style={{ fontFamily: '"Clash Display", sans-serif' }}>
+                          / {total}
+                        </span>
+                        <span className="text-xs uppercase tracking-widest font-mono opacity-50 ml-1">
+                          achievements
+                        </span>
                       </div>
-                      <span className="text-[12px] font-bold rounded-full px-3 py-1"
+                      <span className="text-[11px] font-mono font-bold tracking-wider rounded-full px-3 py-1"
                         style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}>
                         {progress}%
                       </span>
@@ -585,27 +668,23 @@ export default function AchievementsPage({ profile }) {
               </div>
             </div>
 
-
-
             {/* Filter tabs */}
             {!loading && achievements.length > 0 && (
               <div
-                className="ap-filters flex gap-1 px-1 py-1 w-fit"
-                style={{ fontFamily: 'Apple Garamond' }}
+                className="ap-filters flex gap-1 px-1 py-2 w-fit font-mono"
               >
                 {[
-                  { id: 'all',      label: `${t('achievements.all', {}, 'All')} (${achievements.length})` },
-                  { id: 'achieved', label: `${t('achievements.unlocked', {}, 'Unlocked')} (${unlocked})` },
-                  { id: 'locked',   label: `${t('achievements.locked', {}, 'Locked')} (${total - unlocked})` },
+                  { id: 'all',      label: `${t('achievements.all', {}, 'ALL')} (${achievements.length})` },
+                  { id: 'achieved', label: `${t('achievements.unlocked', {}, 'UNLOCKED')} (${unlocked})` },
+                  { id: 'locked',   label: `${t('achievements.locked', {}, 'LOCKED')} (${total - unlocked})` },
                 ].map(opt => (
                   <button
                     key={opt.id}
                     onClick={() => setFilter(opt.id)}
-                    className="px-6 py-1.5 rounded-lg text-[13px] font-medium transition-all"
+                    className="px-5 py-1.5 rounded-xl text-[11px] font-bold tracking-wider transition-all"
                     style={{
                       backgroundColor: filter === opt.id ? accent.hex  : 'transparent',
-                      color:           filter === opt.id ? accent.on   : `${"#ffffff80"}`,
-                      fontWeight:       filter === opt.id ? 800         : 200,
+                      color:           filter === opt.id ? accent.on   : 'rgba(255,255,255,0.4)',
                     }}
                   >
                     {opt.label}
@@ -616,7 +695,7 @@ export default function AchievementsPage({ profile }) {
 
             {/* Achievement list */}
             {loading ? (
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-4 gap-2">
                 {Array.from({ length: 12 }).map((a, i) => <AchievementSkeleton key={i} theme={theme} />)}
               </div>
             ) : achievements.length === 0 && !error ? (
@@ -629,7 +708,7 @@ export default function AchievementsPage({ profile }) {
               </div>
             ) : (
               <AnimatePresence mode="popLayout">
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-4 gap-2">
                   {sorted.map((a, i) => (
                     <motion.div
                       key={a.apiName}

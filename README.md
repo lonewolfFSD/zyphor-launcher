@@ -1,1 +1,1 @@
-# zyphor-launcher
+# Zyphor Launcher

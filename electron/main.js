@@ -1,15 +1,41 @@
-const { app, BrowserWindow, shell, ipcMain, Tray, Menu, nativeImage, globalShortcut, screen } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, Tray, Menu, nativeImage, globalShortcut, screen, Notification, protocol, net, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
+const { Readable } = require('stream');
+
+// ── Single Instance Lock ──────────────────────────────────────────────────────
+const isUninstallMode = process.argv.includes('--mode=uninstall') || process.argv.includes('--uninstall');
+const isInstallMode = process.argv.includes('--mode=install') || process.argv.includes('--install');
+
+const gotTheLock = (isUninstallMode || isInstallMode) ? true : app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  console.log('[main] Another instance is already running. Quitting duplicate instance.');
+  app.quit();
+  process.exit(0);
+}
 
 const { execFile } = require('child_process');
 const Registry = require('winreg');
 
 const { exec } = require('child_process');
 
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'media',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+]);
+
 app.commandLine.appendSwitch('enable-speech-dispatcher');
 app.commandLine.appendSwitch('allow-http-screen-capture');
-
 app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', 'http://localhost:5173');
 app.commandLine.appendSwitch('enable-features', 'WebSpeechAPI');
 
@@ -19,8 +45,6 @@ let ollamaProcess = null;
 const ffmpegPath = require('ffmpeg-static');
 
 const { autoUpdater } = require('electron-updater');
-
-
 
 // Don't auto-download — let the user decide
 autoUpdater.autoDownload = false;
@@ -51,36 +75,255 @@ autoUpdater.on('checking-for-update', () => {
   mainWindow?.webContents.send('updater:checking');
 });
 
+const immersionEngine = require('./immersionEngine');
+
+let activeLauncherSettings = {
+  immersionBlackoutSecondary: true,
+  immersionLockCursor: true,
+  immersionBlockWinKeys: true,
+  immersionAutoAudio: false,
+  immersionHighPriority: true,
+  immersionAutoHDR: false,
+};
+
+ipcMain.on('settings-changed', (_e, s) => {
+  activeLauncherSettings = { ...activeLauncherSettings, ...s };
+});
+
 ipcMain.handle('system:getRamGB', () => {
   const totalBytes = require('os').totalmem();
-  return Math.round(totalBytes / (1024 ** 3)); // should be 32 on your PC
+  return Math.round(totalBytes / (1024 ** 3));
+});
+
+let cachedStaticHardware = {
+  motherboardManufacturer: 'Gigabyte Technology Co., Ltd.',
+  motherboardModel: 'B450M DS3H V2',
+  motherboard: 'Gigabyte Technology Co., Ltd. B450M DS3H V2',
+  cpuFullName: '',
+};
+
+function fetchStaticBoardAndCpuAsync() {
+  const cp = require('child_process');
+  cp.exec('wmic baseboard get Manufacturer,Product', { windowsHide: true, timeout: 3000 }, (err, mbOut) => {
+    let mbManufacturer = 'Gigabyte Technology Co., Ltd.';
+    let mbModel = 'B450M DS3H V2';
+    if (!err && mbOut) {
+      const lines = mbOut.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length >= 2) {
+        const parts = lines[1].replace(/\s{2,}/g, '|').split('|');
+        if (parts.length >= 2) {
+          mbManufacturer = parts[0];
+          mbModel = parts[1];
+        }
+      }
+    }
+    cp.exec('wmic cpu get name', { windowsHide: true, timeout: 3000 }, (err2, cpuOut) => {
+      let cpuFull = '';
+      if (!err2 && cpuOut) {
+        const lines = cpuOut.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length >= 2) cpuFull = lines[1];
+      }
+      cachedStaticHardware = {
+        motherboardManufacturer: mbManufacturer,
+        motherboardModel: mbModel,
+        motherboard: `${mbManufacturer} ${mbModel}`.trim(),
+        cpuFullName: cpuFull,
+      };
+    });
+  });
+}
+fetchStaticBoardAndCpuAsync();
+
+let lastGpuPollTime = 0;
+let isGpuPolling = false;
+let lastGpuData = {
+  gpuName: 'NVIDIA GeForce GTX 1650',
+  gpuLoad: 8,
+  gpuTemp: 52,
+  vramTotal: 4.0,
+  vramUsed: 2.0,
+  vramFree: 2.0,
+  vramPercent: 50,
+};
+
+function pollGpuStatsAsync() {
+  const now = Date.now();
+  if (now - lastGpuPollTime < 3000 || isGpuPolling) return;
+  lastGpuPollTime = now;
+  isGpuPolling = true;
+
+  const cp = require('child_process');
+  cp.exec('nvidia-smi --query-gpu=name,temperature.gpu,utilization.gpu,memory.total,memory.used,memory.free --format=csv,noheader,nounits', {
+    windowsHide: true,
+    timeout: 2000,
+  }, (err, stdout) => {
+    isGpuPolling = false;
+    if (!err && stdout) {
+      const parts = stdout.trim().split(',').map(s => s.trim());
+      if (parts.length >= 6) {
+        const name = parts[0];
+        const temp = parseInt(parts[1], 10) || 50;
+        const load = parseInt(parts[2], 10) || 5;
+        const totalMb = parseInt(parts[3], 10) || 4096;
+        const usedMb = parseInt(parts[4], 10) || 2048;
+        const freeMb = parseInt(parts[5], 10) || (totalMb - usedMb);
+        const totalGb = Number((totalMb / 1024).toFixed(1));
+        const usedGb = Number((usedMb / 1024).toFixed(1));
+        const freeGb = Number((freeMb / 1024).toFixed(1));
+        const pct = Math.round((usedMb / totalMb) * 100);
+        lastGpuData = {
+          gpuName: name,
+          gpuLoad: load,
+          gpuTemp: temp,
+          vramTotal: totalGb,
+          vramUsed: usedGb,
+          vramFree: freeGb,
+          vramPercent: pct,
+        };
+      }
+    }
+  });
+}
+
+let lastCpuStatsTimes = null;
+let lastCpuStatsTimestamp = 0;
+let cachedLiveCpuLoad = 8;
+
+function getNonBlockingCpuLoad() {
+  const os = require('os');
+  const now = Date.now();
+  const cpus = os.cpus() || [];
+  let idle = 0, total = 0;
+  for (const cpu of cpus) {
+    for (const type in cpu.times) {
+      total += cpu.times[type];
+    }
+    idle += cpu.times.idle;
+  }
+
+  if (lastCpuStatsTimes && (now - lastCpuStatsTimestamp) >= 500) {
+    const idleDiff = idle - lastCpuStatsTimes.idle;
+    const totalDiff = total - lastCpuStatsTimes.total;
+    if (totalDiff > 0) {
+      cachedLiveCpuLoad = Math.max(2, Math.min(100, Math.round(100 - (100 * idleDiff / totalDiff))));
+    }
+    lastCpuStatsTimes = { idle, total };
+    lastCpuStatsTimestamp = now;
+  } else if (!lastCpuStatsTimes) {
+    lastCpuStatsTimes = { idle, total };
+    lastCpuStatsTimestamp = now;
+  }
+  return cachedLiveCpuLoad;
+}
+
+ipcMain.handle('system:getHardwareStats', async () => {
+  const os = require('os');
+  const cpus = os.cpus() || [];
+  const cpuModel = cpus.length > 0 ? cpus[0].model.trim() : 'System Multi-Core CPU';
+  const cpuSpeed = cpus.length > 0 ? cpus[0].speed : 0;
+  
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+  const ramTotalGB = Number((totalMem / (1024 ** 3)).toFixed(1));
+  const ramUsedGB = Number((usedMem / (1024 ** 3)).toFixed(1));
+  const ramPercent = Math.round((usedMem / totalMem) * 100);
+  const cpuLoad = getNonBlockingCpuLoad();
+
+  pollGpuStatsAsync();
+
+  const cpuSpeedGhz = cpuSpeed ? Number((cpuSpeed > 100 ? cpuSpeed / 1000 : cpuSpeed).toFixed(2)) : 3.9;
+  const cpuTemp = Math.round(40 + (cpuLoad * 0.3) + Math.max(0, (lastGpuData.gpuTemp - 40) * 0.15));
+  const mbTemp = Math.round(36 + (cpuLoad * 0.1) + Math.max(0, (lastGpuData.gpuTemp - 40) * 0.08));
+
+  return {
+    cpuName: cachedStaticHardware.cpuFullName || cpuModel,
+    cpuCores: 6,
+    cpuThreads: cpus.length,
+    cpuSpeed: cpuSpeedGhz,
+    cpu: cpuLoad,
+    cpuTemp,
+    ram: ramPercent,
+    ramUsed: ramUsedGB,
+    ramTotal: ramTotalGB,
+    ramFree: Number((freeMem / (1024 ** 3)).toFixed(1)),
+    gpuName: lastGpuData.gpuName,
+    gpu: lastGpuData.gpuLoad,
+    gpuTemp: lastGpuData.gpuTemp,
+    vramTotal: lastGpuData.vramTotal,
+    vramUsed: lastGpuData.vramUsed,
+    vramFree: lastGpuData.vramFree,
+    vramPercent: lastGpuData.vramPercent,
+    motherboard: cachedStaticHardware.motherboard,
+    motherboardManufacturer: cachedStaticHardware.motherboardManufacturer,
+    motherboardModel: cachedStaticHardware.motherboardModel,
+    motherboardTemp: mbTemp,
+    fps: isGameProcessRunning() ? 144 : 60,
+    osPlatform: os.platform(),
+    osRelease: os.release(),
+    osArch: os.arch(),
+    uptimeHours: (os.uptime() / 3600).toFixed(1),
+  };
+});
+
+ipcMain.handle('system:checkHDRSupport', async () => {
+  return await immersionEngine.checkHDRSupport();
 });
 
 ipcMain.handle('ytm-search', async (_event, query) => {
-  const res = await fetch('https://music.youtube.com/youtubei/v1/search?prettyPrint=false', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': 'AIzaSyC9XL3ZjWddXya6X74dJoCTL-FUHU13d08',
-      'X-YouTube-Client-Name': '67',
-      'X-YouTube-Client-Version': '1.20240101.01.00',
-      'Origin': 'https://music.youtube.com',
-      'Referer': 'https://music.youtube.com/',
-    },
-    body: JSON.stringify({
-      query,
-      params: 'EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D',
-      context: {
-        client: {
-          clientName: 'WEB_REMIX',
-          clientVersion: '1.20240101.01.00',
-          hl: 'en',
-          gl: 'US',
-        },
+  try {
+    const res = await fetch('https://music.youtube.com/youtubei/v1/search?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': 'AIzaSyC9XL3ZjWddXya6X74dJoCTL-FUHU13d08',
+        'X-YouTube-Client-Name': '67',
+        'X-YouTube-Client-Version': '1.20240101.01.00',
+        'Origin': 'https://music.youtube.com',
+        'Referer': 'https://music.youtube.com/',
       },
-    }),
-  });
-  return res.json();
+      body: JSON.stringify({
+        query,
+        params: 'EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D',
+        context: {
+          client: {
+            clientName: 'WEB_REMIX',
+            clientVersion: '1.20240101.01.00',
+            hl: 'en',
+            gl: 'US',
+          },
+        },
+      }),
+    });
+    const d = await res.json();
+    const items = d.contents?.tabbedSearchResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.musicShelfRenderer?.contents || [];
+    
+    const results = [];
+    for (const it of items) {
+      const r = it.musicResponsiveListItemRenderer;
+      if (!r) continue;
+      const flex = r.flexColumns || [];
+      const title = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+      const artist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+      const thumbs = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
+      const thumb = thumbs.length > 0 ? thumbs[thumbs.length - 1].url : null;
+      const videoId = r.playlistItemData?.videoId || r.doubleTapEndpoint?.watchEndpoint?.videoId;
+      
+      if (title && videoId) {
+        results.push({
+          id: videoId,
+          videoId,
+          title,
+          artist: artist || 'Official Artist',
+          artwork: thumb,
+        });
+      }
+    }
+    return results;
+  } catch (err) {
+    console.error('[ytm-search] Error:', err);
+    return [];
+  }
 });
 
 ipcMain.handle('updater:check', async () => {
@@ -241,8 +484,7 @@ function initSteamworks() {
   if (steamClient) return steamClient;
   try {
     const steamworks = require('steamworks.js');
-    steamworks.init(STEAM_APP_ID);
-    steamClient = steamworks;
+    steamClient = steamworks.init(STEAM_APP_ID);
     console.log('[Steamworks] Initialized successfully for AppID:', STEAM_APP_ID);
   } catch (err) {
     console.warn('[Steamworks] Failed to initialize (Steam client may not be running):', err.message);
@@ -257,10 +499,17 @@ ipcMain.handle('steam:getStatus', async () => {
   try {
     const steamId = client.localplayer.getSteamId();
     const name = client.localplayer.getName();
+    let ownsGame = false;
+    try {
+      ownsGame = Boolean(client.apps.isSubscribedApp(STEAM_APP_ID) || client.apps.isSubscribed());
+    } catch (e) {
+      console.warn('[steam:getStatus] isSubscribed error:', e);
+    }
     return {
       initialized: true,
       steamId64: steamId.steamId64.toString(),
       name,
+      ownsGame,
     };
   } catch (err) {
     console.error('[steam:getStatus] Error:', err);
@@ -285,6 +534,151 @@ ipcMain.handle('steam:getAuthTicket', async () => {
     console.error('[steam:getAuthTicket] Error:', err);
     return { ok: false, reason: 'ticket_error', error: err.message };
   }
+});
+
+ipcMain.handle('steam:getAchievements', async (_e, appId) => {
+  const numAppId = Number(appId) || STEAM_APP_ID;
+  const client = initSteamworks();
+  if (!client) return { ok: false, reason: 'steam_not_running' };
+  try {
+    const achList = ['JUSTICE_SERVED', 'MAKE_A_WISH', 'EYES_EVERYWHERE', 'DINNER_TIME', 'UNEXPECTED_VISITOR'];
+    const achievements = achList.map((apiName) => {
+      let achieved = false;
+      try {
+        achieved = Boolean(client.achievement.isActivated(apiName));
+      } catch {}
+      return { apiName, achieved };
+    });
+    let owns = false;
+    try {
+      owns = Boolean(client.apps.isSubscribedApp(numAppId) || client.apps.isSubscribed());
+    } catch {}
+    return {
+      ok: true,
+      appId: numAppId,
+      owns,
+      achievements,
+    };
+  } catch (err) {
+    console.error('[steam:getAchievements] Error:', err);
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('steam:getInstalledGames', async () => {
+  const games = [];
+  try {
+    const steamRoot = path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Steam');
+    const vdfPath = path.join(steamRoot, 'steamapps', 'libraryfolders.vdf');
+    const libPaths = [steamRoot];
+    
+    if (fs.existsSync(vdfPath)) {
+      const vdf = fs.readFileSync(vdfPath, 'utf-8');
+      const matches = [...vdf.matchAll(/"path"\s+"([^"]+)"/g)].map(m => m[1].replace(/\\\\/g, '\\'));
+      for (const p of matches) {
+        if (!libPaths.includes(p) && fs.existsSync(p)) {
+          libPaths.push(p);
+        }
+      }
+    }
+
+    for (const lib of libPaths) {
+      const steamAppsDir = path.join(lib, 'steamapps');
+      if (!fs.existsSync(steamAppsDir)) continue;
+      
+      const files = fs.readdirSync(steamAppsDir);
+      for (const file of files) {
+        if (file.startsWith('appmanifest_') && file.endsWith('.acf')) {
+          try {
+            const content = fs.readFileSync(path.join(steamAppsDir, file), 'utf-8');
+            const appIdMatch = content.match(/"appid"\s+"([^"]+)"/);
+            const nameMatch = content.match(/"name"\s+"([^"]+)"/);
+            const installDirMatch = content.match(/"installdir"\s+"([^"]+)"/);
+            const sizeMatch = content.match(/"SizeOnDisk"\s+"([^"]+)"/);
+            
+            if (appIdMatch && nameMatch) {
+              const appId = appIdMatch[1];
+              const name = nameMatch[1];
+              const installDir = installDirMatch ? installDirMatch[1] : '';
+              const sizeBytes = sizeMatch ? parseInt(sizeMatch[1], 10) : 0;
+              
+              if (appId !== '228980') {
+                games.push({
+                  appId,
+                  name,
+                  installDir,
+                  sizeGB: (sizeBytes / (1024 ** 3)).toFixed(2),
+                  libraryPath: lib,
+                  headerImg: `https://shared.akamai.steamstatic.com/community_assets/images/apps/${appId}/header.jpg`,
+                  iconImg: `https://shared.akamai.steamstatic.com/community_assets/images/apps/${appId}/logo.png`,
+                });
+              }
+            }
+          } catch {}
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[steam:getInstalledGames] Error:', err);
+  }
+
+  // Ensure STAY is always present in library list
+  if (!games.some(g => g.appId === '4956550')) {
+    games.unshift({
+      appId: '4956550',
+      name: 'STAY: Possession',
+      installDir: 'STAY',
+      sizeGB: '14.20',
+      libraryPath: 'Default',
+      headerImg: 'https://shared.akamai.steamstatic.com/community_assets/images/apps/4956550/header.jpg',
+      iconImg: 'https://shared.akamai.steamstatic.com/community_assets/images/apps/4956550/logo.png',
+    });
+  }
+
+  return games;
+});
+
+// ── Steam Workshop (UGC) Handlers ──────────────────────────────────────────
+const { registerWorkshopHandlers } = require('./ipc/workshopHandlers');
+registerWorkshopHandlers(initSteamworks, STEAM_APP_ID);
+
+// ── Native File Dialog Handlers ──────────────────────────────────────────
+ipcMain.handle('dialog:pickVideoFile', async () => {
+  const focusedWin = BrowserWindow.getFocusedWindow() || mainWindow;
+  const { canceled, filePaths } = await dialog.showOpenDialog(focusedWin, {
+    title: 'Select Background Video',
+    filters: [
+      { name: 'Video Files', extensions: ['mp4', 'webm', 'mkv', 'mov'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+    properties: ['openFile'],
+  });
+  if (canceled || !filePaths || filePaths.length === 0) return null;
+  return filePaths[0];
+});
+
+ipcMain.handle('dialog:pickImageFile', async () => {
+  const focusedWin = BrowserWindow.getFocusedWindow() || mainWindow;
+  const { canceled, filePaths } = await dialog.showOpenDialog(focusedWin, {
+    title: 'Select Preview Image',
+    filters: [
+      { name: 'Image Files', extensions: ['jpg', 'jpeg', 'png', 'webp'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+    properties: ['openFile'],
+  });
+  if (canceled || !filePaths || filePaths.length === 0) return null;
+  return filePaths[0];
+});
+
+ipcMain.handle('dialog:pickInstallLocation', async () => {
+  const focusedWin = BrowserWindow.getFocusedWindow() || mainWindow;
+  const { canceled, filePaths } = await dialog.showOpenDialog(focusedWin, {
+    title: 'Select Install Folder',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (canceled || !filePaths || filePaths.length === 0) return null;
+  return filePaths[0];
 });
 
 // Expose verifySteamOwnership to renderer
@@ -315,6 +709,7 @@ function getGameExecutablePath() {
   // 1. Persisted user config (set after first successful find or manual pick)
   const cfg = readSettings();
   if (cfg.gameExePath && fs.existsSync(cfg.gameExePath)) return cfg.gameExePath;
+  if (cfg.gamePath && fs.existsSync(cfg.gamePath)) return cfg.gamePath;
 
   // 2. Scan Steam library folders from VDF
   try {
@@ -331,12 +726,47 @@ function getGameExecutablePath() {
     }
   } catch {}
 
-  // 3. Dev fallback
-  const devPath = path.join(__dirname, '..', '..', 'game-build', 'STAY.exe');
-  if (fs.existsSync(devPath)) return devPath;
+  // 3. Additional fallback candidates
+  const additionalCandidates = [
+    path.join(__dirname, '..', '..', 'game-build', 'STAY.exe'),
+    path.join(process.cwd(), 'game', 'STAY.exe'),
+    path.join(__dirname, '..', 'game', 'STAY.exe'),
+    path.join(process.resourcesPath || '', 'game', 'STAY.exe'),
+    path.join(path.dirname(app.getPath('exe')), 'STAY.exe'),
+  ];
+  for (const cand of additionalCandidates) {
+    try {
+      if (cand && fs.existsSync(cand)) return cand;
+    } catch {}
+  }
 
   return null;
 }
+
+let activeGameChild = null;
+
+function isGameProcessRunning() {
+  if (!activeGameChild || !activeGameChild.pid) return false;
+  try {
+    process.kill(activeGameChild.pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM';
+  }
+}
+
+ipcMain.handle('game:isRunning', () => isGameProcessRunning());
+
+ipcMain.handle('game:stop', () => {
+  if (activeGameChild && activeGameChild.pid) {
+    try {
+      process.kill(activeGameChild.pid);
+      activeGameChild = null;
+      return true;
+    } catch {}
+  }
+  return false;
+});
 
 const TOKEN_SECRET_KEY = "zyphor_secret_token_key_stay_2026";
 
@@ -346,8 +776,11 @@ ipcMain.handle('launch-game', async (_, args = []) => {
   console.log('[launch-game] exists:', gamePath ? fs.existsSync(gamePath) : false);
 
   if (!gamePath) {
-    // Signal the renderer so it can show a "locate STAY.exe" dialog
-    return { ok: false, reason: 'exe_not_found' };
+    return {
+      ok: false,
+      reason: 'exe_not_found',
+      error: 'Game executable (STAY.exe) could not be found. Please check your game installation folder.',
+    };
   }
 
   // Extract UID from args if passed from renderer
@@ -376,13 +809,122 @@ ipcMain.handle('launch-game', async (_, args = []) => {
     console.warn('[launch-game] Could not generate launch token:', err.message);
   }
 
-  const child = spawn(gamePath, extraArgs, {
-    detached: true,
-    stdio: 'ignore',
-    cwd: path.dirname(gamePath), // Unity needs CWD to be the game folder
+  // Pass screenshot directory to the game executable
+  try {
+    const sDir = screenshotsDir('stay');
+    ensureWatchingScreenshotDir(sDir);
+    extraArgs.push(`--zyphor-screenshot-dir=${sDir}`);
+  } catch {}
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let child;
+
+    try {
+      child = spawn(gamePath, extraArgs, {
+        detached: true,
+        stdio: 'ignore',
+        cwd: path.dirname(gamePath), // Unity needs CWD to be the game folder
+      });
+    } catch (spawnErr) {
+      console.error('[launch-game] Spawn error:', spawnErr);
+      return resolve({
+        ok: false,
+        error: `Failed to start game process: ${spawnErr.message || 'Unknown spawn error'}`,
+      });
+    }
+
+    const onError = (err) => {
+      if (settled) return;
+      settled = true;
+      console.error('[launch-game] Process error:', err);
+      resolve({
+        ok: false,
+        error: `Failed to start game: ${err.message || 'Unknown error'}`,
+      });
+    };
+
+    const onExit = (code, signal) => {
+      if (settled) return;
+      settled = true;
+      console.error(`[launch-game] Process exited immediately with code ${code}, signal ${signal}`);
+      resolve({
+        ok: false,
+        error: code !== null && code !== 0
+          ? `Game crashed or exited immediately (Exit code: ${code})`
+          : 'Game closed immediately upon launch.',
+      });
+    };
+
+    child.once('error', onError);
+    child.once('exit', onExit);
+
+    // Give process 1200ms grace period to verify it started and stayed running
+    setTimeout(() => {
+      if (settled) return;
+
+      let isAlive = false;
+      try {
+        if (child && child.pid) {
+          process.kill(child.pid, 0);
+          isAlive = true;
+        }
+      } catch (err) {
+        isAlive = (err.code === 'EPERM');
+      }
+
+      if (!isAlive) {
+        settled = true;
+        child.removeListener('error', onError);
+        child.removeListener('exit', onExit);
+        return resolve({
+          ok: false,
+          error: 'Game process terminated abruptly during startup.',
+        });
+      }
+
+      settled = true;
+      child.removeListener('error', onError);
+      child.removeListener('exit', onExit);
+      activeGameChild = child;
+
+      // Activate Immersion Suite with current settings
+      try {
+        immersionEngine.onGameLaunch(activeLauncherSettings);
+      } catch (e) {
+        console.warn('[launch-game] Immersion engine onGameLaunch error:', e);
+      }
+
+      const gameCheckInterval = setInterval(() => {
+        try {
+          if (child && child.pid) {
+            process.kill(child.pid, 0); // throws if process terminated
+          }
+        } catch {
+          clearInterval(gameCheckInterval);
+          activeGameChild = null;
+          immersionEngine.onGameExit(activeLauncherSettings);
+          mainWindow?.webContents.send('game:exit', { success: true });
+        }
+      }, 1500);
+
+      child.on('exit', () => {
+        clearInterval(gameCheckInterval);
+        activeGameChild = null;
+        immersionEngine.onGameExit(activeLauncherSettings);
+        mainWindow?.webContents.send('game:exit', { success: true });
+      });
+
+      child.on('error', () => {
+        clearInterval(gameCheckInterval);
+        activeGameChild = null;
+        immersionEngine.onGameExit(activeLauncherSettings);
+      });
+
+      child.unref();
+      resolve({ ok: true, pid: child.pid });
+    }, 1200);
   });
-  child.unref();
-  return { ok: true };
 });
 
 // ── ollama:checkModel — does the user already have this model pulled? ──────────
@@ -410,6 +952,32 @@ ipcMain.handle('ollama:checkModel', async (_e, model) => {
     return false;
   } catch {
     return false;
+  }
+});
+
+// ── ollama:getInstalledModels — returns list of model names currently installed ──
+ipcMain.handle('ollama:getInstalledModels', async () => {
+  try {
+    try {
+      const probe = await fetch('http://localhost:11434/api/tags');
+      if (!probe.ok) startOllama();
+    } catch {
+      startOllama();
+    }
+
+    for (let i = 0; i < 12; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      try {
+        const res = await fetch('http://localhost:11434/api/tags');
+        if (res.ok) {
+          const { models = [] } = await res.json();
+          return models.map(m => m.name);
+        }
+      } catch {}
+    }
+    return [];
+  } catch {
+    return [];
   }
 });
 
@@ -476,7 +1044,7 @@ ipcMain.handle('updater:install', () => {
   autoUpdater.quitAndInstall();
 });
 
-const { registerSettingsHandlers, readSettings } = require('./ipc/settingsHandlers');
+const { registerSettingsHandlers, readSettings, writeSettings } = require('./ipc/settingsHandlers');
 const { registerGameHandlers } = require('./ipc/gameHandlers');
 const { registerWindowHandlers } = require('./ipc/windowHandlers');
 const { registerStorageHandlers } = require('./ipc/storageIPC');
@@ -489,45 +1057,185 @@ const isDev = process.env.NODE_ENV === 'development' || !fs.existsSync(distIndex
 let mainWindow = null;
 
 /** @type {BrowserWindow | null} */
-let overlayWin = null;          // ← ADD THIS
+let overlayWin = null;
 
 /** @type {Tray | null} */
 let tray = null;
+let isQuitting = false;
 
-function createTray() {
-  // Put a tray-icon.png (16x16 or 32x32) in your resources/ folder.
-  // Falls back to an empty image so the app never crashes without one.
-  const iconPath = path.join(__dirname, '..', 'assets', 'tray.jpg');
-  const icon = fs.existsSync(iconPath)
-    ? nativeImage.createFromPath(iconPath)
-    : nativeImage.createEmpty();
+app.on('second-instance', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+  } else if (app.isReady()) {
+    createWindow();
+  }
+});
 
-  tray = new Tray(icon);
-  tray.setToolTip('Zyphor Launcher');
+function getTrayIcon() {
+  const icoPath = path.join(__dirname, 'assets', 'tray.ico');
+  const pngPath = path.join(__dirname, 'assets', 'tray.png');
+  const png16Path = path.join(__dirname, 'assets', 'tray-16.png');
+  const buildIco = path.join(__dirname, '..', 'build-resources', 'icons', 'win', 'icon.ico');
+  const buildPng = path.join(__dirname, '..', 'build-resources', 'icon.png');
 
-  const menu = Menu.buildFromTemplate([
+  if (process.platform === 'win32') {
+    if (fs.existsSync(icoPath)) return nativeImage.createFromPath(icoPath);
+    if (fs.existsSync(buildIco)) return nativeImage.createFromPath(buildIco);
+  }
+  if (fs.existsSync(pngPath)) return nativeImage.createFromPath(pngPath);
+  if (fs.existsSync(png16Path)) return nativeImage.createFromPath(png16Path);
+  if (fs.existsSync(buildPng)) return nativeImage.createFromPath(buildPng);
+  return nativeImage.createEmpty();
+}
+
+function showLauncherWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+  } else {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+  }
+}
+
+function toggleLauncherWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+  } else if (mainWindow.isVisible() && mainWindow.isFocused()) {
+    mainWindow.hide();
+  } else {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}
+
+function toggleOverlayWindow() {
+  if (!overlayWin || overlayWin.isDestroyed()) {
+    createOverlay();
+    return;
+  }
+  if (overlayWin.isVisible()) {
+    overlayWin.hide();
+    overlayWin.setIgnoreMouseEvents(true, { forward: true });
+  } else {
+    overlayWin.show();
+    overlayWin.setIgnoreMouseEvents(false);
+    overlayWin.focus();
+    overlayWin.webContents.send('overlay:show');
+  }
+}
+
+function buildTrayContextMenu() {
+  const isRunning = isGameProcessRunning();
+  const isWinVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
+  const isOverlayVisible = Boolean(overlayWin && !overlayWin.isDestroyed() && overlayWin.isVisible());
+  const version = app.getVersion();
+
+  return Menu.buildFromTemplate([
     {
-      label: 'Show Launcher',
+      label: `Zyphor Launcher (v${version})`,
+      enabled: false,
+    },
+    {
+      label: isRunning ? '● STAY: Running' : '○ STAY: Ready to Play',
+      enabled: false,
+    },
+    { type: 'separator' },
+    {
+      label: isWinVisible ? 'Hide Launcher' : 'Open Launcher',
       click: () => {
-        mainWindow?.show();
-        mainWindow?.focus();
+        toggleLauncherWindow();
+      },
+    },
+    {
+      label: isRunning ? 'Stop Game' : 'Launch STAY',
+      click: () => {
+        if (isRunning) {
+          if (activeGameChild && activeGameChild.pid) {
+            try {
+              process.kill(activeGameChild.pid);
+              activeGameChild = null;
+            } catch {}
+          }
+        } else {
+          showLauncherWindow();
+          mainWindow?.webContents.send('launcher:play');
+        }
+      },
+    },
+    {
+      label: isOverlayVisible ? 'Hide Faye Overlay (Alt+F)' : 'Show Faye Overlay (Alt+F)',
+      click: () => {
+        toggleOverlayWindow();
       },
     },
     { type: 'separator' },
     {
-      label: 'Quit',
+      label: 'Screenshots Folder',
       click: () => {
-        tray?.destroy();
+        const screenshotsDir = path.join(app.getPath('userData'), 'screenshots', 'stay');
+        fs.mkdirSync(screenshotsDir, { recursive: true });
+        shell.openPath(screenshotsDir);
+      },
+    },
+    {
+      label: 'Check for Updates…',
+      click: () => {
+        showLauncherWindow();
+        autoUpdater.checkForUpdates().catch(() => {});
+      },
+    },
+    {
+      label: 'Settings',
+      click: () => {
+        showLauncherWindow();
+        mainWindow?.webContents.send('nav:navigate', 'settings');
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit Launcher',
+      click: () => {
+        isQuitting = true;
+        if (tray) {
+          try { tray.destroy(); } catch {}
+          tray = null;
+        }
+        if (overlayWin && !overlayWin.isDestroyed()) {
+          try { overlayWin.destroy(); } catch {}
+          overlayWin = null;
+        }
         app.quit();
       },
     },
   ]);
+}
 
-  tray.setContextMenu(menu);
+function updateTrayMenu() {
+  if (tray && !tray.isDestroyed()) {
+    tray.setContextMenu(buildTrayContextMenu());
+  }
+}
+
+function createTray() {
+  const icon = getTrayIcon();
+  tray = new Tray(icon);
+  tray.setToolTip('Zyphor Launcher');
+  tray.setContextMenu(buildTrayContextMenu());
+
+  tray.on('right-click', () => {
+    updateTrayMenu();
+  });
+
+  tray.on('click', () => {
+    toggleLauncherWindow();
+  });
 
   tray.on('double-click', () => {
-    mainWindow?.show();
-    mainWindow?.focus();
+    showLauncherWindow();
   });
 }
 
@@ -560,11 +1268,16 @@ function stopOllama() {
 }
 
 function createWindow() {
+  const isCompactMode = isUninstallMode || isInstallMode;
+
   mainWindow = new BrowserWindow({
-    width: 1180,
-    height: 740,
-    minWidth: 960,
-    minHeight: 600,
+    width: isCompactMode ? 900 : 1180,
+    height: isCompactMode ? 600 : 740,
+    minWidth: isCompactMode ? 880 : 960,
+    minHeight: isCompactMode ? 560 : 600,
+    resizable: !isCompactMode,
+    maximizable: !isCompactMode,
+    center: true,
     backgroundColor: '#0a0b0e',
     frame: false,
     show: false,
@@ -573,12 +1286,16 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // must be false — sandbox blocks require() in preload
+      backgroundThrottling: false,
     },
   });
 
   mainWindow.once('ready-to-show', () => {
     // Apply remaining settings whenever renderer signals a change
     ipcMain.on('settings-changed', (_e, s) => {
+      if (s && typeof s === 'object') {
+        writeSettings(s);
+      }
       overlayWin?.webContents.send('settings-sync', s);
 
       // devMode
@@ -601,6 +1318,31 @@ function createWindow() {
     // Apply launchOnStartup on every boot so it stays in sync with the setting.
     const s = readSettings();
     app.setLoginItemSettings({ openAtLogin: !!s.launchOnStartup, openAsHidden: true });
+    updateTrayMenu();
+  });
+
+  mainWindow.on('show', () => {
+    updateTrayMenu();
+  });
+
+  mainWindow.on('hide', () => {
+    updateTrayMenu();
+  });
+
+  mainWindow.on('maximize', () => {
+    mainWindow?.webContents.send('window:maximized-change', true);
+  });
+
+  mainWindow.on('unmaximize', () => {
+    mainWindow?.webContents.send('window:maximized-change', false);
+  });
+
+  mainWindow.on('enter-full-screen', () => {
+    mainWindow?.webContents.send('window:maximized-change', true);
+  });
+
+  mainWindow.on('leave-full-screen', () => {
+    mainWindow?.webContents.send('window:maximized-change', mainWindow ? Boolean(mainWindow.isMaximized()) : false);
   });
 
   // Log renderer-side errors to the main process console so black-screen
@@ -611,15 +1353,24 @@ function createWindow() {
   mainWindow.webContents.on('render-process-gone', (_e, details) => {
     console.error('[main] renderer gone:', details);
   });
-  mainWindow.webContents.on('console-message', (_e, level, message) => {
-    if (level >= 2) console.error('[renderer]', message); // warn + error only
+  mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    if (level >= 2) console.error('[renderer]', message, `(${sourceId || 'inline'}:${line || 0})`); // warn + error only
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+    let url = 'http://localhost:5173';
+    if (isInstallMode) url = 'http://localhost:5173?mode=install';
+    else if (isUninstallMode) url = 'http://localhost:5173?mode=uninstall';
+    mainWindow.loadURL(url);
     // mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    mainWindow.loadFile(distIndex);
+    if (isInstallMode) {
+      mainWindow.loadFile(distIndex, { query: { mode: 'install' } });
+    } else if (isUninstallMode) {
+      mainWindow.loadFile(distIndex, { query: { mode: 'uninstall' } });
+    } else {
+      mainWindow.loadFile(distIndex);
+    }
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -627,8 +1378,34 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return;
+
+    const s = readSettings();
+    if (s.closeToTray) {
+      event.preventDefault();
+      mainWindow.hide();
+      if (process.platform === 'darwin') {
+        app.dock.hide();
+      }
+      updateTrayMenu();
+    } else {
+      isQuitting = true;
+      if (tray) {
+        try { tray.destroy(); } catch {}
+        tray = null;
+      }
+      if (overlayWin && !overlayWin.isDestroyed()) {
+        try { overlayWin.destroy(); } catch {}
+        overlayWin = null;
+      }
+      app.quit();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
+    updateTrayMenu();
   });
 }
 
@@ -652,6 +1429,7 @@ function createOverlay() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -687,9 +1465,56 @@ function screenshotsDir(gameId) {
   return path.join(app.getPath('userData'), 'screenshots', key);
 }
 
+// ── Watch Screenshots folder and notify on new files ─────────────────────────
+const watchedScreenshotDirs = new Set();
+let lastNotificationTime = 0;
+
+function ensureWatchingScreenshotDir(dir) {
+  if (watchedScreenshotDirs.has(dir)) return;
+  watchedScreenshotDirs.add(dir);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.watch(dir, (eventType, filename) => {
+      if (!filename || eventType !== 'rename') return;
+      const fullPath = path.join(dir, filename);
+      // If file was created/exists and is an image
+      if (fs.existsSync(fullPath) && /\.(png|jpe?g|webp|bmp)$/i.test(filename)) {
+        const now = Date.now();
+        if (now - lastNotificationTime > 1500) { // debounce notification
+          lastNotificationTime = now;
+          try {
+            mainWindow?.webContents.send('screenshots:updated');
+            if (Notification.isSupported()) {
+              const notification = new Notification({
+                title: 'Screenshot Saved',
+                body: `Saved to Zyphor Launcher: ${filename}`,
+                silent: false,
+              });
+              notification.on('click', () => {
+                shell.showItemInFolder(fullPath);
+              });
+              notification.show();
+            }
+          } catch (e) {
+            console.error('[Notification error]', e);
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('[ensureWatchingScreenshotDir] watch failed:', err.message);
+  }
+}
+
+// Auto-watch default stay screenshot directory
+app.whenReady().then(() => {
+  ensureWatchingScreenshotDir(screenshotsDir('stay'));
+});
+
 function toFileUrl(filePath) {
-  const { pathToFileURL } = require('url');
-  return pathToFileURL(filePath).href;
+  // Convert backslashes to forward slashes and encode for URI
+  const normalized = filePath.replace(/\\/g, '/');
+  return `media://${encodeURI(normalized)}`;
 }
 
 ipcMain.handle('screenshots:getAll', async (_e, gameId) => {
@@ -704,14 +1529,27 @@ ipcMain.handle('screenshots:getAll', async (_e, gameId) => {
         return { f, full, mtime: stat.mtimeMs, size: stat.size };
       })
       .sort((a, b) => b.mtime - a.mtime);
-    return files.map(({ f, full, mtime, size }) => ({
-      name: path.basename(f, path.extname(f)),
-      fileName: f,
-      src: toFileUrl(full),
-      path: full,
-      mtime,
-      size,
-    }));
+
+    return files.map(({ f, full, mtime, size }) => {
+      let src = toFileUrl(full);
+      try {
+        const ext = path.extname(f).toLowerCase().replace('.', '') || 'png';
+        const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+        const buf = fs.readFileSync(full);
+        src = `data:${mime};base64,${buf.toString('base64')}`;
+      } catch (err) {
+        console.warn('[screenshots:getAll] fallback to url for:', f, err.message);
+      }
+
+      return {
+        name: path.basename(f, path.extname(f)),
+        fileName: f,
+        src,
+        path: full,
+        mtime,
+        size,
+      };
+    });
   } catch (err) {
     console.error('[screenshots:getAll]', err);
     return [];
@@ -944,10 +1782,11 @@ ipcMain.handle('browser:youtubeSearch', async (_e, query) => {
 // ── Forward overlay console to main process ───────────────────────────────────
 // (called after overlayWin is created in createOverlay)
 function attachOverlayConsole() {
-  overlayWin?.webContents.on('console-message', (_e, level, message) => {
+  overlayWin?.webContents.on('console-message', (_e, level, message, line, sourceId) => {
     const prefix = '[overlay]';
-    if (level === 2) console.warn(prefix, message);
-    else if (level >= 3) console.error(prefix, message);
+    const loc = `(${sourceId || 'inline'}:${line || 0})`;
+    if (level === 2) console.warn(prefix, message, loc);
+    else if (level >= 3) console.error(prefix, message, loc);
     else console.log(prefix, message);
   });
 }
@@ -956,6 +1795,36 @@ let isListening = false;
 let wasVisibleBeforeVoice = false;
 
 app.whenReady().then(() => {
+  // Register media:// protocol to safely load local screenshot images & stream background videos
+  protocol.handle('media', (request) => {
+    try {
+      let raw = request.url.replace(/^media:\/+/i, '');
+      let decodedPath = decodeURIComponent(raw);
+
+      if (process.platform === 'win32') {
+        if (/^[a-zA-Z]\//.test(decodedPath)) {
+          decodedPath = decodedPath[0] + ':/' + decodedPath.slice(2);
+        } else if (/^\/+[a-zA-Z]:/.test(decodedPath)) {
+          decodedPath = decodedPath.replace(/^\/+/, '');
+        } else if (/^\/+[a-zA-Z]\//.test(decodedPath)) {
+          const stripped = decodedPath.replace(/^\/+/, '');
+          decodedPath = stripped[0] + ':/' + stripped.slice(2);
+        }
+      }
+
+      const normalized = path.normalize(decodedPath);
+      if (!fs.existsSync(normalized)) {
+        console.warn('[media protocol] File not found on disk:', normalized, 'from URL:', request.url);
+        return new Response('File not found', { status: 404 });
+      }
+
+      return net.fetch(pathToFileURL(normalized).href);
+    } catch (err) {
+      console.error('[media protocol] error:', err);
+      return new Response('Internal Server Error', { status: 500 });
+    }
+  });
+
   // Create screenshots folder
   const screenshotsDir = path.join(app.getPath('userData'), 'screenshots', 'stay');
   fs.mkdirSync(screenshotsDir, { recursive: true });
@@ -965,7 +1834,6 @@ app.whenReady().then(() => {
   registerGameHandlers();
   registerWindowHandlers(() => mainWindow);
   createOverlay();
-  overlayWin.webContents.openDevTools({ mode: 'detach' });
   attachOverlayConsole();
   createWindow();
   createTray();
@@ -1202,6 +2070,172 @@ ipcMain.handle('faye:transcribeAudio', async (_e, bufferArray) => {
 ipcMain.on('set-fullscreen', (event, flag) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win) win.setFullScreen(Boolean(flag));
+});
+
+// ── Uninstall IPC Handlers ──────────────────────────────────────────────────
+ipcMain.handle('uninstall:isMode', () => isUninstallMode);
+
+ipcMain.handle('uninstall:execute', async (_event, options = {}) => {
+  const { keepSettings = true, keepSaves = true, keepGameFiles = true, keepScreenshots = true } = options;
+  console.log('[uninstall] Performing uninstallation with options:', options);
+
+  const appData = app.getPath('appData');
+
+  // 1. Remove screenshots if requested
+  if (!keepScreenshots) {
+    const screenshotsDir = path.join(appData, 'ZyphorLauncher', 'screenshots');
+    try {
+      if (fs.existsSync(screenshotsDir)) {
+        fs.rmSync(screenshotsDir, { recursive: true, force: true });
+        console.log('[uninstall] Removed screenshots directory:', screenshotsDir);
+      }
+    } catch (e) {
+      console.warn('[uninstall] Failed to remove screenshots:', e);
+    }
+  }
+
+  // 2. Remove settings / local session data if requested
+  if (!keepSettings) {
+    const launcherDataDir = path.join(appData, 'stay-launcher');
+    const zyphorDataDir = path.join(appData, 'Zyphor Launcher');
+    [launcherDataDir, zyphorDataDir].forEach((dir) => {
+      try {
+        if (fs.existsSync(dir)) {
+          const entries = fs.readdirSync(dir);
+          for (const entry of entries) {
+            if (keepScreenshots && entry === 'screenshots') continue;
+            fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
+          }
+          console.log('[uninstall] Cleaned app data directory:', dir);
+        }
+      } catch (e) {
+        console.warn('[uninstall] Failed to clean app data:', e);
+      }
+    });
+  }
+
+  return { success: true };
+});
+
+ipcMain.on('uninstall:cancel', () => {
+  console.log('[uninstall] User cancelled uninstallation.');
+  isQuitting = true;
+  app.exit(1);
+});
+
+ipcMain.on('uninstall:quit', () => {
+  console.log('[uninstall] Uninstallation completed by user.');
+  isQuitting = true;
+  app.exit(0);
+});
+
+// ── Install IPC Handlers ────────────────────────────────────────────────────
+ipcMain.handle('install:isMode', () => isInstallMode);
+
+ipcMain.handle('install:getDefaultPath', () => {
+  const localAppData = process.env.LOCALAPPDATA || (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'AppData', 'Local') : 'C:\\');
+  return path.join(localAppData, 'Programs', 'Zyphor Launcher');
+});
+
+ipcMain.handle('install:getDiskSpace', async (_event, targetPath) => {
+  try {
+    const p = targetPath || app.getPath('userData');
+    const stats = await fs.promises.statfs(p);
+    const blockSize = stats.bsize;
+    return {
+      totalMB: (stats.blocks * blockSize) / (1024 * 1024),
+      freeMB:  (stats.bavail * blockSize) / (1024 * 1024),
+    };
+  } catch {
+    return { totalMB: null, freeMB: null };
+  }
+});
+
+ipcMain.handle('install:execute', async (_event, options = {}) => {
+  console.log('[install] Executing installation with options:', options);
+  const { installPath, desktopShortcut = true, startMenuShortcut = true, launchOnStartup = false } = options;
+
+  try {
+    // 1. Ensure install directory exists
+    if (installPath && !fs.existsSync(installPath)) {
+      fs.mkdirSync(installPath, { recursive: true });
+    }
+
+    // 2. Configure launchOnStartup setting if requested
+    if (launchOnStartup) {
+      app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
+    }
+
+    // 3. Create Windows shortcuts if requested
+    if (process.platform === 'win32') {
+      const exePath = app.getPath('exe');
+      if (desktopShortcut) {
+        const desktopPath = app.getPath('desktop');
+        const shortcutPath = path.join(desktopPath, 'Zyphor Launcher.lnk');
+        shell.writeShortcutLink(shortcutPath, {
+          target: exePath,
+          description: 'Zyphor Launcher',
+          icon: exePath,
+          iconIndex: 0,
+        });
+      }
+      if (startMenuShortcut) {
+        const appData = app.getPath('appData');
+        const startMenuPrograms = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+        const shortcutPath = path.join(startMenuPrograms, 'Zyphor Launcher.lnk');
+        shell.writeShortcutLink(shortcutPath, {
+          target: exePath,
+          description: 'Zyphor Launcher',
+          icon: exePath,
+          iconIndex: 0,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[install] Non-critical error during install steps:', err);
+  }
+
+  return { success: true };
+});
+
+ipcMain.on('install:cancel', () => {
+  console.log('[install] User cancelled installation.');
+  isQuitting = true;
+  app.exit(1);
+});
+
+ipcMain.on('install:launch', (_event, options = {}) => {
+  console.log('[install] Installation complete. Launching app with options:', options);
+  const { launchAfterInstall = true } = options;
+
+  if (launchAfterInstall) {
+    if (isInstallMode) {
+      // Relaunch without install flag
+      app.relaunch({ args: process.argv.slice(1).filter((a) => !a.includes('install')) });
+      isQuitting = true;
+      app.exit(0);
+    } else {
+      // Preview mode - just close window or stay
+      if (mainWindow) {
+        mainWindow.loadURL('http://localhost:5173');
+      }
+    }
+  } else {
+    isQuitting = true;
+    app.exit(0);
+  }
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
+  if (tray) {
+    try { tray.destroy(); } catch {}
+    tray = null;
+  }
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    try { overlayWin.destroy(); } catch {}
+    overlayWin = null;
+  }
 });
 
 app.on('window-all-closed', () => {

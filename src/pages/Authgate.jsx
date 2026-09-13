@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { doc, getDoc, onSnapshot } from 'firebase/firestore'
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js'
 import { ExternalLink, ShieldAlert, RefreshCw, ArrowRight, Zap, Globe } from 'lucide-react'
@@ -18,36 +18,9 @@ import { clearSession, saveUid } from '../lib/authSession.js'
 import { useTranslation, SUPPORTED_LANGUAGES } from '../i18n/index.jsx'
 
 import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4'
-import VIDEO_GAMING             from './videos/gaming.mp4'
-import VIDEO_DRAGON_TRAVELLER   from './videos/Xuanwu - Dragon Traveler.mp4'
-import VIDEO_LUCY               from './videos/Lucy Cyberpunk.mp4'
-import VIDEO_KALTSIT            from './videos/Kaltsit.mp4'
-import VIDEO_ROSSI              from './videos/rossi.mp4'
-
-import ROSSI_FRAME   from './videos/frames/rossi frame.png'
-import KALTSIT_FRAME from './videos/frames/kaltsit frame.png'
-import XUANWU_FRAME  from './videos/frames/xuanwu frame.png'
-import FIREFLY_FRAME from './videos/frames/firefly frame.png'
-import LUCY_FRAME    from './videos/frames/lucy frame.png'
 
 import Logo from '../Logo/icon.png';
 import Trans from '../Logo/trans-logo.png';
-
-const PRESET_VIDEO_MAP = {
-  'preset-gaming':           VIDEO_GAMING,
-  'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
-  'preset-lucy':             VIDEO_LUCY,
-  'preset-kaltsit':          VIDEO_KALTSIT,
-  'preset-rossi':            VIDEO_ROSSI,
-}
-
-const PRESET_STATIC_MAP = {
-  'preset-gaming':           FIREFLY_FRAME,
-  'preset-dragon-traveller': XUANWU_FRAME,
-  'preset-lucy':             LUCY_FRAME,
-  'preset-kaltsit':          KALTSIT_FRAME,
-  'preset-rossi':            ROSSI_FRAME,
-}
 
 const HANDSHAKE_BASE = 'https://zyphorstudios.com/login-game-handshake'
 const SESSION_TTL_MS = 5 * 60 * 1000
@@ -82,6 +55,7 @@ function ArcSpinner({ size = 32, color = '#8b5cf6', thickness = 6 }) {
 
 /* ─── Countdown ring ─── */
 function CountdownRing({ secondsLeft, total, color }) {
+  const { t } = useTranslation()
   const size = 72
   const thickness = 2
   const r = (size - thickness) / 2
@@ -113,7 +87,7 @@ function CountdownRing({ secondsLeft, total, color }) {
         gap: 1,
       }}>
         <span style={{
-          fontFamily: "'Manrope', monospace",
+          fontFamily: '"JetBrains Mono", Consolas, monospace',
           fontSize: 13,
           fontWeight: 700,
           letterSpacing: '-0.02em',
@@ -122,7 +96,17 @@ function CountdownRing({ secondsLeft, total, color }) {
         }}>
           {mins}:{secs}
         </span>
-        <span style={{ fontSize: 7, marginTop: 2, opacity: 0.35, color: '#ffffff', letterSpacing: '0.08em', textTransform: 'uppercase' }}>left</span>
+        <span style={{
+          fontFamily: '"JetBrains Mono", Consolas, monospace',
+          fontSize: 8,
+          marginTop: 2,
+          opacity: 0.4,
+          color: '#ffffff',
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase'
+        }}>
+          {t('auth.left', {}, 'left')}
+        </span>
       </div>
     </div>
   )
@@ -189,7 +173,7 @@ export default function AuthGate({ onAuthSuccess }) {
     expiryRef.current = setTimeout(() => {
       stopListening()
       setStatus('error')
-      setErrorMsg('Session expired. The 5-minute window closed before you signed in.')
+      setErrorMsg(t('auth.errorExpired', {}, 'Session expired. The 5-minute window closed before you signed in.'))
     }, SESSION_TTL_MS)
 
     const sessionDoc = doc(db, 'auth_sessions', sessionId)
@@ -204,11 +188,34 @@ export default function AuthGate({ onAuthSuccess }) {
       try {
         const userSnap = await getDoc(doc(db, 'users', uid))
         if (!userSnap.exists()) {
-          setErrorMsg('Account found but no profile exists. Complete sign-up on the website first.')
+          setErrorMsg(t('auth.errorNoProfile', {}, 'Account found but no profile exists. Complete sign-up on the website first.'))
           setStatus('error')
           return
         }
         const d = userSnap.data()
+
+        let steamInfo = null
+        try {
+          steamInfo = await window.launcherAPI?.steam?.getStatus?.()
+        } catch {}
+
+        const steamConnected = Boolean(steamInfo?.initialized)
+        const resolvedSteamId = d.steamId || (steamConnected ? steamInfo.steamId64 : '')
+        const resolvedOwnsGame = Boolean(d.steamOwnsGame || d.hasGame || steamInfo?.ownsGame || steamConnected)
+
+        if (steamConnected && (!d.steamId || !d.steamOwnsGame)) {
+          setDoc(
+            doc(db, 'users', uid),
+            {
+              steamId: resolvedSteamId,
+              steamName: steamInfo?.name || '',
+              steamOwnsGame: resolvedOwnsGame,
+              hasGame: resolvedOwnsGame,
+            },
+            { merge: true }
+          ).catch((e) => console.warn('Background steam link failed:', e))
+        }
+
         const profile = {
           uid,
           email:       d.email        ?? '',
@@ -218,8 +225,9 @@ export default function AuthGate({ onAuthSuccess }) {
           timezone:    d.timezone     ?? 'UTC',
           gender:      d.gender       ?? '',
           isVip:       Boolean(d.isVip),
-          hasGame:     Boolean(d.hasGame || d.steamOwnsGame),
-          steamId:     d.steamId      ?? '',
+          hasGame:     resolvedOwnsGame,
+          steamOwnsGame: resolvedOwnsGame,
+          steamId:     resolvedSteamId,
           rememberMe:  Boolean(d.rememberMe),
           totpLinked:  Boolean(d.totpLinked),
           hasPasskey:  Boolean(d.hasPasskey),
@@ -230,13 +238,13 @@ export default function AuthGate({ onAuthSuccess }) {
         onAuthSuccess(profile)
       } catch (err) {
         console.error('Profile fetch failed:', err)
-        setErrorMsg('Failed to load your profile. Check your connection and try again.')
+        setErrorMsg(t('auth.errorLoadProfile', {}, 'Failed to load your profile. Check your connection and try again.'))
         setStatus('error')
       }
     }, (err) => {
       console.error('Firestore listener error:', err)
       stopListening()
-      setErrorMsg('Lost connection to the server. Try again.')
+      setErrorMsg(t('auth.errorConnection', {}, 'Lost connection to the server. Try again.'))
       setStatus('error')
     })
   }
@@ -264,9 +272,8 @@ export default function AuthGate({ onAuthSuccess }) {
       fontFamily: "'Manrope', 'Inter', system-ui, sans-serif",
       overflow: 'hidden',
     }}>
-      {/* ── Google Fonts ── */}
+      {/* ── Global helper style ── */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { display: none; }
       `}</style>
@@ -306,7 +313,7 @@ export default function AuthGate({ onAuthSuccess }) {
           alignItems: 'center', justifyContent: 'center',
           zIndex: 2,
         }}>
-          <img src={Trans} style={{ width: 430, opacity: 0.95 }} />
+          <img src={Trans} style={{ width: 380, opacity: 0.95 }} />
         </div>
 
         
@@ -343,59 +350,41 @@ export default function AuthGate({ onAuthSuccess }) {
           pointerEvents: 'none',
         }} />
 
-        {/* ── Logo / Brand + Language Selector ── */}
+        {/* ── Logo / Brand ── */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15, duration: 0.5 }}
-          style={{ marginBottom: 40, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}
+          style={{ marginBottom: 40, display: 'flex', alignItems: 'center' }}
         >
           <div className='flex gap-3'>
             <img className='w-[70px] h-[70px]' src={Logo} alt="" />
             <span>
               <h1 style={{
-                fontFamily: "Apple Garamond",
+                fontFamily: '"Clash Display", "Manrope", system-ui, sans-serif',
                 marginTop: 4,
-                fontSize: 40, fontWeight: 500,
-                letterSpacing: '0.01em',
+                fontSize: 32,
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                textTransform: 'uppercase',
                 color: T,
                 lineHeight: 1,
               }}>
                 Zyphor Launcher
               </h1>
-              <p style={{
-                fontFamily: "Apple Garamond",
-                fontSize: 10, fontWeight: 600,
-                letterSpacing: '0.22em',
+              {/* <p style={{
+                fontFamily: '"JetBrains Mono", Consolas, monospace',
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '0.2em',
                 textTransform: 'uppercase',
-                marginTop: 10,
+                marginTop: 8,
                 color: M,
                 marginBottom: 6,
               }}>
                 v{CURRENT_VERSION}
-              </p>
+              </p> */}
             </span>
-          </div>
-
-          {/* Quick Language Dropdown */}
-          <div className="relative">
-            <select
-              value={language || 'en'}
-              onChange={(e) => {
-                const newLang = e.target.value;
-                setLanguage?.(newLang);
-                updateSettings?.({ language: newLang });
-              }}
-              className="appearance-none rounded-xl border border-white/10 bg-white/5 py-1.5 pl-3 pr-7 text-[11px] font-medium text-bone/80 outline-none transition hover:bg-white/10"
-              style={{ cursor: 'pointer' }}
-            >
-              {SUPPORTED_LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code} style={{ backgroundColor: '#181818', color: '#fff' }}>
-                  {l.flag} {l.nativeName}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[9px] opacity-40">▼</div>
           </div>
         </motion.div>
 
@@ -414,10 +403,11 @@ export default function AuthGate({ onAuthSuccess }) {
               style={{ display: 'flex', flexDirection: 'column', gap: 24 }}
             >
               <p style={{
-                fontSize: 18.5, lineHeight: 1.3,
-                color: M,
-                fontFamily: "Apple Garamond",
-                fontWeight: 200,
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: 'rgba(255,255,255,0.6)',
+                fontFamily: '"Manrope", "Inter", system-ui, sans-serif',
+                fontWeight: 400,
               }}>
                 {t('auth.signInToContinue', {}, "Sign in or create an account on the Zyphor website. The launcher connects automatically once you're done.")}
               </p>
@@ -430,16 +420,17 @@ export default function AuthGate({ onAuthSuccess }) {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   width: '100%',
-                  padding: '15px 28px',
+                  padding: '16px 24px',
                   borderRadius: 16,
                   border: 'none',
                   cursor: 'pointer',
                   backgroundColor: A,
                   color: '#000000',
-                  fontFamily: "Apple Garamond",
-                  fontSize: 17,
+                  fontFamily: '"Clash Display", "Manrope", system-ui, sans-serif',
+                  fontSize: 14,
                   fontWeight: 600,
-                  letterSpacing: '0.02em',
+                  letterSpacing: '0.03em',
+                  textTransform: 'uppercase',
                   transition: 'box-shadow 0.2s',
                 }}
               >
@@ -451,14 +442,28 @@ export default function AuthGate({ onAuthSuccess }) {
 
               {/* Divider hint */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.06em', fontFamily: "Apple Garamond" }}>
-                  BROWSER AUTHENTICATION
+                <span style={{
+                  fontSize: 10,
+                  color: 'rgba(255,255,255,0.3)',
+                  letterSpacing: '0.15em',
+                  textTransform: 'uppercase',
+                  fontFamily: '"JetBrains Mono", Consolas, monospace',
+                  fontWeight: 600,
+                }}>
+                  {t('auth.browserAuth', {}, 'BROWSER AUTHENTICATION')}
                 </span>
                 <div style={{ flex: 1, height: 1, backgroundColor: B }} />
               </div>
 
-              <p style={{ fontSize: 15.5, color: 'rgba(255,255,255,0.22)', marginTop: -10, lineHeight: 1.2, textAlign: 'left', fontFamily: "Apple Garamond" }}>
-                A browser window will open. Sign in there — the launcher detects it automatically.
+              <p style={{
+                fontSize: 12.5,
+                color: 'rgba(255,255,255,0.35)',
+                marginTop: -10,
+                lineHeight: 1.5,
+                textAlign: 'left',
+                fontFamily: '"Manrope", "Inter", system-ui, sans-serif',
+              }}>
+                {t('auth.browserHint', {}, 'A browser window will open. Sign in there — the launcher detects it automatically.')}
               </p>
             </motion.div>
           )}
@@ -484,14 +489,23 @@ export default function AuthGate({ onAuthSuccess }) {
                 <ArcSpinner size={28} color={A} thickness={2.5} />
                 <div>
                   <p style={{
-                    fontFamily: "Apple Garamond",
-                    fontSize: 16, fontWeight: 400, color: T,
+                    fontFamily: '"Clash Display", "Manrope", system-ui, sans-serif',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    letterSpacing: '0.01em',
+                    color: T,
                     lineHeight: 1,
                   }}>
-                    Waiting for browser{dots}
+                    {t('auth.waitingForBrowser', {}, 'Waiting for browser')}{dots}
                   </p>
-                  <p style={{ fontSize: 14, color: M, marginTop: 4, lineHeight: 1.4, fontFamily: "Apple Garamond", }}>
-                    Complete sign-in on the website
+                  <p style={{
+                    fontSize: 12.5,
+                    color: M,
+                    marginTop: 4,
+                    lineHeight: 1.4,
+                    fontFamily: '"Manrope", "Inter", system-ui, sans-serif',
+                  }}>
+                    {t('auth.completeSignIn', {}, 'Complete sign-in on the website')}
                   </p>
                 </div>
 
@@ -503,9 +517,9 @@ export default function AuthGate({ onAuthSuccess }) {
 
               {/* Steps */}
               {[
-                { n: '1', t: 'Browser opened', done: true },
-                { n: '2', t: 'Sign in on website', done: false },
-                { n: '3', t: 'Auto-connect', done: false },
+                { n: '1', t: t('auth.stepBrowserOpened', {}, 'Browser opened'), done: true },
+                { n: '2', t: t('auth.stepSignInWebsite', {}, 'Sign in on website'), done: false },
+                { n: '3', t: t('auth.stepAutoConnect', {}, 'Auto-connect'), done: false },
               ].map((step, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
@@ -521,10 +535,10 @@ export default function AuthGate({ onAuthSuccess }) {
                   }}>
                     {step.done
                       ? <span style={{ fontSize: 10, color: A, marginTop: 1 }}>✓</span>
-                      : <span style={{ fontSize: 10, color: M, marginTop: 1, fontFamily: "Apple Garamond", }}>{step.n}</span>
+                      : <span style={{ fontSize: 10, color: M, marginTop: 1, fontFamily: '"JetBrains Mono", Consolas, monospace', fontWeight: 700 }}>{step.n}</span>
                     }
                   </div>
-                  <span style={{ fontSize: 15.5, fontFamily: "Apple Garamond", color: step.done ? M : T }}>{step.t}</span>
+                  <span style={{ fontSize: 13.5, fontFamily: '"Manrope", "Inter", system-ui, sans-serif', color: step.done ? M : T }}>{step.t}</span>
                 </div>
               ))}
 
@@ -535,39 +549,45 @@ export default function AuthGate({ onAuthSuccess }) {
                   style={{
                     flex: 1,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    padding: '16px 14px',
-                    borderRadius: 16,
+                    padding: '14px 14px',
+                    borderRadius: 14,
                     border: `1px solid ${B}`,
-                    fontFamily: "Apple Garamond",
+                    fontFamily: '"Clash Display", "Manrope", system-ui, sans-serif',
                     backgroundColor: 'transparent',
                     color: T,
-                    fontSize: 15, fontWeight: 500,
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
                     cursor: 'pointer',
                     transition: 'background 0.15s',
                   }}
                   onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
                   onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
-                  <RefreshCw size={15} strokeWidth={2.2} />
-                  Reopen browser
+                  <RefreshCw size={14} strokeWidth={2.2} />
+                  {t('auth.reopenBrowser', {}, 'Reopen browser')}
                 </button>
                 <button
                   onClick={handleRetry}
                   style={{
-                    padding: '14px 28px',
-                    borderRadius: 10,
+                    padding: '14px 24px',
+                    borderRadius: 14,
                     border: `1px solid ${B}`,
                     backgroundColor: 'transparent',
-                    fontFamily: "Apple Garamond",
+                    fontFamily: '"Clash Display", "Manrope", system-ui, sans-serif',
                     color: M,
-                    fontSize: 15, fontWeight: 500,
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
                     cursor: 'pointer',
                     transition: 'color 0.15s',
                   }}
                   onMouseEnter={e => e.currentTarget.style.color = T}
                   onMouseLeave={e => e.currentTarget.style.color = M}
                 >
-                  Cancel
+                  {t('auth.cancel', {}, 'Cancel')}
                 </button>
               </div>
             </motion.div>
@@ -590,13 +610,19 @@ export default function AuthGate({ onAuthSuccess }) {
               <ArcSpinner size={44} color={A} thickness={2.5} />
               <div style={{ textAlign: 'center' }}>
                 <p style={{
-                  fontFamily: "'Manrope', sans-serif",
-                  fontSize: 14, fontWeight: 600, color: T,
+                  fontFamily: '"Clash Display", "Manrope", system-ui, sans-serif',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                  textTransform: 'uppercase',
+                  color: T,
                   marginBottom: 4,
                 }}>
-                  Loading profile
+                  {t('auth.loadingProfile', {}, 'Loading profile')}
                 </p>
-                <p style={{ fontSize: 12, color: M }}>One moment…</p>
+                <p style={{ fontSize: 12, color: M, fontFamily: '"Manrope", "Inter", system-ui, sans-serif' }}>
+                  {t('auth.oneMoment', {}, 'One moment…')}
+                </p>
               </div>
             </motion.div>
           )}
@@ -613,7 +639,7 @@ export default function AuthGate({ onAuthSuccess }) {
             >
               {/* Error card */}
               <div style={{
-                borderRadius: 12,
+                borderRadius: 14,
                 border: '1px solid rgba(239,68,68,0.2)',
                 backgroundColor: 'rgba(239,68,68,0.07)',
                 padding: '14px 16px',
@@ -628,7 +654,7 @@ export default function AuthGate({ onAuthSuccess }) {
                 }}>
                   <ShieldAlert size={13} color="#f87171" strokeWidth={2.2} />
                 </div>
-                <p style={{ fontSize: 12.5, lineHeight: 1.6, color: '#f87171' }}>
+                <p style={{ fontSize: 12.5, lineHeight: 1.6, color: '#f87171', fontFamily: '"Manrope", "Inter", system-ui, sans-serif' }}>
                   {errorMsg}
                 </p>
               </div>
@@ -642,22 +668,24 @@ export default function AuthGate({ onAuthSuccess }) {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   width: '100%',
-                  padding: '14px 18px',
-                  borderRadius: 12,
+                  padding: '15px 22px',
+                  borderRadius: 14,
                   border: 'none',
                   cursor: 'pointer',
                   backgroundColor: A,
                   color: '#000000',
-                  fontFamily: "'Manrope', sans-serif",
-                  fontSize: 14,
+                  fontFamily: '"Clash Display", "Manrope", system-ui, sans-serif',
+                  fontSize: 13.5,
                   fontWeight: 600,
+                  letterSpacing: '0.03em',
+                  textTransform: 'uppercase',
                   boxShadow: `0 4px 20px ${A}40`,
                   transition: 'box-shadow 0.2s',
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <ExternalLink size={15} strokeWidth={2.2} />
-                  Try again
+                  {t('auth.tryAgain', {}, 'Try again')}
                 </span>
                 <ArrowRight size={15} strokeWidth={2.2} style={{ opacity: 0.7 }} />
               </motion.button>
@@ -669,6 +697,10 @@ export default function AuthGate({ onAuthSuccess }) {
                   border: 'none',
                   color: M,
                   fontSize: 12,
+                  fontFamily: '"Clash Display", "Manrope", system-ui, sans-serif',
+                  fontWeight: 600,
+                  letterSpacing: '0.03em',
+                  textTransform: 'uppercase',
                   cursor: 'pointer',
                   textAlign: 'center',
                   padding: '4px 0',
@@ -677,33 +709,53 @@ export default function AuthGate({ onAuthSuccess }) {
                 onMouseEnter={e => e.currentTarget.style.color = T}
                 onMouseLeave={e => e.currentTarget.style.color = M}
               >
-                Back to start
+                {t('auth.backToStart', {}, 'Back to start')}
               </button>
             </motion.div>
           )}
 
         </AnimatePresence>
 
-        {/* ── Bottom version tag ── */}
+        {/* ── Bottom bar (Language on left, Version on right) ── */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1, duration: 0.5 }}
+          transition={{ delay: 0.6, duration: 0.5 }}
           style={{
             position: 'absolute', bottom: 24, left: 40, right: 40,
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}
         >
-          <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.06em', opacity: '0' }}>
-            ZYPHOR LAUNCHER
-          </span>
+          {/* Quick Language Dropdown on bottom left */}
+          <div className="relative">
+            <span className="text-[11px] font-medium text-bone/70">{t('auth.language', {}, 'Language')}: </span>
+            <select
+              value={language || 'en'}
+              onChange={(e) => {
+                const newLang = e.target.value;
+                setLanguage?.(newLang);
+                updateSettings?.({ language: newLang });
+              }}
+              className="appearance-none rounded-xl border border-white/10 bg-white/5 py-1.5 pl-3 pr-7 text-[11px] font-medium text-bone/70 outline-none transition hover:bg-white/10 hover:text-white"
+              style={{ cursor: 'pointer', fontFamily: '"Manrope", "Inter", system-ui, sans-serif' }}
+            >
+              {SUPPORTED_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code} style={{ backgroundColor: '#181818', color: '#fff' }}>
+                  {l.flag} {l.nativeName}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[9px] opacity-40">▼</div>
+          </div>
+
           <span style={{
             fontSize: 10,
-            color: 'rgba(255,255,255,0.18)',
-            fontFamily: 'monospace',
-            letterSpacing: '0.04em',
+            color: 'rgba(255,255,255,0.25)',
+            fontFamily: '"JetBrains Mono", Consolas, monospace',
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
           }}>
-            v1.2.2
+            v{CURRENT_VERSION}
           </span>
         </motion.div>
       </motion.div>

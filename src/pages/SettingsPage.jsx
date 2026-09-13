@@ -1,18 +1,31 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import { useTranslation, SUPPORTED_LANGUAGES } from '../i18n/index.jsx';
 import DEFAULT_BACKGROUND_VIDEO from './videos/test_video.mp4';
-import VIDEO_GAMING from './videos/Gaming.mp4';
-import VIDEO_DRAGON_TRAVELLER from './videos/Xuanwu - Dragon Traveler.mp4';
-import VIDEO_LUCY from './videos/Lucy Cyberpunk.mp4';
-import VIDEO_KALTSIT from './videos/Kaltsit.mp4';
-import VIDEO_ROSSI from './videos/rossi.mp4'
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../firebase.js';
+import WorkshopWallpapersModal from '../components/WorkshopWallpapersModal.jsx';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faSteam } from '@fortawesome/free-brands-svg-icons';
+import {
+  Compass,
+  Sparkles,
+  Film,
+  UploadCloud,
+  RotateCcw,
+  Power,
+  FolderOpen,
+  CheckCircle2,
+  Trash2,
+} from 'lucide-react';
 
 const SECTIONS = [
   { id: 'language',   label: 'Language',   key: 'settings.tabs.language',   icon: IconLanguage },
   { id: 'appearance', label: 'Appearance', key: 'settings.tabs.appearance', icon: IconAppearance },
   { id: 'behavior',   label: 'Behavior',   key: 'settings.tabs.behavior',   icon: IconBehavior },
+  { id: 'voice',      label: 'Voice & Audio', key: 'settings.tabs.voice',   icon: IconVoice },
+  { id: 'immersion',  label: 'Immersion',  key: 'settings.tabs.immersion',  icon: IconImmersion },
   { id: 'privacy',    label: 'Privacy',    key: 'settings.tabs.privacy',    icon: IconPrivacy },
   { id: 'storage',    label: 'Storage',    key: 'settings.tabs.storage',    icon: IconStorage },
   { id: 'advanced',   label: 'Advanced',   key: 'settings.tabs.advanced',   icon: IconAdvanced },
@@ -20,30 +33,17 @@ const SECTIONS = [
   { id: 'about',      label: 'About',      key: 'settings.tabs.about',      icon: IconAbout },
 ];
 
-const BG_VIDEO_PRESETS = [
-  { id: 'preset-gaming',           label: 'Firefly Gaming - Honkai',                      tags: ['gaming', 'action'],              staticSrc: new URL('./images/static/gaming.jpg',            import.meta.url).href },
-  { id: 'preset-dragon-traveller', label: 'Xuanwu - Dragon Traveller',            tags: ['anime', 'fantasy', 'calm'],      staticSrc: new URL('./images/static/dragon-traveller.jpg',  import.meta.url).href },
-  { id: 'preset-lucy',             label: 'Lucy - Cyberpunk Edgerunners',              tags: ['anime', 'cyberpunk', 'action'],  staticSrc: new URL('./images/static/lucy-cyberpunk.jpg',    import.meta.url).href },
-  { id: 'preset-kaltsit',          label: 'Kaltsit - Arknights: Endfield',                     tags: ['anime', 'calm', 'arknights'],    staticSrc: new URL('./images/static/kaltsit.jpg',           import.meta.url).href },
-  { id: 'preset-rossi',            label: 'Rossi - Arknights: Endfield', tags: ['anime', 'calm', 'arknights'],    staticSrc: new URL('./images/static/rossi.jpg',             import.meta.url).href },
-];
+const BG_VIDEO_PRESETS = [];
 
 const VIDEO_QUALITY_OPTIONS = [
-  { id: 'hd',     label: 'HD',     hint: 'Full resolution \u00b7 best quality' },
-  { id: 'sd',     label: 'SD',     hint: 'Lower resolution \u00b7 saves performance' },
-  { id: 'static', label: 'Static', hint: 'Still poster frame \u00b7 lowest GPU usage' },
+  { id: 'hd', label: 'HD', hint: 'Full resolution · best quality' },
+  { id: 'sd', label: 'SD', hint: 'Lower resolution · saves performance' },
+  { id: 'static', label: 'Static', hint: 'Static image wallpaper · lowest resource usage' },
 ];
 
-const ALL_VIDEO_TAGS = ['all', ...Array.from(new Set(BG_VIDEO_PRESETS.flatMap(p => p.tags)))];
+const ALL_VIDEO_TAGS = ['all'];
 
-
-const PRESET_VIDEO_MAP = {
-  'preset-gaming': VIDEO_GAMING,
-  'preset-dragon-traveller': VIDEO_DRAGON_TRAVELLER,
-  'preset-lucy': VIDEO_LUCY,
-  'preset-kaltsit': VIDEO_KALTSIT,
-  'preset-rossi': VIDEO_ROSSI
-};
+const PRESET_VIDEO_MAP = {};
 
 const FAYE_MODELS = [
   { id: 'fast',     label: 'Fast',     desc: '', model: 'phi3:mini',   displayModel: 'Faye Spark'   },
@@ -137,7 +137,7 @@ function StorageItemSkeleton({ theme }) {
 }
 
 
-export default function SettingsPage() {
+export default function SettingsPage({ profile }) {
   const { t } = useTranslation();
   const {
     settings,
@@ -173,6 +173,42 @@ const [modelDownloadProgress, setModelDownloadProgress] = useState(0);
 const [pendingModel, setPendingModel] = useState(null); // the FAYE_MODELS entry awaiting download
 
 const [ramGB, setRamGB] = useState(null);
+const [installedModels, setInstalledModels] = useState([]); // list of downloaded model names
+
+useEffect(() => {
+  let isMounted = true;
+  async function checkInstalledFayeModels() {
+    try {
+      const models = await window.launcherAPI?.getInstalledOllamaModels?.();
+      if (!isMounted || !Array.isArray(models)) return;
+      setInstalledModels(models);
+
+      // Check if any FAYE_MODELS is installed
+      const installedFayeModel = FAYE_MODELS.find(m =>
+        models.some(n => n === m.model || n.startsWith(m.model.split(':')[0]))
+      );
+
+      if (installedFayeModel) {
+        // If current setting is not set or not installed, sync to installed model
+        if (!settings.fayeModel || !models.some(n => {
+          const current = FAYE_MODELS.find(fm => fm.id === settings.fayeModel);
+          return current && (n === current.model || n.startsWith(current.model.split(':')[0]));
+        })) {
+          update({ fayeModel: installedFayeModel.id });
+        }
+      } else {
+        // No model downloaded on user's computer — deselect all initially
+        if (settings.fayeModel !== null) {
+          update({ fayeModel: null });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to check installed models:', e);
+    }
+  }
+  checkInstalledFayeModels();
+  return () => { isMounted = false; };
+}, []);
 
 useEffect(() => {
   window.launcherAPI?.getRamGB?.()
@@ -185,6 +221,160 @@ useEffect(() => {
       setRamGB(16);
     });
 }, []);
+
+const [hdrStatus, setHdrStatus] = useState({ supported: false, enabled: false, loading: true });
+
+useEffect(() => {
+  let isMounted = true;
+  if (window.launcherAPI?.checkHDRSupport) {
+    window.launcherAPI.checkHDRSupport()
+      .then((res) => {
+        if (isMounted) setHdrStatus({ ...res, loading: false });
+      })
+      .catch(() => {
+        if (isMounted) setHdrStatus({ supported: false, enabled: false, loading: false });
+      });
+  } else {
+    const supported = (typeof window !== 'undefined' && window.matchMedia)
+      ? window.matchMedia('(dynamic-range: high)').matches || (window.screen.colorDepth >= 30)
+      : false;
+    setHdrStatus({ supported, enabled: false, loading: false });
+  }
+  return () => { isMounted = false; };
+}, []);
+
+// ── Voice & Audio Device Detection & Mic Test ─────────────────────────────
+const [audioInputs, setAudioInputs] = useState([{ value: 'default', label: 'Default Microphone' }]);
+const [audioOutputs, setAudioOutputs] = useState([{ value: 'default', label: 'Default Output' }]);
+const [isTestingMic, setIsTestingMic] = useState(false);
+const [micVolumeLevel, setMicVolumeLevel] = useState(0); // 0 - 100
+const micTestStreamRef = useRef(null);
+const micTestAudioCtxRef = useRef(null);
+const micAnimFrameRef = useRef(null);
+const micFeedbackAudioRef = useRef(null);
+
+const refreshAudioDevices = useCallback(async () => {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const inputs = devices
+      .filter((d) => d.kind === 'audioinput')
+      .map((d, i) => ({
+        value: d.deviceId || 'default',
+        label: d.label || `Microphone ${i + 1}`,
+      }));
+    const outputs = devices
+      .filter((d) => d.kind === 'audiooutput')
+      .map((d, i) => ({
+        value: d.deviceId || 'default',
+        label: d.label || `Speaker / Headset ${i + 1}`,
+      }));
+
+    if (inputs.length > 0) setAudioInputs(inputs);
+    if (outputs.length > 0) setAudioOutputs(outputs);
+  } catch (err) {
+    console.warn('[Audio] Failed to enumerate devices:', err);
+  }
+}, []);
+
+useEffect(() => {
+  refreshAudioDevices();
+  const md = navigator.mediaDevices;
+  if (md?.addEventListener) {
+    md.addEventListener('devicechange', refreshAudioDevices);
+    return () => md.removeEventListener('devicechange', refreshAudioDevices);
+  }
+}, [refreshAudioDevices]);
+
+const stopMicTest = useCallback(() => {
+  if (micAnimFrameRef.current) {
+    cancelAnimationFrame(micAnimFrameRef.current);
+    micAnimFrameRef.current = null;
+  }
+  if (micTestStreamRef.current) {
+    micTestStreamRef.current.getTracks().forEach((track) => track.stop());
+    micTestStreamRef.current = null;
+  }
+  if (micTestAudioCtxRef.current) {
+    micTestAudioCtxRef.current.close().catch(() => {});
+    micTestAudioCtxRef.current = null;
+  }
+  if (micFeedbackAudioRef.current) {
+    micFeedbackAudioRef.current.pause();
+    micFeedbackAudioRef.current.srcObject = null;
+    micFeedbackAudioRef.current = null;
+  }
+  setIsTestingMic(false);
+  setMicVolumeLevel(0);
+}, []);
+
+const startMicTest = useCallback(async () => {
+  stopMicTest();
+  try {
+    const selectedId = settings?.audioInputDevice;
+    const constraints = {
+      audio: selectedId && selectedId !== 'default' ? { deviceId: { exact: selectedId } } : true,
+      video: false,
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    micTestStreamRef.current = stream;
+
+    refreshAudioDevices();
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioContextClass();
+    micTestAudioCtxRef.current = ctx;
+
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.3;
+    source.connect(analyser);
+
+    if (settings?.audioMicFeedback) {
+      const audioEl = new Audio();
+      audioEl.srcObject = stream;
+      audioEl.volume = Math.max(0, Math.min(1, (settings?.audioOutputVolume ?? 100) / 100));
+      if (settings?.audioOutputDevice && settings.audioOutputDevice !== 'default' && audioEl.setSinkId) {
+        audioEl.setSinkId(settings.audioOutputDevice).catch(() => {});
+      }
+      audioEl.play().catch(() => {});
+      micFeedbackAudioRef.current = audioEl;
+    }
+
+    setIsTestingMic(true);
+
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    let smoothed = 0;
+
+    const checkVolume = () => {
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const avg = sum / dataArray.length;
+      const gain = ((settings?.audioInputVolume ?? 100) / 100);
+      const normalized = Math.min(100, Math.round((avg / 120) * 100 * gain));
+      smoothed = smoothed * 0.65 + normalized * 0.35;
+      setMicVolumeLevel(Math.round(smoothed));
+      micAnimFrameRef.current = requestAnimationFrame(checkVolume);
+    };
+
+    micAnimFrameRef.current = requestAnimationFrame(checkVolume);
+  } catch (err) {
+    console.error('[Mic Test] Error:', err);
+    setToast('Microphone access denied or device not found');
+    stopMicTest();
+  }
+}, [settings?.audioInputDevice, settings?.audioOutputDevice, settings?.audioInputVolume, settings?.audioOutputVolume, settings?.audioMicFeedback, refreshAudioDevices, stopMicTest]);
+
+useEffect(() => {
+  return () => {
+    stopMicTest();
+  };
+}, [stopMicTest]);
 
   useEffect(() => {
     if (!toast) return;
@@ -207,9 +397,9 @@ useEffect(() => {
   const previewSrc =
   settings.backgroundVideoType === 'none' ? null
   : settings.backgroundVideoType === 'custom'
-    ? (settings.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : customVideoUrl)
-  : settings.backgroundVideoType?.startsWith('preset-')
-    ? PRESET_VIDEO_MAP[settings.backgroundVideoType]
+    ? (settings.backgroundVideoPath ? `media:///${encodeURI(settings.backgroundVideoPath.replace(/\\/g, '/').replace(/^\/+/, ''))}` : customVideoUrl)
+  : settings.backgroundVideoType === 'workshop'
+    ? (settings.backgroundVideoPath ? `media:///${encodeURI(settings.backgroundVideoPath.replace(/\\/g, '/').replace(/^\/+/, ''))}` : DEFAULT_BACKGROUND_VIDEO)
   : DEFAULT_BACKGROUND_VIDEO;
 
   const items = diskItems ?? [];
@@ -240,7 +430,15 @@ useEffect(() => {
       const filePath = await window.launcherAPI.pickVideoFile();
       if (!filePath) return;
       const name = filePath.split(/[\\/]/).pop();
-      update({ backgroundVideoType: 'custom', backgroundVideoPath: filePath, backgroundVideoName: name });
+      update({
+        backgroundVideoType: 'custom',
+        backgroundVideoPath: filePath,
+        backgroundVideoName: name,
+        backgroundWorkshopId: null,
+      });
+      if (profile?.uid) {
+        setDoc(doc(db, 'users', profile.uid), { activeWallpaperId: null }, { merge: true }).catch(() => {});
+      }
       setCustomVideoUrl(null);
       setToast('Custom background video set');
       return;
@@ -301,13 +499,19 @@ async function handleCheckUpdate() {
 
   function setDefaultBackgroundVideo() {
     setCustomVideoUrl(null);
-    update({ backgroundVideoType: 'default', backgroundVideoPath: null, backgroundVideoName: null });
+    update({ backgroundVideoType: 'default', backgroundVideoPath: null, backgroundVideoName: null, backgroundWorkshopId: null });
+    if (profile?.uid) {
+      setDoc(doc(db, 'users', profile.uid), { activeWallpaperId: null }, { merge: true }).catch(() => {});
+    }
     setToast('Using default background video');
   }
 
   function disableBackgroundVideo() {
     setCustomVideoUrl(null);
-    update({ backgroundVideoType: 'none', backgroundVideoPath: null, backgroundVideoName: null });
+    update({ backgroundVideoType: 'none', backgroundVideoPath: null, backgroundVideoName: null, backgroundWorkshopId: null });
+    if (profile?.uid) {
+      setDoc(doc(db, 'users', profile.uid), { activeWallpaperId: null }, { merge: true }).catch(() => {});
+    }
     setToast('Background video disabled');
   }
 
@@ -370,7 +574,7 @@ async function handleCheckUpdate() {
     >
       {/* Left section nav */}
       <div className="w-56 shrink-0 border-r px-4 py-7" style={{ borderColor: theme.border }}>
-        <h2 className="mb-6 px-2 text-[1.85em] font-medium tracking-tight text-bone" style={{ fontFamily: 'Apple Garamond'}}>
+        <h2 className="mb-6 px-2 text-[1.45em] font-semibold tracking-tight text-bone">
           {t('settings.title', {}, 'Settings')}
         </h2>
         <nav className="flex flex-col gap-1">
@@ -518,7 +722,7 @@ async function handleCheckUpdate() {
             {/* LEFT — all settings + carousel */}
             <div className="flex-1 min-w-0 flex flex-col gap-3" style={{ maxWidth: '680px' }}>
 
-            <SettingRow
+            {/* <SettingRow
               label={t('settings.language.select', {}, 'Interface Language')}
               hint={t('settings.language.description', {}, 'Change the language of the launcher interface.')}
             >
@@ -542,7 +746,7 @@ async function handleCheckUpdate() {
                   </option>
                 ))}
               </select>
-            </SettingRow>
+            </SettingRow> */}
 
             <SettingRow label={t('settings.appearance.theme', {}, 'Theme')} hint={t('settings.appearance.themeDesc', {}, 'OLED Black is the default and recommended.')}>
               <div className="flex flex-col items-end gap-2">
@@ -677,7 +881,7 @@ async function handleCheckUpdate() {
   </div>
 </SettingRow>
 
-            <SettingRow label={t('settings.appearance.backgroundQuality', {}, 'Background quality')} hint={t('settings.appearance.backgroundQualityDesc', {}, 'SD compresses the video to a lower resolution. Static shows only a still frame.')}>
+            <SettingRow label={t('settings.appearance.backgroundQuality', {}, 'Background quality')} hint={t('settings.appearance.backgroundQualityDesc', {}, 'HD provides maximum fidelity; SD compresses and downscales video to save performance.')}>
               <div className="flex gap-1.5">
                 {VIDEO_QUALITY_OPTIONS.map((q) => {
                   const isActive = (settings.backgroundQuality ?? 'hd') === q.id;
@@ -700,307 +904,225 @@ async function handleCheckUpdate() {
                 })}
               </div>
             </SettingRow>
-            {/* ── Background video carousel ── */}
-            <div>
-                <div className="mb-3 mt-4 flex items-center justify-between">
-                  <p className="text-[14px] font-medium text-bone/90">{t('settings.appearance.backgroundVideo', {}, 'Background video')}</p>
-                    <div className='flex gap-3'>
-                                          <button
-                      type="button"
-                      onClick={() => setShowVideoModal(true)}
-                      style={{
-                        fontSize: '11px', fontWeight: 500, color: accent.hex,
-                        background: `${accent.hex}14`, border: `1px solid ${accent.hex}33`,
-                        borderRadius: '7px', padding: '4px 14px', cursor: 'pointer',
-                      }}
-                    >
-                      {t('common.browseAll', {}, 'Browse all')}
-                    </button>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => { carouselRef.current?.scrollBy({ left: -180, behavior: 'smooth' }); }}
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', flexShrink: 0 }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M7.5 2L3.5 6l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { carouselRef.current?.scrollBy({ left: 180, behavior: 'smooth' }); }}
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', flexShrink: 0 }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4.5 2L8.5 6l-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                  </div>
-                    </div>
+            {/* ── Background Video & Steam Workshop Section ── */}
+            <div className="mt-4 flex flex-col gap-3 font-sans">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[13px] font-medium text-bone/90">
+                    {t('settings.appearance.backgroundVideo', {}, 'Background Video')}
+                  </p>
+                  <p className="text-[11px] text-ash/60 mt-0.5">
+                    Stream animated backgrounds from the Steam Workshop or use a local video
+                  </p>
                 </div>
 
-                {/* Scrollable strip */}
-                <div
-                  ref={carouselRef}
-                  style={{ display: 'flex', gap: '6px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: '4px' }}
-                >
-                {[
-                  { id: 'default', label: 'Default', src: DEFAULT_BACKGROUND_VIDEO },
-                  ...BG_VIDEO_PRESETS
-                    .slice(0, 3)
-                    .map(p => ({ ...p, src: PRESET_VIDEO_MAP[p.id] })),
-                  { id: 'none', label: 'None', src: null },
-                ].map((opt) => {
-                    const isActive = (settings.backgroundVideoType ?? 'default') === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => {
-                          if (opt.id === 'none') { disableBackgroundVideo(); return; }
-                          if (opt.id === 'default') { setDefaultBackgroundVideo(); return; }
-                          setCustomVideoUrl(null);
-                          update({ backgroundVideoType: opt.id, backgroundVideoPath: null, backgroundVideoName: opt.label });
-                          setToast(`Background: ${opt.label}`);
-                        }}
-                        style={{
-                          flexShrink: 0,
-                          width: '180px',
-                          borderRadius: '10px',
-                          border: isActive ? `2px solid ${accent.hex}` : '2px solid rgba(255,255,255,0.08)',
-                          overflow: 'hidden',
-                          cursor: 'pointer',
-                          padding: 0,
-                          background: 'transparent',
-                          position: 'relative',
-                          transition: 'border-color 150ms',
-                          boxShadow: isActive ? `0 0 0 1px ${accent.hex}33` : 'none',
-                        }}
-                      >
-                        <div style={{ width: '100%', height: '90px', position: 'relative', background: '#0a0a0a', overflow: 'hidden' }}>
-                          {opt.src ? (
-                            <video
-                              src={opt.src}
-                              muted
-                              playsInline
-                              preload="none"
-                              onMouseEnter={e => e.currentTarget.play()}
-                              onMouseLeave={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.85 }}
-                            />
-                          ) : (
-                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#111,#0a0a0a)' }}>
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.25 }}>
-                                <circle cx="12" cy="12" r="9" stroke="white" strokeWidth="1.5"/>
-                                <path d="M9 9l6 3-6 3V9z" fill="white"/>
-                                <line x1="4" y1="4" x2="20" y2="20" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                              </svg>
-                            </div>
-                          )}
-                          {isActive && <div style={{ position: 'absolute', inset: 0, background: `${accent.hex}22` }} />}
-                          {isActive && (
-                            <div style={{ position: 'absolute', top: '4px', right: '4px', width: '16px', height: '16px', borderRadius: '50%', background: accent.hex, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2 3-3" stroke={accent.on} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ padding: '5px 7px 6px', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
-                          <p style={{ fontSize: '11px', fontWeight: 500, color: isActive ? accent.hex : 'rgba(255,255,255,0.65)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>
-                            {opt.label}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowVideoModal(true)}
+                    className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold transition-all hover:brightness-110 active:scale-98 shadow-sm"
+                    style={{ backgroundColor: accent.hex, color: accent.on }}
+                  >
+                    
+                    Browse Workshop
+                  </button>
 
-                  {/* Custom tile */}
                   <button
                     type="button"
                     onClick={chooseCustomBackgroundVideo}
-                    style={{
-                      flexShrink: 0,
-                      width: '180px',
-                      borderRadius: '10px',
-                      border: settings.backgroundVideoType === 'custom' ? `2px solid ${accent.hex}` : '2px dashed rgba(255,255,255,0.15)',
-                      overflow: 'hidden',
-                      cursor: 'pointer',
-                      padding: 0,
-                      background: 'transparent',
-                      position: 'relative',
-                      transition: 'border-color 150ms',
-                    }}
+                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-bone/80 hover:bg-white/10 hover:text-white transition-colors"
                   >
-                    <div style={{ width: '100%', height: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', background: settings.backgroundVideoType === 'custom' ? `${accent.hex}15` : 'rgba(255,255,255,0.02)', position: 'relative' }}>
-                      {settings.backgroundVideoType === 'custom' && (customVideoUrl || settings.backgroundVideoPath) ? (
-                        <video
-                          src={settings.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : customVideoUrl}
-                          muted
-                          playsInline
-                          preload="none"
-                          onMouseEnter={e => e.currentTarget.play()}
-                          onMouseLeave={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.85, position: 'absolute', inset: 0 }}
-                        />
-                      ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.4 }}><path d="M12 5v14M5 12h14" stroke="white" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                      )}
-                    </div>
-                    <div style={{ padding: '5px 7px 6px', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
-                      <p style={{ fontSize: '11px', fontWeight: 500, color: settings.backgroundVideoType === 'custom' ? accent.hex : 'rgba(255,255,255,0.4)', margin: 0 }}>
-                        {settings.backgroundVideoType === 'custom' && settings.backgroundVideoName ? settings.backgroundVideoName : 'Custom…'}
-                      </p>
-                    </div>
+                    Custom File…
                   </button>
-                  <input ref={bgVideoInputRef} type="file" accept="video/mp4,video/webm" onChange={handleBackgroundVideoFile} className="hidden" />
                 </div>
               </div>
 
-              {/* ── Video picker modal ── */}
-              {showVideoModal && (() => {
-                const allOpts = [
-                  { id: 'default', label: 'Default', src: DEFAULT_BACKGROUND_VIDEO, tags: [] },
-                  ...BG_VIDEO_PRESETS.map(p => ({ ...p, src: PRESET_VIDEO_MAP[p.id] })),
-                  { id: 'none', label: 'None', src: null, tags: [] },
-                ];
-                const filtered = allOpts.filter(opt => {
-                  const matchSearch = !videoSearch || opt.label.toLowerCase().includes(videoSearch.toLowerCase());
-                  const matchTag = videoTag === 'all' || (opt.tags ?? []).includes(videoTag);
-                  return matchSearch && matchTag;
-                });
-                return (
+              {/* Current Active Background Info Card */}
+              <div
+                className="flex items-center justify-between rounded-xl border p-3.5 transition-colors"
+                style={{ backgroundColor: `${theme.surface}66`, borderColor: theme.border }}
+              >
+                <div className="flex items-center gap-3 min-w-0">
                   <div
-                    onClick={() => { setShowVideoModal(false); setVideoSearch(''); setVideoTag('all'); }}
-                    style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(14px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: `${accent.hex}18`, color: accent.hex }}
                   >
-                    <div
-                      onClick={e => e.stopPropagation()}
-                      style={{ width: '860px', height: '72vh', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '20px', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(0,0,0,0.6)' }}
-                    >
-                      {/* Header */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
-                        <p style={{ fontSize: '15px', fontWeight: 600, color: theme.text, margin: 0 }}>Background videos</p>
-                        <button type="button" onClick={() => { setShowVideoModal(false); setVideoSearch(''); setVideoTag('all'); }} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '8px', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}>
-                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                        </button>
-                      </div>
-
-                      {/* Search + tag filters */}
-                      <div style={{ padding: '12px 20px', borderBottom: `1px solid ${theme.border}`, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <div style={{ position: 'relative' }}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', opacity: 0.35, pointerEvents: 'none' }}>
-                            <circle cx="11" cy="11" r="8" stroke="white" strokeWidth="2"/><path d="M21 21l-4.35-4.35" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                          </svg>
-                          <input
-                            type="text"
-                            placeholder="Search videos..."
-                            value={videoSearch}
-                            onChange={e => setVideoSearch(e.target.value)}
-                            style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: `1px solid ${theme.border}`, borderRadius: '9px', padding: '7px 12px 7px 32px', fontSize: '12px', color: theme.text, outline: 'none', boxSizing: 'border-box' }}
-                          />
-                          {videoSearch && (
-                            <button type="button" onClick={() => setVideoSearch('')} style={{ position: 'absolute', right: '9px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.35)', padding: 0, display: 'flex' }}>
-                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                            </button>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                          {ALL_VIDEO_TAGS.map(tag => {
-                            const isActiveTag = videoTag === tag;
-                            return (
-                              <button key={tag} type="button" onClick={() => setVideoTag(tag)} style={{ padding: '3px 11px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, cursor: 'pointer', border: 'none', transition: 'all 130ms', background: isActiveTag ? accent.hex : 'rgba(255,255,255,0.07)', color: isActiveTag ? accent.on : 'rgba(255,255,255,0.5)', textTransform: 'capitalize' }}>
-                                {tag}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Grid */}
-                      <div style={{ overflowY: 'auto', padding: '14px 20px 20px' }}>
-                        {filtered.length === 0 ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '160px', gap: '8px', opacity: 0.4 }}>
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="white" strokeWidth="1.5"/><path d="M21 21l-4.35-4.35" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                            <p style={{ color: theme.text, fontSize: '13px', margin: 0 }}>No videos match</p>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-                            {filtered.map((opt) => {
-                              const isActive = (settings.backgroundVideoType ?? 'default') === opt.id;
-                              return (
-                                <button
-                                  key={opt.id}
-                                  type="button"
-                                  onClick={() => {
-                                    if (opt.id === 'none') { disableBackgroundVideo(); }
-                                    else if (opt.id === 'default') { setDefaultBackgroundVideo(); }
-                                    else { setCustomVideoUrl(null); update({ backgroundVideoType: opt.id, backgroundVideoPath: null, backgroundVideoName: opt.label }); setToast(`Background: ${opt.label}`); }
-                                    setShowVideoModal(false); setVideoSearch(''); setVideoTag('all');
-                                  }}
-                                  style={{ borderRadius: '10px', border: isActive ? `2px solid ${accent.hex}` : '2px solid rgba(255,255,255,0.08)', overflow: 'hidden', cursor: 'pointer', padding: 0, background: 'transparent', position: 'relative', transition: 'border-color 150ms', boxShadow: isActive ? `0 0 0 1px ${accent.hex}33` : 'none' }}
-                                >
-                                  <div style={{ width: '100%', height: '110px', position: 'relative', background: '#0a0a0a' }}>
-                                    {opt.src ? (
-                                      <video src={opt.src} muted playsInline preload="none" onMouseEnter={e => e.currentTarget.play()} onMouseLeave={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.85 }} />
-                                    ) : (
-                                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#111,#0a0a0a)' }}>
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.25 }}><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="1.5"/><line x1="4" y1="4" x2="20" y2="20" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                                      </div>
-                                    )}
-                                    {isActive && <div style={{ position: 'absolute', inset: 0, background: `${accent.hex}22` }} />}
-                                    {isActive && (
-                                      <div style={{ position: 'absolute', top: '5px', right: '5px', width: '16px', height: '16px', borderRadius: '50%', background: accent.hex, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2 3-3" stroke={accent.on} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div style={{ padding: '6px 8px 7px', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
-                                    <p style={{ fontSize: '11px', fontWeight: 500, color: isActive ? accent.hex : 'rgba(255,255,255,0.65)', margin: 0, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opt.label}</p>
-                                    {(opt.tags ?? []).length > 0 && (
-                                      <div style={{ display: 'flex', gap: '4px', marginTop: '3px', flexWrap: 'wrap' }}>
-                                        {opt.tags.slice(0, 3).map(t => (
-                                          <span key={t} style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.35)', textTransform: 'capitalize' }}>{t}</span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </button>
-                              );
-                            })}
-                            {videoTag === 'all' && !videoSearch && (
-                              <button type="button" onClick={() => { chooseCustomBackgroundVideo(); setShowVideoModal(false); setVideoSearch(''); setVideoTag('all'); }} style={{ borderRadius: '10px', border: settings.backgroundVideoType === 'custom' ? `2px solid ${accent.hex}` : '2px dashed rgba(255,255,255,0.15)', overflow: 'hidden', cursor: 'pointer', padding: 0, background: 'transparent', position: 'relative' }}>
-                                <div style={{ width: '100%', height: '110px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', background: settings.backgroundVideoType === 'custom' ? `${accent.hex}15` : 'rgba(255,255,255,0.02)', position: 'relative' }}>
-                                  {settings.backgroundVideoType === 'custom' && (customVideoUrl || settings.backgroundVideoPath) ? (
-                                    <video src={settings.backgroundVideoPath ? `file://${settings.backgroundVideoPath}` : customVideoUrl} muted playsInline preload="none" onMouseEnter={e => e.currentTarget.play()} onMouseLeave={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.85, position: 'absolute', inset: 0 }} />
-                                  ) : (
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.4 }}><path d="M12 5v14M5 12h14" stroke="white" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                                  )}
-                                </div>
-                                <div style={{ padding: '6px 8px 7px', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
-                                  <p style={{ fontSize: '11px', fontWeight: 500, color: settings.backgroundVideoType === 'custom' ? accent.hex : 'rgba(255,255,255,0.4)', margin: 0, textAlign: 'left' }}>
-                                    {settings.backgroundVideoType === 'custom' && settings.backgroundVideoName ? settings.backgroundVideoName : 'Custom...'}
-                                  </p>
-                                </div>
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <Film className="h-4 w-4" />
                   </div>
-                );
-              })()}
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-xs font-semibold text-bone">
+                        {settings.backgroundVideoType === 'none'
+                          ? 'Background video disabled'
+                          : settings.backgroundVideoType === 'workshop'
+                          ? settings.backgroundVideoName || 'Steam Workshop Background'
+                          : settings.backgroundVideoType === 'custom'
+                          ? settings.backgroundVideoName || 'Custom Video File'
+                          : 'Default Animated Background'}
+                      </p>
+                      <span
+                        className={`rounded px-1.5 py-0.2 text-[9.5px] font-medium ${
+                          settings.backgroundVideoType === 'none'
+                            ? 'bg-rose-500/10 text-rose-300'
+                            : settings.backgroundVideoType === 'workshop'
+                            ? 'bg-cyan-500/10 text-cyan-300'
+                            : settings.backgroundVideoType === 'custom'
+                            ? 'bg-amber-500/10 text-amber-300'
+                            : 'bg-emerald-500/10 text-emerald-300'
+                        }`}
+                      >
+                        {settings.backgroundVideoType === 'none'
+                          ? 'Off'
+                          : settings.backgroundVideoType === 'workshop'
+                          ? 'Steam UGC'
+                          : settings.backgroundVideoType === 'custom'
+                          ? 'Local'
+                          : 'Default'}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-ash/60 truncate mt-0.5">
+                      {settings.backgroundVideoType === 'workshop'
+                        ? 'Downloaded and synced via Steam Workshop'
+                        : settings.backgroundVideoType === 'custom'
+                        ? 'Playing from local disk'
+                        : settings.backgroundVideoType === 'none'
+                        ? 'Video playback disabled to save resources'
+                        : 'Default launcher animated loop'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick actions */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {settings.backgroundVideoType !== 'default' && (
+                    <button
+                      type="button"
+                      onClick={setDefaultBackgroundVideo}
+                      className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-ash hover:bg-white/10 hover:text-bone transition-all"
+                    >
+                      Reset Default
+                    </button>
+                  )}
+                  {settings.backgroundVideoType !== 'none' ? (
+                    <button
+                      type="button"
+                      onClick={disableBackgroundVideo}
+                      className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-2.5 py-1.5 text-[11px] font-medium text-rose-300 hover:bg-rose-500/20 transition-all"
+                    >
+                      Disable
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={setDefaultBackgroundVideo}
+                      className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-medium text-emerald-300 hover:bg-emerald-500/20 transition-all"
+                    >
+                      Enable
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Hidden input fallback for browser dev */}
+              <input ref={bgVideoInputRef} type="file" accept="video/mp4,video/webm" onChange={handleBackgroundVideoFile} className="hidden" />
+            </div>
+
+            {/* Steam Workshop Backgrounds Modal */}
+            <WorkshopWallpapersModal
+              isOpen={showVideoModal}
+              onClose={() => setShowVideoModal(false)}
+              profile={profile}
+              currentWorkshopId={settings.backgroundWorkshopId}
+              onApplyWallpaper={(item, videoPath) => {
+                update({
+                  backgroundVideoType: 'workshop',
+                  backgroundWorkshopId: item.publishedFileId,
+                  backgroundVideoPath: videoPath,
+                  backgroundVideoName: item.title,
+                  backgroundPreviewUrl: item.previewUrl || null,
+                });
+                setToast(`Background applied: ${item.title}`);
+                setShowVideoModal(false);
+              }}
+              onResetActiveBackground={() => {
+                update({
+                  backgroundVideoType: 'default',
+                  backgroundWorkshopId: null,
+                  backgroundVideoPath: null,
+                  backgroundVideoName: null,
+                  backgroundPreviewUrl: null,
+                });
+                setToast('Active background reset to default');
+              }}
+              theme={theme}
+              accent={accent}
+            />
             </div>{/* end LEFT col */}
 
             {/* RIGHT — preview panel, fixed width, aspect-ratio locked */}
             <div
-              className="w-[48%] shrink-0 overflow-hidden rounded-xl border"
-              style={{ borderColor: theme.border, backgroundColor: theme.bg }}
+              className="w-[48%] shrink-0 overflow-hidden rounded-2xl border shadow-xl backdrop-blur-md"
+              style={{ borderColor: theme.border, backgroundColor: `${theme.bg}dd` }}
             >
-              <div className="flex items-center justify-between border-b px-3 py-2" style={{ borderColor: theme.border }}>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-ash/60">Preview</p>
-                {settings.backgroundVideoType === 'custom' && !settings.backgroundVideoPath && !customVideoUrl && (
-                  <p className="text-[10px] text-ash/40">No file</p>
-                )}
+              <div
+                className="flex items-center justify-between border-b px-4 py-2.5"
+                style={{ borderColor: theme.border, backgroundColor: 'rgba(0,0,0,0.2)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <Film className="h-3.5 w-3.5" style={{ color: accent.hex }} />
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-ash/70">Live Monitor</p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{
+                      backgroundColor: settings.backgroundVideoType === 'none' ? '#ef4444' : '#10b981',
+                      boxShadow: settings.backgroundVideoType === 'none' ? 'none' : '0 0 8px #10b98188',
+                    }}
+                  />
+                  <span className="text-[10px] font-semibold text-ash/60">
+                    {settings.backgroundVideoType === 'none' ? 'MUTED' : (settings.backgroundQuality === 'static' ? 'STATIC' : 'ACTIVE')}
+                  </span>
+                </div>
               </div>
+
               {/* 16:9 box — video fits inside without cropping */}
-              <div className="relative w-full bg-black" style={{ aspectRatio: '16/9' }}>
-                {previewSrc ? (
+              <div className="relative w-full bg-black/90 overflow-hidden" style={{ aspectRatio: '16/9' }}>
+                {settings.backgroundVideoType === 'none' ? (
+                  <div
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-2"
+                    style={{ background: `linear-gradient(135deg, ${theme.surface}, ${theme.bg})` }}
+                  >
+                    <Power className="h-6 w-6 text-ash/30" />
+                    <p className="text-[11px] font-medium text-ash/50">Animated Backdrop Disabled</p>
+                  </div>
+                ) : settings.backgroundQuality === 'static' ? (
+                  settings.backgroundPreviewUrl ? (
+                    <img
+                      src={settings.backgroundPreviewUrl}
+                      alt="Static preview"
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  ) : previewSrc ? (
+                    <video
+                      ref={previewVideoRef}
+                      src={previewSrc}
+                      muted
+                      playsInline
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-2"
+                      style={{ background: `linear-gradient(135deg, ${theme.surface}, ${theme.bg})` }}
+                    >
+                      <Film className="h-6 w-6 text-ash/30" />
+                      <p className="text-[11px] font-medium text-ash/50">Static Backdrop Active</p>
+                    </div>
+                  )
+                ) : previewSrc ? (
                   <video
                     ref={previewVideoRef}
                     src={previewSrc}
@@ -1008,27 +1130,40 @@ async function handleCheckUpdate() {
                     muted
                     loop
                     playsInline
-                    className="absolute inset-0 h-full w-full object-contain"
+                    className="absolute inset-0 h-full w-full object-cover"
                   />
                 ) : (
                   <div
-                    className="absolute inset-0 flex items-center justify-center"
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-2"
                     style={{ background: `linear-gradient(135deg, ${theme.surface}, ${theme.bg})` }}
                   >
-                    <p className="text-[11px] text-ash/40">No background video</p>
+                    <Power className="h-6 w-6 text-ash/30" />
+                    <p className="text-[11px] font-medium text-ash/50">Animated Backdrop Disabled</p>
                   </div>
                 )}
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-                <div className="absolute bottom-2 left-3">
-                  <p className="text-[10px] font-medium text-bone/80">
-                    {settings.backgroundVideoType === 'none'
-                      ? 'Off'
-                      : settings.backgroundVideoType === 'custom'
-                      ? settings.backgroundVideoName || 'Custom video'
-                      : settings.backgroundVideoType?.startsWith('preset-')
-                      ? BG_VIDEO_PRESETS.find(p => p.id === settings.backgroundVideoType)?.label ?? 'Preset'
-                      : 'Default'}
-                  </p>
+                
+                {/* Cinematic gradient & status watermark */}
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
+                
+                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold text-white drop-shadow-md">
+                      {settings.backgroundVideoType === 'none'
+                        ? 'Disabled'
+                        : settings.backgroundVideoType === 'custom'
+                        ? settings.backgroundVideoName || 'Custom video'
+                        : settings.backgroundVideoType === 'workshop'
+                        ? settings.backgroundVideoName || 'Steam Workshop'
+                        : 'Default Animated Atmosphere'}
+                    </p>
+                    <p className="text-[9.5px] text-white/60 drop-shadow">
+                      {settings.backgroundVideoType === 'none' ? 'Static background' : 'Seamless 60 FPS loop'}
+                    </p>
+                  </div>
+
+                  <span className="shrink-0 rounded-md bg-black/60 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white/70 backdrop-blur-sm border border-white/10">
+                    16:9
+                  </span>
                 </div>
               </div>
             </div>{/* end RIGHT col */}
@@ -1105,26 +1240,22 @@ async function handleCheckUpdate() {
     <>
       {t('faye.modelHint', {}, "Choose the Faye AI model based on your system's available RAM.")}
       <p
-    style={{
-      fontSize: 12,
-      color: 'rgba(255,255,255,0.4)',
-      marginTop: 3,
-    }}
-    >
-    {t('faye.detectedRam', { ram: ramGB ?? '…' }, `Detected RAM: ${ramGB ?? '…'} GB`)}
-  </p>
-      <span className="block mt-3" style={{ color: '#fbbf24' }}>
-        {t('faye.ramWarning', {}, '⚠️ Balanced uses more RAM and Quality requires significantly more RAM. Lower-end systems may experience reduced performance.')}
-      </span>
-        
+        style={{
+          fontSize: 12,
+          color: 'rgba(255,255,255,0.4)',
+          marginTop: 3,
+        }}
+      >
+        {t('faye.detectedRam', { ram: ramGB ?? '…' }, `Detected RAM: ${ramGB ?? '…'} GB`)}
+      </p>
     </>
   }
 >
 
   <div className="flex gap-1.5">
     {FAYE_MODELS.map((m) => {
-      const isActive =
-        (settings.fayeModel ?? 'fast') === m.id;
+      const isDownloaded = installedModels.some(n => n === m.model || n.startsWith(m.model.split(':')[0]));
+      const isActive = settings.fayeModel === m.id;
         
         // Disable rules
         const disabled =
@@ -1182,7 +1313,16 @@ async function handleCheckUpdate() {
               : m.desc
           }
           >
-          <div>{t(`faye.${m.id}`, {}, m.label)}</div>
+          <div className="flex items-center justify-center gap-1">
+            <span>{t(`faye.${m.id}`, {}, m.label)}</span>
+            {isDownloaded && (
+              <span
+                className="inline-block w-1.5 h-1.5 rounded-full"
+                style={{ backgroundColor: isActive ? accent.on : '#10b981' }}
+                title="Installed"
+              />
+            )}
+          </div>
 
           <div style={{ fontSize: '10px', opacity: 0.7, marginTop: 2 }}>
             {m.displayModel}
@@ -1211,8 +1351,18 @@ async function handleCheckUpdate() {
           </p>
           <p className="mt-1 text-[12px] text-ash/60">
             {t('faye.needDownload', { model: pendingModel.displayModel }, `${pendingModel.displayModel} needs to be downloaded before Faye can use it.`)}
+            {pendingModel.id === 'balanced' && (
+              <span className="block mt-1.5" style={{ color: '#fbbf24' }}>
+                {t('faye.ramWarningBalanced', {}, '⚠️ Balanced uses more RAM. Lower-end systems may experience reduced performance.')}
+              </span>
+            )}
+            {pendingModel.id === 'quality' && (
+              <span className="block mt-1.5" style={{ color: '#fbbf24' }}>
+                {t('faye.ramWarningQuality', {}, '⚠️ Quality requires significantly more RAM (~28GB+). Lower-end systems may experience reduced performance or slow responses.')}
+              </span>
+            )}
             {settings.fayeModel && settings.fayeModel !== pendingModel.id && (
-              <span className="block mt-1" style={{ color: '#fbbf24' }}>
+              <span className="block mt-1 text-ash/70">
                 {t('faye.replaceWarning', {}, '⚠️ Your current model will be removed to free up space.')}
               </span>
             )}
@@ -1243,6 +1393,7 @@ async function handleCheckUpdate() {
                 unsub?.(); // clean up listener
                 if (result?.ok) {
                   update({ fayeModel: pendingModel.id });
+                  setInstalledModels((prev) => [...prev, pendingModel.model]);
                   setModelDownloadState('done');
                   setToast(`${pendingModel.label} downloaded — Faye is ready`);
                   setTimeout(() => { setModelDownloadState('idle'); setPendingModel(null); }, 2000);
@@ -1299,6 +1450,269 @@ async function handleCheckUpdate() {
 )}
     </div>
             
+          </Section>
+        )}
+
+        {activeSection === 'voice' && (
+          <Section
+            title={t('settings.sections.voice', {}, 'Voice & Audio')}
+            description={t('settings.sections.voiceDesc', {}, 'Configure microphone, output speakers, and test audio levels.')}
+          >
+            {/* Input Device */}
+            <div className="col-span-1 flex flex-col justify-between rounded-xl border border-edge-soft px-5 py-4 transition-colors hover:border-bulb/20">
+              <div className="mb-2">
+                <p className="text-[13px] font-semibold text-bone">{t('settings.voice.inputDevice', {}, 'Input Device')}</p>
+                <p className="text-[11px] text-ash/60">{t('settings.voice.inputDeviceDesc', {}, 'Microphone used for voice commands and Faye.')}</p>
+              </div>
+              <Dropdown
+                value={settings.audioInputDevice || 'default'}
+                onChange={(val) => {
+                  update({ audioInputDevice: val });
+                  if (isTestingMic) {
+                    setTimeout(() => startMicTest(), 50);
+                  }
+                }}
+                options={audioInputs}
+                theme={theme}
+                accent={accent}
+                className="w-full mt-2"
+              />
+            </div>
+
+            {/* Output Device */}
+            <div className="col-span-1 flex flex-col justify-between rounded-xl border border-edge-soft px-5 py-4 transition-colors hover:border-bulb/20">
+              <div className="mb-2">
+                <p className="text-[13px] font-semibold text-bone">{t('settings.voice.outputDevice', {}, 'Output Device')}</p>
+                <p className="text-[11px] text-ash/60">{t('settings.voice.outputDeviceDesc', {}, 'Playback device for sound effects and music.')}</p>
+              </div>
+              <Dropdown
+                value={settings.audioOutputDevice || 'default'}
+                onChange={(val) => {
+                  update({ audioOutputDevice: val });
+                  if (isTestingMic && micFeedbackAudioRef.current?.setSinkId) {
+                    micFeedbackAudioRef.current.setSinkId(val === 'default' ? '' : val).catch(() => {});
+                  }
+                }}
+                options={audioOutputs}
+                theme={theme}
+                accent={accent}
+                className="w-full mt-2"
+              />
+            </div>
+
+            {/* Input Volume Slider */}
+            <SettingRow
+              label={t('settings.voice.inputVolume', {}, 'Input Volume')}
+              hint={`${settings.audioInputVolume ?? 100}% sensitivity`}
+            >
+              <div className="flex items-center gap-3 w-48">
+                <input
+                  type="range"
+                  min="0"
+                  max="150"
+                  value={settings.audioInputVolume ?? 100}
+                  onChange={(e) => update({ audioInputVolume: Number(e.target.value) })}
+                  className="w-full accent-[var(--accent)] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                />
+                <span className="text-[11px] font-mono text-ash/70 w-9 text-right">
+                  {settings.audioInputVolume ?? 100}%
+                </span>
+              </div>
+            </SettingRow>
+
+            {/* Output Volume Slider */}
+            <SettingRow
+              label={t('settings.voice.outputVolume', {}, 'Output Volume')}
+              hint={`${settings.audioOutputVolume ?? 100}% master volume`}
+            >
+              <div className="flex items-center gap-3 w-48">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={settings.audioOutputVolume ?? 100}
+                  onChange={(e) => update({ audioOutputVolume: Number(e.target.value) })}
+                  className="w-full accent-[var(--accent)] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                />
+                <span className="text-[11px] font-mono text-ash/70 w-9 text-right">
+                  {settings.audioOutputVolume ?? 100}%
+                </span>
+              </div>
+            </SettingRow>
+
+            {/* ── Discord-Style Mic Test Card ── */}
+            <div className="col-span-full rounded-2xl border border-white/10 bg-black/40 p-5 mt-2 flex flex-col gap-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h4 className="text-[14px] font-bold text-bone flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: isTestingMic ? '#4ecb8d' : accent.hex }} />
+                    {t('settings.voice.testMic', {}, 'Mic Test')}
+                  </h4>
+                  <p className="text-[12px] text-ash/60 mt-0.5">
+                    {t('settings.voice.testMicDesc', {}, 'Speak into your microphone to verify your input audio levels.')}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isTestingMic) stopMicTest();
+                    else startMicTest();
+                  }}
+                  style={{
+                    backgroundColor: isTestingMic ? 'rgba(239,68,68,0.15)' : accent.hex,
+                    color: isTestingMic ? '#f87171' : accent.on,
+                    borderColor: isTestingMic ? 'rgba(239,68,68,0.3)' : 'transparent',
+                  }}
+                  className="px-5 py-2 rounded-xl text-[12px] font-semibold transition-all duration-200 border shadow-md active:scale-95 flex items-center gap-2 cursor-pointer"
+                >
+                  {isTestingMic ? (
+                    <>
+                      <span className="h-2 w-2 rounded-full bg-red-400 animate-ping" />
+                      {t('settings.voice.stopTest', {}, 'Stop Testing')}
+                    </>
+                  ) : (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                      </svg>
+                      {t('settings.voice.startTest', {}, "Let's Check")}
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Real-time Voice Level Meter (Discord-style segmented LED bar) */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between text-[11px] text-ash/50 font-mono">
+                  <span>INPUT LEVEL</span>
+                  <span style={{ color: isTestingMic ? (micVolumeLevel > 75 ? '#ef4444' : '#4ecb8d') : 'inherit' }}>
+                    {isTestingMic ? `${micVolumeLevel}%` : 'OFFLINE'}
+                  </span>
+                </div>
+                <div className="h-3 w-full rounded-full bg-black/60 p-0.5 border border-white/10 overflow-hidden flex items-center gap-[2px]">
+                  {Array.from({ length: 32 }).map((_, i) => {
+                    const stepThreshold = (i / 32) * 100;
+                    const isActive = isTestingMic && micVolumeLevel > stepThreshold;
+                    const isPeaking = i >= 28;
+                    const isHigh = i >= 22;
+                    const activeColor = isPeaking ? '#ef4444' : isHigh ? '#f59e0b' : '#10b981';
+
+                    return (
+                      <div
+                        key={i}
+                        className="h-full flex-1 rounded-sm transition-all duration-75"
+                        style={{
+                          backgroundColor: isActive ? activeColor : 'rgba(255,255,255,0.06)',
+                          boxShadow: isActive ? `0 0 6px ${activeColor}80` : 'none',
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Loopback Hear Yourself Toggle */}
+              <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                <div>
+                  <p className="text-[12px] font-medium text-bone/90">{t('settings.voice.micFeedback', {}, 'Hear yourself during mic test')}</p>
+                  <p className="text-[10px] text-ash/50">{t('settings.voice.micFeedbackDesc', {}, 'Routes your voice back to your output device so you can hear yourself.')}</p>
+                </div>
+                <Toggle
+                  checked={settings.audioMicFeedback ?? true}
+                  onChange={(checked) => {
+                    update({ audioMicFeedback: checked });
+                    if (isTestingMic) {
+                      setTimeout(() => startMicTest(), 50);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </Section>
+        )}
+
+        {activeSection === 'immersion' && (
+          <Section title={t('settings.sections.immersion', {}, 'Immersion & Focus')} description={t('settings.sections.immersionDesc', {}, 'Hardware, display, and distraction-free gaming optimizations.')}>
+            <SettingRow
+              label={t('settings.immersion.blackoutSecondary', {}, 'Auto-blackout secondary displays')}
+              hint={t('settings.immersion.blackoutSecondaryDesc', {}, 'Dims 2nd and 3rd monitors to pure black when a game starts.')}
+            >
+              <Toggle
+                checked={settings.immersionBlackoutSecondary ?? true}
+                onChange={(checked) => update({ immersionBlackoutSecondary: checked })}
+              />
+            </SettingRow>
+
+            <SettingRow
+              label={t('settings.immersion.lockCursor', {}, 'Lock mouse cursor to game window')}
+              hint={t('settings.immersion.lockCursorDesc', {}, 'Prevents the mouse from slipping off-screen during fast movements.')}
+            >
+              <Toggle
+                checked={settings.immersionLockCursor ?? true}
+                onChange={(checked) => update({ immersionLockCursor: checked })}
+              />
+            </SettingRow>
+
+            <SettingRow
+              label={t('settings.immersion.blockWinKeys', {}, 'Block Windows key & Sticky keys')}
+              hint={t('settings.immersion.blockWinKeysDesc', {}, 'Suppresses accidental Start menu popups and Shift chime alerts.')}
+            >
+              <Toggle
+                checked={settings.immersionBlockWinKeys ?? true}
+                onChange={(checked) => update({ immersionBlockWinKeys: checked })}
+              />
+            </SettingRow>
+
+            <SettingRow
+              label={t('settings.immersion.autoAudio', {}, 'Auto-switch audio device')}
+              hint={t('settings.immersion.autoAudioDesc', {}, 'Automatically routes audio to your gaming headset on launch.')}
+            >
+              <Toggle
+                checked={settings.immersionAutoAudio ?? false}
+                onChange={(checked) => update({ immersionAutoAudio: checked })}
+              />
+            </SettingRow>
+
+            <SettingRow
+              label={t('settings.immersion.highPriority', {}, 'High process priority & RAM purge')}
+              hint={t('settings.immersion.highPriorityDesc', {}, 'Allocates maximum CPU/GPU priority and clears standby memory before launch.')}
+            >
+              <Toggle
+                checked={settings.immersionHighPriority ?? true}
+                onChange={(checked) => update({ immersionHighPriority: checked })}
+              />
+            </SettingRow>
+
+            <SettingRow
+              label={t('settings.immersion.autoHDR', {}, 'Auto-toggle Windows HDR')}
+              hint={
+                hdrStatus.loading
+                  ? 'Detecting display HDR capability...'
+                  : !hdrStatus.supported
+                  ? 'HDR is not supported by your current display.'
+                  : t('settings.immersion.autoHDRDesc', {}, 'Enables HDR exclusively while the game is running.')
+              }
+            >
+              <div className="flex items-center gap-2">
+                {!hdrStatus.loading && !hdrStatus.supported && (
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded border border-white/10 text-ash/40">
+                    UNSUPPORTED
+                  </span>
+                )}
+                <Toggle
+                  disabled={!hdrStatus.supported}
+                  checked={hdrStatus.supported ? (settings.immersionAutoHDR ?? false) : false}
+                  onChange={(checked) => {
+                    if (!hdrStatus.supported) {
+                      setToast('HDR not supported by your display');
+                      return;
+                    }
+                    update({ immersionAutoHDR: checked });
+                  }}
+                />
+              </div>
+            </SettingRow>
           </Section>
         )}
 
@@ -1693,7 +2107,7 @@ async function handleCheckUpdate() {
               <HotkeyGroup label={t('hotkeys.groups.appearance', {}, 'Appearance')} accent={accent} theme={theme} rows={[
                 { keys: ['Ctrl', 'Shift', 'D'],  desc: t('hotkeys.cycleTheme', {}, 'Cycle theme (OLED → Dark → More)') },
                 { keys: ['Ctrl', 'Shift', 'E'], desc: t('hotkeys.cycleAccent', {}, 'Cycle accent color') },
-                { keys: ['Ctrl', 'Shift', 'Q'],  desc: t('hotkeys.cycleBgQuality', {}, 'Cycle background quality (HD → SD → Static)') },
+                { keys: ['Ctrl', 'Shift', 'Q'],  desc: t('hotkeys.cycleBgQuality', {}, 'Cycle background quality (HD ↔ SD)') },
               ]} />
 
             </div>
@@ -1846,6 +2260,9 @@ async function handleCheckUpdate() {
             </div>
           </div>
 
+          {/* Uninstallation Test / Preview */}
+
+
         </Section>
       )}
 
@@ -1916,13 +2333,14 @@ function SettingRow({ label, hint, children }) {
   );
 }
 
-function Toggle({ checked, onChange }) {
+function Toggle({ checked, onChange, disabled = false }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      onClick={() => onChange(!checked)}
+      disabled={disabled}
+      onClick={() => !disabled && onChange(!checked)}
       style={{
         position: 'relative',
         display: 'inline-flex',
@@ -1931,10 +2349,11 @@ function Toggle({ checked, onChange }) {
         height: '24px',
         borderRadius: '9999px',
         border: 'none',
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.35 : 1,
         flexShrink: 0,
-        backgroundColor: checked ? 'var(--accent)' : 'rgba(255,255,255,0.12)',
-        transition: 'background-color 200ms',
+        backgroundColor: checked && !disabled ? 'var(--accent)' : 'rgba(255,255,255,0.12)',
+        transition: 'background-color 200ms, opacity 200ms',
         padding: 0,
       }}
     >
@@ -2156,6 +2575,24 @@ function IconBehavior({ className }) {
         strokeLinecap="round"
       />
       <path d="M17 5.5v3h3M7 18.5v-3H4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconVoice({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconImmersion({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8 21h8M12 17v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }

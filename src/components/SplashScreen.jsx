@@ -227,16 +227,16 @@ useEffect(() => {
           className="flex flex-col items-center gap-1 -mt-3 mb-24"
         >
           <p
-            className="text-[40px] font-medium text-white"
-            style={{ letterSpacing: '-0.01em', fontFamily: 'Apple Garamond' }}
+            className="text-[34px] font-bold text-white uppercase tracking-[-0.02em]"
+            style={{ fontFamily: '"Clash Display", "Manrope", system-ui, sans-serif' }}
           >
             Zyphor Launcher
           </p>
           <p
-            className="text-[16px] uppercase tracking-[0.25em] -mt-1"
-            style={{ fontFamily: 'Apple Garamond', color: 'rgba(255,255,255,0.22)' }}
+            className="text-[11px] font-bold uppercase tracking-[0.25em] mt-1"
+            style={{ fontFamily: '"JetBrains Mono", Consolas, monospace', color: 'rgba(255,255,255,0.35)' }}
           >
-            V{CURRENT_VERSION}
+            v{CURRENT_VERSION}
           </p>
         </motion.div>
 
@@ -264,12 +264,13 @@ useEffect(() => {
           </div>
 
           <p
-            className="text-[10px] uppercase tracking-[0.22em]"
+            className="text-[11px] font-semibold uppercase tracking-[0.22em]"
             style={{
-              color:      'rgba(255,255,255,0.25)',
+              fontFamily: '"JetBrains Mono", Consolas, monospace',
+              color:      'rgba(255,255,255,0.35)',
               opacity:     msgVisible ? 1 : 0,
               transition: 'opacity 0.22s ease',
-              minWidth:   '220px',
+              minWidth:   '240px',
               textAlign:  'center',
             }}
           >

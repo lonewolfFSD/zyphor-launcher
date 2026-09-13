@@ -99,12 +99,28 @@ export default function TitleBar({ profile }) {
   const [updateChecking, setUpdateChecking] = useState(false);
   const [resolvedLocation, setResolvedLocation] = useState(profile?.location ?? null);
   const [battery, setBattery] = useState(null);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   const isVip       = Boolean(profile?.isVip);
   const vipGold     = '#FDB515';
   const accentColor = isVip ? vipGold : accent.hex;
 
   const locRef = useRef(null);
+
+  // Sync maximized state with Electron main window
+  useEffect(() => {
+    window.launcherAPI?.isWindowMaximized?.().then((max) => {
+      if (typeof max === 'boolean') setIsMaximized(max);
+    }).catch(() => {});
+
+    const cleanup = window.launcherAPI?.onMaximizedChange?.((max) => {
+      setIsMaximized(Boolean(max));
+    });
+
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, []);
 
   // Live clock
   useEffect(() => {
@@ -237,11 +253,11 @@ export default function TitleBar({ profile }) {
           className="flex items-center gap-2 rounded px-2 py-1 transition-all duration-150"
           style={{ WebkitAppRegion: 'no-drag' }}
         >
-          <span className="font-mono text-[11px] uppercase tracking-widest select-none" style={{ color: `${theme.text}77` }}>Zyphor Launcher</span>
-          <span className="rounded px-1.5 py-px font-mono text-[9px] font-bold uppercase tracking-widest" style={{ backgroundColor: `${accentColor}18`, color: accentColor, border: `1px solid ${accentColor}33` }}>
+          <span className="font-bold text-[11px] uppercase tracking-widest select-none" style={{ color: `${theme.text}77`, fontFamily: '"Clash Display", sans-serif' }}>Zyphor Launcher</span>
+          <span className="rounded  font-mono text-[8px] font-bold uppercase tracking-widest" style={{ color: accentColor }}>
             v{APP_VERSION}
           </span>
-          <FontAwesomeIcon icon={faChevronDown} className="text-[9px] transition-transform duration-200 p-1.5 rounded" style={{ color: `${theme.text}44`, backgroundColor: `${accentColor}18`, transform: menuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+          <FontAwesomeIcon icon={faChevronDown} className="text-[9px] transition-transform duration-200 p-1.5 rounded" style={{ color: `${theme.text}44`, backgroundColor: `${accentColor}8`, transform: menuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
         </button>
 
         <AnimatePresence>
@@ -258,7 +274,7 @@ export default function TitleBar({ profile }) {
               >
                 <div className="px-3 py-2.5 border-b" style={{ borderColor: theme.border }}>
                   <p className="font-mono text-[9px] uppercase tracking-widest" style={{ color: `${theme.text}44` }}>v{APP_VERSION}</p>
-                  <p className="text-xs font-semibold mt-0.5" style={{ color: theme.text }}>Zyphor Launcher</p>
+                  <p className="text-xs font-bold mt-0.5 uppercase" style={{ color: theme.text, fontFamily: '"Clash Display", sans-serif' }}>Zyphor Launcher</p>
                 </div>
                 <div className="py-1">
                   {menuItems.map((item, i) =>
@@ -274,13 +290,13 @@ export default function TitleBar({ profile }) {
                         onClick={() => { item.action(); setMenuOpen(false); }}
                       >
                         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${accentColor}18` }}>
-                          <FontAwesomeIcon icon={item.icon} className={`text-[11px] ${item.label.includes('Checking') ? 'animate-spin' : ''}`} style={{ color: accentColor }} />
+                          <FontAwesomeIcon icon={item.icon} className={`text-[13px] ${item.label.includes('Checking') ? 'animate-spin' : ''}`} style={{ color: accentColor }} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold leading-tight" style={{ color: theme.text }}>{item.label}</p>
+                          <p className="text-xs font-medium leading-tight" style={{ color: theme.text, fontFamily: '"Clash Display", sans-serif' }}>{item.label}</p>
                           <p className="text-[10px] leading-tight mt-0.5" style={{ color: `${theme.text}55` }}>{item.sub}</p>
                         </div>
-                        <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="ml-auto text-[9px] opacity-20 shrink-0" style={{ color: theme.text }} />
+                        <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="ml-auto text-[10px] opacity-20 shrink-0 hidden" style={{ color: theme.text }} />
                       </button>
                     )
                   )}
@@ -350,8 +366,22 @@ export default function TitleBar({ profile }) {
         <TitleBarButton label={t('titleBar.minimize', {}, 'Minimize')} onClick={() => window.launcherAPI?.minimizeWindow?.()} accentColor={accentColor} theme={theme}>
           <svg viewBox="0 0 10 10" className="h-2.5 w-2.5"><rect x="0" y="4.5" width="10" height="1" fill="currentColor" /></svg>
         </TitleBarButton>
-        <TitleBarButton label={t('titleBar.maximize', {}, 'Maximize')} onClick={() => window.launcherAPI?.maximizeWindow?.()} accentColor={accentColor} theme={theme}>
-          <svg viewBox="0 0 10 10" className="h-2.5 w-2.5"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" /></svg>
+        <TitleBarButton
+          label={isMaximized ? t('titleBar.restore', {}, 'Restore') : t('titleBar.maximize', {}, 'Maximize')}
+          onClick={() => window.launcherAPI?.maximizeWindow?.()}
+          accentColor={accentColor}
+          theme={theme}
+        >
+          {isMaximized ? (
+            <svg viewBox="0 0 10 10" className="h-2.5 w-2.5">
+              <path d="M3 0.5 H9.5 V7 H7.5" fill="none" stroke="currentColor" strokeWidth="1" />
+              <rect x="0.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" strokeWidth="1" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 10 10" className="h-2.5 w-2.5">
+              <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" />
+            </svg>
+          )}
         </TitleBarButton>
         <TitleBarButton label={t('titleBar.close', {}, 'Close')} onClick={() => window.launcherAPI?.closeWindow?.()} accentColor={accentColor} theme={theme} danger>
           <svg viewBox="0 0 10 10" className="h-2.5 w-2.5">

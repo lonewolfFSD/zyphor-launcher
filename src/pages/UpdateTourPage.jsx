@@ -12,27 +12,12 @@ import DEFAULT_BG_VIDEO from '../pages/videos/test_video.mp4';
 import Sad from './images/faye/sad.png';
 import Excited from './images/faye/excited.png';
 import Happy from './images/faye/happy.png';
-import Neutral from './images/faye/neutral.png';
+import Neutral from './images/faye/excited.png';
 import Proud from './images/faye/proud.png';
 import Sleepy from './images/faye/sleepy.png';
 import Waving from './images/faye/waving.png';
 import Wink from './images/faye/wink.png';
 import Curious from './images/faye/curious.png';
-
-import Dragging from './videos/1.2.2/dragging.mp4';
-import Liquid from './videos/1.2.2/liquid.mp4';
-import Hotkeys from './videos/1.2.2/hotkeys.mp4';
-
-import first from './videos/1.2.2/audio/first.mp3';
-import second from './videos/1.2.2/audio/second.mp3';
-import third from './videos/1.2.2/audio/third.mp3';
-import fourth from './videos/1.2.2/audio/forth.mp3';
-import fifth from './videos/1.2.2/audio/fifth.mp3';
-import sixth from './videos/1.2.2/audio/sixth.mp3';
-import seventh from './videos/1.2.2/audio/seventh.mp3';
-import eight from './videos/1.2.2/audio/eigth.mp3';
-
-import Faye from './videos/1.2.2/faye.png';
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -41,102 +26,102 @@ import Faye from './videos/1.2.2/faye.png';
 //  current app version if the user has never seen it.
 // ═══════════════════════════════════════════════════════════════════════════════
 const UPDATES = {
-'1.2.6': {
-  version: '1.2.6',
-  title: 'Faye & UI Update',
-  steps: [
-    {
-      id: 'welcome',
-      expression: 'happy',
-      text: "Heyyy, player~! How's everything going? Ready to see what's new in Zyphor?",
-      subtext: "There's quite a bit this time... ehehe~",
-      action: 'continue',
-      btn: "Show me!",
-      voice: first,
-    },
+// '1.2.6': {
+//   version: '1.2.6',
+//   title: 'Faye & UI Update',
+//   steps: [
+//     {
+//       id: 'welcome',
+//       expression: 'happy',
+//       text: "Heyyy, player~! How's everything going? Ready to see what's new in Zyphor?",
+//       subtext: "There's quite a bit this time... ehehe~",
+//       action: 'continue',
+//       btn: "Show me!",
+//       voice: first,
+//     },
 
-    {
-      id: 'faye',
-      expression: 'excited',
-      text: "Oh, and I have some news too! I'm officially joining you for future updates now~!",
-      subtext: "Looks like you'll be seeing this face again. ✨",
-      image: Faye,
-      action: 'continue',
-      btn: "Yaaay~!",
-      voice: second,
-    },
+//     {
+//       id: 'faye',
+//       expression: 'excited',
+//       text: "Oh, and I have some news too! I'm officially joining you for future updates now~!",
+//       subtext: "Looks like you'll be seeing this face again. ✨",
+//       image: Faye,
+//       action: 'continue',
+//       btn: "Yaaay~!",
+//       voice: second,
+//     },
 
-    {
-      id: 'drag-nav',
-      expression: 'curious',
-      text: "Moving around the launcher just got a little more fun! You can drag the active indicator straight onto another page.",
-      subtext: "It's oddly satisfying... try it.",
-      video: Dragging,
-      action: 'continue',
-      btn: "Ooh, nice!",
-      voice: third,
-    },
+//     {
+//       id: 'drag-nav',
+//       expression: 'curious',
+//       text: "Moving around the launcher just got a little more fun! You can drag the active indicator straight onto another page.",
+//       subtext: "It's oddly satisfying... try it.",
+//       video: Dragging,
+//       action: 'continue',
+//       btn: "Ooh, nice!",
+//       voice: third,
+//     },
 
-    {
-      id: 'splash',
-      expression: 'proud',
-      text: "The splash screen has been refreshed too! Everything should feel a little cleaner when you start up.",
-      subtext: "First impressions are important, y'know~",
-      action: 'continue',
-      btn: "Pretty!",
-      voice: fourth,
-    },
+//     {
+//       id: 'splash',
+//       expression: 'proud',
+//       text: "The splash screen has been refreshed too! Everything should feel a little cleaner when you start up.",
+//       subtext: "First impressions are important, y'know~",
+//       action: 'continue',
+//       btn: "Pretty!",
+//       voice: fourth,
+//     },
 
-    {
-      id: 'glass',
-      expression: 'excited',
-      text: "And then... Liquid Glass! A whole new interface style with a much more dynamic look.",
-      subtext: "It is a bit heavier on the GPU, though. Don't say I didn't warn you~",
-      action: 'continue',
-      video: Liquid,
-      btn: "I wanna see it!",
-      voice: fifth,
-    },
+//     {
+//       id: 'glass',
+//       expression: 'excited',
+//       text: "And then... Liquid Glass! A whole new interface style with a much more dynamic look.",
+//       subtext: "It is a bit heavier on the GPU, though. Don't say I didn't warn you~",
+//       action: 'continue',
+//       video: Liquid,
+//       btn: "I wanna see it!",
+//       voice: fifth,
+//     },
 
-    {
-      id: 'hotkeys',
-      expression: 'wink',
-      text: "Hotkeys finally got some love too! You can now manage and check your shortcuts from Settings.",
-      subtext: "Less clicking, more keyboard smashing. Hehe~",
-      action: 'continue',
-      btn: "Nice!",
-      video: Hotkeys,
-      voice: sixth,
-    },
+//     {
+//       id: 'hotkeys',
+//       expression: 'wink',
+//       text: "Hotkeys finally got some love too! You can now manage and check your shortcuts from Settings.",
+//       subtext: "Less clicking, more keyboard smashing. Hehe~",
+//       action: 'continue',
+//       btn: "Nice!",
+//       video: Hotkeys,
+//       voice: sixth,
+//     },
 
-    {
-      id: 'fixes',
-      expression: 'happy',
-      text: "And there's a bunch of smaller fixes underneath it all, so the launcher should feel smoother overall.",
-      subtext: "Some very annoying bugs have officially lost their jobs. 🪲",
-      action: 'continue',
-      btn: "Good riddance!",
-      voice: seventh,
-    },
+//     {
+//       id: 'fixes',
+//       expression: 'happy',
+//       text: "And there's a bunch of smaller fixes underneath it all, so the launcher should feel smoother overall.",
+//       subtext: "Some very annoying bugs have officially lost their jobs. 🪲",
+//       action: 'continue',
+//       btn: "Good riddance!",
+//       voice: seventh,
+//     },
 
-    {
-      id: 'goodbye',
-      expression: 'waving',
-      text: "That's the tour for v1.2.6! Thanks for stopping by, player~!",
-      subtext: "Now go play with all the new stuff. ✨",
-      action: 'finish',
-      btn: "Let's Go! 🚀",
-      voice: eight,
-    },
-  ],
-},
+//     {
+//       id: 'goodbye',
+//       expression: 'waving',
+//       text: "That's the tour for v1.2.6! Thanks for stopping by, player~!",
+//       subtext: "Now go play with all the new stuff. ✨",
+//       action: 'finish',
+//       btn: "Let's Go! 🚀",
+//       voice: eight,
+//     },
+//   ],
+// },
 
   
 };
 
 // Current app version – change this (or import from package.json / electron)
 // const CURRENT_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.0.0';
-const CURRENT_VERSION = '1.2.6';
+const CURRENT_VERSION = '1.3.96';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 const EXPRESSIONS = {

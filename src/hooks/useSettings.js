@@ -48,7 +48,7 @@ const DEFAULTS = {
   autoUpdate: true,
   updateChannel: 'stable',
 
-  fayeModel: 'fast',   // default
+  fayeModel: null,   // null until detected or selected
   fullscreenOnLaunch: true,
 
   gamePath: '',
@@ -57,6 +57,21 @@ const DEFAULTS = {
   devMode: false,
   checkUpdates: true,
   hardwareId: false,
+
+  // Immersion & Focus
+  immersionBlackoutSecondary: true,
+  immersionLockCursor: true,
+  immersionBlockWinKeys: true,
+  immersionAutoAudio: false,
+  immersionHighPriority: true,
+  immersionAutoHDR: false,
+
+  // Voice & Audio
+  audioInputDevice: 'default',
+  audioOutputDevice: 'default',
+  audioInputVolume: 100,
+  audioOutputVolume: 100,
+  audioMicFeedback: true,
 
   // Privacy
   userAnalytics: false,
@@ -67,9 +82,13 @@ const DEFAULTS = {
   // Only the type + a persistable path are stored; blob: URLs from a
   // browser-fallback <input type=file> don't survive a reload so they're
   // deliberately not part of DEFAULTS/persisted settings.
-  backgroundVideoType: 'default', // 'default' | 'none' | 'custom'
+  backgroundVideoType: 'default', // 'default' | 'none' | 'custom' | 'workshop'
   backgroundVideoPath: null,
   backgroundVideoName: null,
+  backgroundWorkshopId: null,
+  backgroundVideoMuted: true,
+  backgroundQuality: 'hd', // 'hd' | 'sd' | 'static'
+  backgroundPreviewUrl: null,
 };
 
 function loadFromDisk() {

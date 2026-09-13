@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 // reference must be relative — an absolute base ('/') resolves to the
 // filesystem root and breaks the packaged app.
 export default defineConfig({
-  base: './',
+  base: process.env.NODE_ENV === 'production' ? './' : '/',
   plugins: [react()],
   server: {
     port: 5173,

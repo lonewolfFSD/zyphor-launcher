@@ -175,10 +175,10 @@ export default function NewsPage() {
           {/* ── Header row ── */}
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-4xl font-medium tracking-tight text-bone" style={{ fontFamily: 'Apple Garamond' }}>
+              <h2 className="text-3xl uppercase font-bold tracking-tight text-bone">
                 {t('news.title', {}, 'Updates & Patch Notes')}
               </h2>
-              <p className="mt-1 text-base text-ash/70" style={{ fontFamily: 'Apple Garamond' }}>
+              <p className="mt-1 text-sm text-ash/70 font-body">
                 {t('news.subtitle', {}, 'Latest announcements, patch notes, and community highlights')}
               </p>
             </div>
@@ -195,10 +195,10 @@ export default function NewsPage() {
 
           {/* ── Warning banner ── */}
           <div
-            className="flex items-start gap-2.5 rounded-2xl border px-4 py-3 text-[15px] leading-relaxed text-ash/80 backdrop-blur-sm"
-            style={{ borderColor: `${accent.hex}40`, backgroundColor: `${theme.surface}66`, fontFamily: 'Apple Garamond' }}
+            className="flex items-start gap-2.5 rounded-2xl border px-4 py-3 text-[13px] leading-relaxed text-ash/80 backdrop-blur-sm font-body"
+            style={{ borderColor: `${accent.hex}40`, backgroundColor: `${theme.surface}66` }}
           >
-            <AlertTriangle size={15} className="mt-1 shrink-0" style={{ color: accent.hex }} />
+            <AlertTriangle size={14} className="mt-1 shrink-0" style={{ color: accent.hex }} />
             <span>{t('news.cautionBanner', {}, 'Patch notes are compiled after each release and may not reflect hotfixes pushed without a full client update.')}</span>
           </div>
 
@@ -377,26 +377,26 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
         }}
       >
         {entry.image && (
-          <div className="h-48 w-full overflow-hidden bg-white/5">
+          <div className="h-44 w-full overflow-hidden bg-white/5">
             <img src={entry.image} alt="" className="h-full w-full object-cover" />
           </div>
         )}
 
-        <div className="flex flex-1 flex-col px-7 py-8 bg-black/10">
+        <div className="flex flex-1 flex-col px-6 py-6 bg-black/10">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-xl font-medium tracking-tight text-bone" style={{ fontFamily: 'Apple Garamond' }}>
+            <h3 className="text-[17px] font-semibold tracking-tight text-bone">
               v{entry.title}
             </h3>
-            <time className="text-[12px] font-medium text-ash/60" style={{ fontFamily: 'Apple Garamond' }}>
+            <time className="text-[11px] font-mono opacity-40">
               {entry.date}
             </time>
           </div>
 
           {entry.tags?.length > 0 && (
-            <div className="mt-2 flex flex-row gap-2">
+            <div className="mt-2 flex flex-row gap-1.5 font-mono">
               {isLatest && (
                 <span
-                  className="rounded-lg border border-transparent px-3 py-[5px] text-[9px] font-bold uppercase tracking-wide"
+                  className="rounded-md border border-transparent px-2.5 py-[3px] text-[8.5px] font-bold uppercase tracking-wide"
                   style={{ backgroundColor: accent.hex, color: accent.on }}
                 >
                   {t('news.latest', {}, 'Latest')}
@@ -405,7 +405,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
               {entry.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-lg border px-3 py-[5px] text-[9px] font-medium uppercase tracking-wide"
+                  className="rounded-md border px-2.5 py-[3px] text-[8.5px] font-medium uppercase tracking-wide"
                   style={{ borderColor: `${accent.hex}4d`, color: accent.hex }}
                 >
                   {tag}
@@ -414,53 +414,53 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
             </div>
           )}
 
-          <div className="mb-8 overflow-hidden rounded-2xl mt-4 border" style={{ borderColor: theme.border }}>
+          <div className="mb-5 overflow-hidden rounded-xl mt-3 border" style={{ borderColor: theme.border }}>
             <div
-              className="flex items-center justify-between border-b px-5 py-3"
+              className="flex items-center justify-between border-b px-4 py-2"
               style={{ borderColor: theme.border, background: `${theme.surface}99` }}
             >
-              <h3 className="text-[15px] font-medium text-bone" style={{ fontFamily: 'Apple Garamond' }}>
+              <h3 className="text-[12.5px] font-semibold text-bone">
                 {t('news.releaseInfo', {}, 'Release Info')}
               </h3>
               <span
-                className="rounded-lg px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide"
+                className="rounded-md px-2 py-0.5 text-[8px] font-mono font-semibold uppercase tracking-wide"
                 style={{ background: stabilityBg, color: stabilityColor }}
               >
                 {stabilityLabel}
               </span>
             </div>
 
-            <div className="space-y-4 px-5 py-4">
-              <div className="flex flex-col gap-y-2 text-xs">
-                <span className="text-ash/50">{t('news.recommendation', {}, 'Recommendation')}</span>
-                <span className="text-bone/80 font-medium text-[15px] mb-1 -mt-1" style={{ fontFamily: 'Apple Garamond', lineHeight: '1.3' }}>
+            <div className="space-y-3 px-4 py-3 font-body">
+              <div className="flex flex-col gap-y-1 text-[11px]">
+                <span className="text-ash/50 text-[10px] uppercase font-mono tracking-wider">{t('news.recommendation', {}, 'Recommendation')}</span>
+                <span className="text-bone/80 font-medium text-[12px] leading-snug">
                   {recommendation}
                 </span>
-                <span className="text-ash/50">{t('news.download', {}, 'Download')}</span>
-                <span className="text-bone/80">{t('news.downloadHint', {}, 'Available from the official GitHub Releases page.')}</span>
+                <span className="text-ash/50 text-[10px] uppercase font-mono tracking-wider mt-1">{t('news.download', {}, 'Download')}</span>
+                <span className="text-bone/80 text-[11px]">{t('news.downloadHint', {}, 'Available from the official GitHub Releases page.')}</span>
               </div>
               <a
                 href={entry.url}
                 target="_blank"
                 rel="noreferrer"
-                className={`inline-flex items-center gap-2 rounded-xl border px-5 py-2 text-[13px] font-medium transition-all hover:scale-[1.02] ${
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium transition-all hover:scale-[1.02] ${
                   (isLatest || entry.title.toLowerCase().includes('alpha') || entry.title.toLowerCase().includes('beta'))
                     ? 'opacity-0 pointer-events-none'
                     : 'block'
                 }`}
-                style={{ borderColor: `${accent.hex}55`, color: accent.hex, fontFamily: 'Apple Garamond', backgroundColor: `${accent.hex}10` }}
+                style={{ borderColor: `${accent.hex}55`, color: accent.hex, backgroundColor: `${accent.hex}10` }}
               >
-                <ExternalLink size={12} /> {t('news.downloadThisVersion', {}, 'Download this Version')}
+                <ExternalLink size={11} /> {t('news.downloadThisVersion', {}, 'Download this Version')}
               </a>
             </div>
           </div>
 
-          <div className="-mt-4">
+          <div className="-mt-1">
             <button
               type="button"
               onClick={onOpen}
-              className="w-full rounded-xl border py-2.5 text-[14px] font-medium tracking-wide transition-colors hover:text-bone"
-              style={{ borderColor: `${accent.hex}55`, color: accent.hex, backgroundColor: `${accent.hex}10`, fontFamily: 'Apple Garamond' }}
+              className="w-full rounded-xl border py-2 text-[12px] font-semibold tracking-wide transition-colors hover:text-bone"
+              style={{ borderColor: `${accent.hex}55`, color: accent.hex, backgroundColor: `${accent.hex}10` }}
             >
               {t('news.viewFullNotes', {}, 'View Full Notes')}
             </button>

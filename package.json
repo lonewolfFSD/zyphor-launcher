@@ -1,7 +1,7 @@
 {
-  "name": "stay-launcher",
+  "name": "zyphor-launcher",
   "productName": "Zyphor Launcher",
-  "version": "1.3.6",
+  "version": "1.35.996",
   "description": "Official desktop launcher for all Zyphor Studios titles.",
   "author": "Zyphor Studios",
   "license": "UNLICENSED",
@@ -15,7 +15,8 @@
     "start": "npm run build && electron .",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
-    "release": "dotenv -e .env -- electron-builder --publish always"
+    "release": "dotenv -e .env -- electron-builder --publish always",
+    "dist:installer": "cd installer && npm run dist"
   },
   "dependencies": {
     "@fortawesome/free-brands-svg-icons": "^7.3.1",
@@ -23,6 +24,7 @@
     "@fortawesome/react-fontawesome": "^3.5.0",
     "@gsap/react": "^2.1.2",
     "@tailwindcss/typography": "^0.5.20",
+    "@tensorflow/tfjs": "^4.22.0",
     "@xenova/transformers": "^2.17.2",
     "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.3.0",
@@ -31,6 +33,7 @@
     "framer-motion": "^12.43.0",
     "gsap": "^3.15.0",
     "lucide-react": "^1.28.0",
+    "nsfwjs": "^4.3.0",
     "ogl": "^1.0.11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -56,12 +59,16 @@
     "vite": "^5.4.11",
     "wait-on": "^8.0.1"
   },
-  "nsis": {
-    "include": "build/installer.nsh"
-  },
   "build": {
     "appId": "com.zyphorstudios.zyphorlauncher",
     "productName": "Zyphor Launcher",
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "include": "build/installer.nsh"
+    },
     "directories": {
       "output": "release",
       "buildResources": "build-resources"
