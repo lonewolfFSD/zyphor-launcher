@@ -178,7 +178,6 @@ writeGameSettings: (settings) => ipcRenderer.invoke('settings:writeToGame', sett
 
   getDiskItems:        () => ipcRenderer.invoke('storage:getDiskItems'),
   getDiskSpace:        () => ipcRenderer.invoke('storage:getDiskSpace'),
-  pickInstallLocation: () => ipcRenderer.invoke('dialog:pickInstallLocation'),
   pickVideoFile:       () => ipcRenderer.invoke('dialog:pickVideoFile'),
   openLogsFolder:      () => ipcRenderer.invoke('shell:openLogsFolder'),
 
@@ -200,14 +199,5 @@ writeGameSettings: (settings) => ipcRenderer.invoke('settings:writeToGame', sett
     execute:  (options) => ipcRenderer.invoke('uninstall:execute', options),
     cancel:   ()        => ipcRenderer.send('uninstall:cancel'),
     quit:     ()        => ipcRenderer.send('uninstall:quit'),
-  },
-
-  install: {
-    isMode:         ()        => ipcRenderer.invoke('install:isMode'),
-    getDefaultPath: ()        => ipcRenderer.invoke('install:getDefaultPath'),
-    getDiskSpace:   (dirPath) => ipcRenderer.invoke('install:getDiskSpace', dirPath),
-    execute:        (options) => ipcRenderer.invoke('install:execute', options),
-    cancel:         ()        => ipcRenderer.send('install:cancel'),
-    launch:         (options) => ipcRenderer.send('install:launch', options),
   },
 });

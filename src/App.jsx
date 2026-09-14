@@ -19,7 +19,6 @@ import { useHotkeys } from './hooks/useHotkeys.js';
 
 import UpdateTourPage, { useUpdateTourCheck } from './pages/UpdateTourPage.jsx';
 import UninstallPage from './pages/UninstallPage.jsx';
-import InstallPage from './pages/InstallPage.jsx';
 
 import DEFAULT_BACKGROUND_VIDEO from './pages/videos/test_video.mp4';
 import SplashScreen from './components/SplashScreen.jsx';
@@ -179,28 +178,16 @@ export default function App() {
     return window.location.search.includes('uninstall') || window.location.hash.includes('uninstall');
   });
 
-  const [isInstallMode, setIsInstallMode] = useState(() => {
-    return window.location.search.includes('install') || window.location.hash.includes('install');
-  });
-
   useEffect(() => {
     window.launcherAPI?.uninstall?.isMode?.().then((res) => {
       if (res) setIsUninstallMode(true);
     }).catch(() => {});
 
-    window.launcherAPI?.install?.isMode?.().then((res) => {
-      if (res) setIsInstallMode(true);
-    }).catch(() => {});
-
     const handlePreviewUninstall = () => setIsUninstallMode(true);
-    const handlePreviewInstall = () => setIsInstallMode(true);
-
     window.addEventListener('launcher:preview-uninstall', handlePreviewUninstall);
-    window.addEventListener('launcher:preview-install', handlePreviewInstall);
 
     return () => {
       window.removeEventListener('launcher:preview-uninstall', handlePreviewUninstall);
-      window.removeEventListener('launcher:preview-install', handlePreviewInstall);
     };
   }, []);
 
@@ -441,27 +428,6 @@ useEffect(() => {
   }, [settings]);
 
   const ActivePageComponent = PAGES[activePage];
-
-  if (isInstallMode) {
-    return (
-      <I18nProvider language={settings?.language || 'en'} onLanguageChange={(lang) => updateSettings?.({ language: lang })}>
-        <InstallPage
-          onCancel={() => {
-            setIsInstallMode(false);
-            if (window.history?.replaceState) {
-              window.history.replaceState({}, document.title, window.location.pathname);
-            }
-          }}
-          onComplete={({ launchAfterInstall }) => {
-            setIsInstallMode(false);
-            if (window.history?.replaceState) {
-              window.history.replaceState({}, document.title, window.location.pathname);
-            }
-          }}
-        />
-      </I18nProvider>
-    );
-  }
 
   if (isUninstallMode) {
     return (

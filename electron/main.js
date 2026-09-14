@@ -6,9 +6,8 @@ const { Readable } = require('stream');
 
 // ── Single Instance Lock ──────────────────────────────────────────────────────
 const isUninstallMode = process.argv.includes('--mode=uninstall') || process.argv.includes('--uninstall');
-const isInstallMode = process.argv.includes('--mode=install') || process.argv.includes('--install');
 
-const gotTheLock = (isUninstallMode || isInstallMode) ? true : app.requestSingleInstanceLock();
+const gotTheLock = isUninstallMode ? true : app.requestSingleInstanceLock();
 if (!gotTheLock) {
   console.log('[main] Another instance is already running. Quitting duplicate instance.');
   app.quit();
@@ -46,9 +45,9 @@ const ffmpegPath = require('ffmpeg-static');
 
 const { autoUpdater } = require('electron-updater');
 
-// Don't auto-download — let the user decide
+// Don't auto-download or auto-install on quit — let the user click launch/install
 autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoInstallOnAppQuit = false;
 
 autoUpdater.on('update-available', (info) => {
   mainWindow?.webContents.send('updater:update-available', info);
@@ -671,16 +670,6 @@ ipcMain.handle('dialog:pickImageFile', async () => {
   return filePaths[0];
 });
 
-ipcMain.handle('dialog:pickInstallLocation', async () => {
-  const focusedWin = BrowserWindow.getFocusedWindow() || mainWindow;
-  const { canceled, filePaths } = await dialog.showOpenDialog(focusedWin, {
-    title: 'Select Install Folder',
-    properties: ['openDirectory', 'createDirectory'],
-  });
-  if (canceled || !filePaths || filePaths.length === 0) return null;
-  return filePaths[0];
-});
-
 // Expose verifySteamOwnership to renderer
 ipcMain.handle('verify-steam-ownership', async (_, uid) => {
   try {
@@ -1041,7 +1030,16 @@ ipcMain.handle('updater:download', () => {
 });
 
 ipcMain.handle('updater:install', () => {
-  autoUpdater.quitAndInstall();
+  isQuitting = true;
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    try { overlayWin.destroy(); } catch {}
+    overlayWin = null;
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.destroy(); } catch {}
+    mainWindow = null;
+  }
+  autoUpdater.quitAndInstall(false, true);
 });
 
 const { registerSettingsHandlers, readSettings, writeSettings } = require('./ipc/settingsHandlers');
@@ -1268,7 +1266,7 @@ function stopOllama() {
 }
 
 function createWindow() {
-  const isCompactMode = isUninstallMode || isInstallMode;
+  const isCompactMode = isUninstallMode;
 
   mainWindow = new BrowserWindow({
     width: isCompactMode ? 900 : 1180,
@@ -1358,15 +1356,11 @@ function createWindow() {
   });
 
   if (isDev) {
-    let url = 'http://localhost:5173';
-    if (isInstallMode) url = 'http://localhost:5173?mode=install';
-    else if (isUninstallMode) url = 'http://localhost:5173?mode=uninstall';
+    const url = isUninstallMode ? 'http://localhost:5173?mode=uninstall' : 'http://localhost:5173';
     mainWindow.loadURL(url);
     // mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    if (isInstallMode) {
-      mainWindow.loadFile(distIndex, { query: { mode: 'install' } });
-    } else if (isUninstallMode) {
+    if (isUninstallMode) {
       mainWindow.loadFile(distIndex, { query: { mode: 'uninstall' } });
     } else {
       mainWindow.loadFile(distIndex);
@@ -2127,103 +2121,6 @@ ipcMain.on('uninstall:quit', () => {
   console.log('[uninstall] Uninstallation completed by user.');
   isQuitting = true;
   app.exit(0);
-});
-
-// ── Install IPC Handlers ────────────────────────────────────────────────────
-ipcMain.handle('install:isMode', () => isInstallMode);
-
-ipcMain.handle('install:getDefaultPath', () => {
-  const localAppData = process.env.LOCALAPPDATA || (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'AppData', 'Local') : 'C:\\');
-  return path.join(localAppData, 'Programs', 'Zyphor Launcher');
-});
-
-ipcMain.handle('install:getDiskSpace', async (_event, targetPath) => {
-  try {
-    const p = targetPath || app.getPath('userData');
-    const stats = await fs.promises.statfs(p);
-    const blockSize = stats.bsize;
-    return {
-      totalMB: (stats.blocks * blockSize) / (1024 * 1024),
-      freeMB:  (stats.bavail * blockSize) / (1024 * 1024),
-    };
-  } catch {
-    return { totalMB: null, freeMB: null };
-  }
-});
-
-ipcMain.handle('install:execute', async (_event, options = {}) => {
-  console.log('[install] Executing installation with options:', options);
-  const { installPath, desktopShortcut = true, startMenuShortcut = true, launchOnStartup = false } = options;
-
-  try {
-    // 1. Ensure install directory exists
-    if (installPath && !fs.existsSync(installPath)) {
-      fs.mkdirSync(installPath, { recursive: true });
-    }
-
-    // 2. Configure launchOnStartup setting if requested
-    if (launchOnStartup) {
-      app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
-    }
-
-    // 3. Create Windows shortcuts if requested
-    if (process.platform === 'win32') {
-      const exePath = app.getPath('exe');
-      if (desktopShortcut) {
-        const desktopPath = app.getPath('desktop');
-        const shortcutPath = path.join(desktopPath, 'Zyphor Launcher.lnk');
-        shell.writeShortcutLink(shortcutPath, {
-          target: exePath,
-          description: 'Zyphor Launcher',
-          icon: exePath,
-          iconIndex: 0,
-        });
-      }
-      if (startMenuShortcut) {
-        const appData = app.getPath('appData');
-        const startMenuPrograms = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs');
-        const shortcutPath = path.join(startMenuPrograms, 'Zyphor Launcher.lnk');
-        shell.writeShortcutLink(shortcutPath, {
-          target: exePath,
-          description: 'Zyphor Launcher',
-          icon: exePath,
-          iconIndex: 0,
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('[install] Non-critical error during install steps:', err);
-  }
-
-  return { success: true };
-});
-
-ipcMain.on('install:cancel', () => {
-  console.log('[install] User cancelled installation.');
-  isQuitting = true;
-  app.exit(1);
-});
-
-ipcMain.on('install:launch', (_event, options = {}) => {
-  console.log('[install] Installation complete. Launching app with options:', options);
-  const { launchAfterInstall = true } = options;
-
-  if (launchAfterInstall) {
-    if (isInstallMode) {
-      // Relaunch without install flag
-      app.relaunch({ args: process.argv.slice(1).filter((a) => !a.includes('install')) });
-      isQuitting = true;
-      app.exit(0);
-    } else {
-      // Preview mode - just close window or stay
-      if (mainWindow) {
-        mainWindow.loadURL('http://localhost:5173');
-      }
-    }
-  } else {
-    isQuitting = true;
-    app.exit(0);
-  }
 });
 
 app.on('before-quit', () => {

@@ -1,3 +1,45 @@
+# Zyphor Launcher — Release Notes (1.35.997 / HUD v1.9)
+**Release Date:** September 2026  
+**Title:** Telemetry Overhaul, Static Wallpaper Engine & HUD Polish  
+
+---
+
+## 🌟 Overview
+This update resolves hardware telemetry performance bottlenecks, introduces a resource-efficient **Static Wallpaper mode** with full Steam Workshop preview integration, and brings major UX & typography enhancements to the **Zyphor In-Game HUD & Faye AI Cockpit**.
+
+---
+
+## ✨ Major Features & Enhancements
+
+### 1. ⚡ Non-Blocking Telemetry & 144Hz+ Framerate Fix
+* **Zero-Lag Background Polling**: Eliminated all synchronous command-line processes (`execSync`) in the main process. Hardware stats are now polled asynchronously without stalling the Electron event loop or IPC channels.
+* **Instantaneous CPU Delta Calculation**: Replaced blocking timer loops with instant differential tick measurements via Node's `os.cpus()` (0ms latency), dropping background telemetry CPU overhead to near 0%.
+* **Compositor Smoothness**: Removed conflicting Chromium command-line flags to ensure buttery smooth 144Hz+ rendering across transparent overlay windows and launcher views.
+
+---
+
+### 2. 🖼️ "Static" Wallpaper Mode & Workshop Preview Support
+* **Static Quality Option**: Added **Static** mode alongside **HD** and **SD** under *Settings → Appearance → Background Quality*.
+* **Steam Workshop Preview Integration**: When Static mode is active, the launcher loads the wallpaper's dedicated preview image (`previewUrl` / `previewImagePath`) from Steamworks / Steam Workshop.
+* **Minimal Resource Usage**: Eliminates video decoding and GPU playback loops when Static mode is selected, while maintaining continuous video loops in HD/SD modes.
+* **Hotkey Cycle**: `Ctrl+Shift+Q` updated to seamlessly cycle through `HD → SD → Static`.
+
+---
+
+### 3. 🎮 Cockpit HUD & Overlay Refinements
+* **Clean Default State**: All overlay windows and panels now initialize **closed/off by default** (`[]`) when the overlay opens, keeping the in-game view clear and uncluttered.
+* **Typography Polish**: Upgraded overlay navigation tab headers to the bold uppercase `Clash Display` (`font-heading`) typeface to match Zyphor's cockpit branding.
+* **Dynamic Active Session Title**: The HUD header dynamically detects and displays the active game title and session state.
+* **Achievement Priority Sorting**: Unlocked Steam achievements are automatically sorted to the top of the achievement list.
+
+---
+
+### 4. 🧠 Faye AI Companion Improvements
+* **2-Tier Dependency Verification**: Faye AI validates both the local Ollama service installation and downloaded models before activation, providing one-click setup shortcuts if components are missing.
+* **Accurate Companion Status Card**: Real-time companion cards reflect exact model status and connection readiness.
+
+---
+
 # Zyphor Launcher — Release Notes (v1.3.96)
 **Release Date:** September 2026  
 **Title:** The Steam Workshop & Community UGC Update  

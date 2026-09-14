@@ -9,13 +9,6 @@
 
 !macro customInstall
   CreateDirectory "$APPDATA\ZyphorLauncher\screenshots\stay"
-  ${ifNot} ${isUpdated}
-    ExecWait '"$INSTDIR\Zyphor Launcher.exe" --mode=install' $0
-    ${if} $0 != 0
-      RMDir /r "$INSTDIR"
-      Quit
-    ${endif}
-  ${endif}
 !macroend
 
 !macro customUnInit

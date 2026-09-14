@@ -1,7 +1,7 @@
 {
   "name": "zyphor-launcher",
   "productName": "Zyphor Launcher",
-  "version": "1.35.996",
+  "version": "1.35.998",
   "description": "Official desktop launcher for all Zyphor Studios titles.",
   "author": "Zyphor Studios",
   "license": "UNLICENSED",
@@ -67,6 +67,7 @@
       "perMachine": false,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
+      "runAfterFinish": false,
       "include": "build/installer.nsh"
     },
     "directories": {
