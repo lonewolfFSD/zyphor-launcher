@@ -41,27 +41,31 @@ export default function UninstallPage({ onCancel }) {
   }, []);
 
   const handleCancel = () => {
-    if (onCancel) {
-      onCancel();
+    if (step === 'complete') {
+      handleQuit();
       return;
     }
     if (window.launcherAPI?.uninstall?.cancel) {
       window.launcherAPI.uninstall.cancel();
-    } else {
-      window.close();
+      return;
     }
-  };
-
-  const handleQuit = () => {
     if (onCancel) {
       onCancel();
       return;
     }
+    window.close();
+  };
+
+  const handleQuit = () => {
     if (window.launcherAPI?.uninstall?.quit) {
       window.launcherAPI.uninstall.quit();
-    } else {
-      window.close();
+      return;
     }
+    if (onCancel) {
+      onCancel();
+      return;
+    }
+    window.close();
   };
 
   const handleStartUninstall = async () => {
@@ -152,7 +156,7 @@ export default function UninstallPage({ onCancel }) {
         {step !== 'progress' && (
           <div style={{ display: 'flex', gap: 4, WebkitAppRegion: 'no-drag' }}>
             <button
-              onClick={handleCancel}
+              onClick={() => window.launcherAPI?.minimizeWindow?.()}
               style={{
                 width: 26,
                 height: 26,
@@ -178,7 +182,7 @@ export default function UninstallPage({ onCancel }) {
               <Minus size={13} />
             </button>
             <button
-              onClick={handleCancel}
+              onClick={step === 'complete' ? handleQuit : handleCancel}
               style={{
                 width: 26,
                 height: 26,

@@ -43,36 +43,43 @@ let ollamaProcess = null;
 
 const ffmpegPath = require('ffmpeg-static');
 
-const { autoUpdater } = require('electron-updater');
+let autoUpdater = null;
+if (!isUninstallMode) {
+  try {
+    const updaterModule = require('electron-updater');
+    autoUpdater = updaterModule.autoUpdater;
+    if (autoUpdater) {
+      autoUpdater.autoDownload = false;
+      autoUpdater.autoInstallOnAppQuit = false;
 
-// Don't auto-download or auto-install on quit — let the user click launch/install
-autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = false;
+      autoUpdater.on('update-available', (info) => {
+        mainWindow?.webContents.send('updater:update-available', info);
+      });
 
-autoUpdater.on('update-available', (info) => {
-  mainWindow?.webContents.send('updater:update-available', info);
-});
+      autoUpdater.on('update-not-available', () => {
+        mainWindow?.webContents.send('updater:up-to-date');
+      });
 
-autoUpdater.on('update-not-available', () => {
-  mainWindow?.webContents.send('updater:up-to-date');
-});
+      autoUpdater.on('download-progress', (progress) => {
+        mainWindow?.webContents.send('updater:download-progress', progress);
+      });
 
-autoUpdater.on('download-progress', (progress) => {
-  mainWindow?.webContents.send('updater:download-progress', progress);
-});
+      autoUpdater.on('update-downloaded', (info) => {
+        mainWindow?.webContents.send('updater:update-downloaded', info);
+      });
 
-autoUpdater.on('update-downloaded', (info) => {
-  mainWindow?.webContents.send('updater:update-downloaded', info);
-});
+      autoUpdater.on('error', (err) => {
+        mainWindow?.webContents.send('updater:error', err?.message || String(err));
+      });
 
-autoUpdater.on('error', (err) => {
-  mainWindow?.webContents.send('updater:error', err.message);
-});
-
-// near the other autoUpdater.on(...) blocks
-autoUpdater.on('checking-for-update', () => {
-  mainWindow?.webContents.send('updater:checking');
-});
+      autoUpdater.on('checking-for-update', () => {
+        mainWindow?.webContents.send('updater:checking');
+      });
+    }
+  } catch (err) {
+    console.warn('[main] autoUpdater initialization bypassed/failed:', err?.message || err);
+  }
+}
 
 const immersionEngine = require('./immersionEngine');
 
@@ -326,6 +333,9 @@ ipcMain.handle('ytm-search', async (_event, query) => {
 });
 
 ipcMain.handle('updater:check', async () => {
+  if (!autoUpdater) {
+    return { error: 'Updater inactive' };
+  }
   try {
     const result = await autoUpdater.checkForUpdates();
     if (result == null) {
@@ -1026,7 +1036,9 @@ ipcMain.handle('ollama:pullModel', async (_e, model) => {
 });
 
 ipcMain.handle('updater:download', () => {
-  autoUpdater.downloadUpdate();
+  if (autoUpdater) {
+    autoUpdater.downloadUpdate();
+  }
 });
 
 ipcMain.handle('updater:install', () => {
@@ -1039,7 +1051,11 @@ ipcMain.handle('updater:install', () => {
     try { mainWindow.destroy(); } catch {}
     mainWindow = null;
   }
-  autoUpdater.quitAndInstall(false, true);
+  if (autoUpdater) {
+    autoUpdater.quitAndInstall(false, true);
+  } else {
+    app.quit();
+  }
 });
 
 const { registerSettingsHandlers, readSettings, writeSettings } = require('./ipc/settingsHandlers');
@@ -1374,6 +1390,20 @@ function createWindow() {
 
   mainWindow.on('close', (event) => {
     if (isQuitting) return;
+
+    if (isUninstallMode) {
+      isQuitting = true;
+      if (tray) {
+        try { tray.destroy(); } catch {}
+        tray = null;
+      }
+      if (overlayWin && !overlayWin.isDestroyed()) {
+        try { overlayWin.destroy(); } catch {}
+        overlayWin = null;
+      }
+      app.exit(0);
+      return;
+    }
 
     const s = readSettings();
     if (s.closeToTray) {
