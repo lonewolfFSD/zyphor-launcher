@@ -107,6 +107,10 @@ const GAMES = [
         locked:   'https://shared.akamai.steamstatic.com/community_assets/images/apps/4956550/eb2cd4d59c5290afa1d15a0d2ec5f500d1c391d2.jpg',
         unlocked: 'https://shared.akamai.steamstatic.com/community_assets/images/apps/4956550/90c750fa1ac002348e2e4019e34085d8134c2514.jpg',
       },
+      WORTH_IT: {
+        locked: 'https://shared.fastly.steamstatic.com/community_assets/images/apps/4956550/2f67c71cfd2bce0978c41f4fd5d0e95a379dc08d.jpg',
+        unlocked: 'https://shared.fastly.steamstatic.com/community_assets/images/apps/4956550/0afc1871aaa4d56528e7554068b1553799a6eeed.jpg',
+      }
     },
   },
   // ── Add future games below ──────────────────────────────────────────────
