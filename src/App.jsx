@@ -67,12 +67,21 @@ function BackgroundVideo({ src, previewSrc, active, quality = 'hd', videoStyle =
   if (!src && !previewSrc) return null;
 
   const handleVideoError = (e) => {
-    console.warn('[BackgroundVideo] failed to load:', src, e.target?.error);
-    if (e.target && e.target.src !== DEFAULT_BACKGROUND_VIDEO) {
-      // Fallback to default background video so screen is never black
-      e.target.src = DEFAULT_BACKGROUND_VIDEO;
-      e.target.play().catch(() => {});
+    const err = e.target?.error;
+    console.warn('[BackgroundVideo] failed to load:', src, err);
+    if (!e.target || e.target.src.endsWith(DEFAULT_BACKGROUND_VIDEO)) return;
+
+    // MEDIA_ERR_DECODE (3) triggers when GPU context is lost (e.g. launching a heavy game).
+    // Let it recover instead of permanently destroying the custom video.
+    if (err?.code === 3) {
+      setTimeout(() => {
+        if (e.target) { e.target.load(); e.target.play().catch(() => {}); }
+      }, 1500);
+      return;
     }
+
+    e.target.src = DEFAULT_BACKGROUND_VIDEO;
+    e.target.play().catch(() => {});
   };
 
   // Static mode: Use uploaded / Steam Workshop preview image, or still frame
@@ -464,7 +473,7 @@ useEffect(() => {
           <>
             {/* ── Global background — rendered once, persists across page transitions ── */}
             <BackgroundVideo
-              key={backgroundVideoSrc + (backgroundPreviewUrl || '') + backgroundQuality}
+              key={backgroundVideoSrc + (backgroundPreviewUrl || '')}
               src={backgroundVideoSrc}
               previewSrc={backgroundPreviewUrl}
               active={motionOn}

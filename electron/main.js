@@ -102,17 +102,17 @@ ipcMain.handle('system:getRamGB', () => {
 });
 
 let cachedStaticHardware = {
-  motherboardManufacturer: 'Gigabyte Technology Co., Ltd.',
-  motherboardModel: 'B450M DS3H V2',
-  motherboard: 'Gigabyte Technology Co., Ltd. B450M DS3H V2',
+  motherboardManufacturer: '',
+  motherboardModel: '',
+  motherboard: '',
   cpuFullName: '',
 };
 
 function fetchStaticBoardAndCpuAsync() {
   const cp = require('child_process');
   cp.exec('wmic baseboard get Manufacturer,Product', { windowsHide: true, timeout: 3000 }, (err, mbOut) => {
-    let mbManufacturer = 'Gigabyte Technology Co., Ltd.';
-    let mbModel = 'B450M DS3H V2';
+    let mbManufacturer = '';
+    let mbModel = '';
     if (!err && mbOut) {
       const lines = mbOut.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
       if (lines.length >= 2) {
@@ -140,16 +140,22 @@ function fetchStaticBoardAndCpuAsync() {
 }
 fetchStaticBoardAndCpuAsync();
 
+// Pump the Steam callback queue every 250ms so achievements/stats stay in sync
+setInterval(() => {
+  if (!steamClient) return;
+  try { require('steamworks.js').runCallbacks(); } catch {}
+}, 250);
+
 let lastGpuPollTime = 0;
 let isGpuPolling = false;
 let lastGpuData = {
-  gpuName: 'NVIDIA GeForce GTX 1650',
-  gpuLoad: 8,
-  gpuTemp: 52,
-  vramTotal: 4.0,
-  vramUsed: 2.0,
-  vramFree: 2.0,
-  vramPercent: 50,
+  gpuName: '',
+  gpuLoad: 0,
+  gpuTemp: 0,
+  vramTotal: 0,
+  vramUsed: 0,
+  vramFree: 0,
+  vramPercent: 0,
 };
 
 function pollGpuStatsAsync() {
@@ -244,7 +250,7 @@ ipcMain.handle('system:getHardwareStats', async () => {
 
   return {
     cpuName: cachedStaticHardware.cpuFullName || cpuModel,
-    cpuCores: 6,
+    cpuCores: cpus.length > 0 ? Math.ceil(cpus.length / (cpus[0]?.times ? 1 : 2)) : cpus.length,
     cpuThreads: cpus.length,
     cpuSpeed: cpuSpeedGhz,
     cpu: cpuLoad,
@@ -282,7 +288,6 @@ ipcMain.handle('ytm-search', async (_event, query) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Goog-Api-Key': 'AIzaSyC9XL3ZjWddXya6X74dJoCTL-FUHU13d08',
         'X-YouTube-Client-Name': '67',
         'X-YouTube-Client-Version': '1.20240101.01.00',
         'Origin': 'https://music.youtube.com',
@@ -328,6 +333,18 @@ ipcMain.handle('ytm-search', async (_event, query) => {
     return results;
   } catch (err) {
     console.error('[ytm-search] Error:', err);
+    return [];
+  }
+});
+
+ipcMain.handle('ytm-suggest', async (_event, query) => {
+  if (!query || !query.trim()) return [];
+  try {
+    const res = await fetch(`https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=${encodeURIComponent(query.trim())}`);
+    const data = await res.json();
+    return data[1] || [];
+  } catch (err) {
+    console.error('[ytm-suggest] Error:', err);
     return [];
   }
 });
@@ -550,6 +567,10 @@ ipcMain.handle('steam:getAchievements', async (_e, appId) => {
   const client = initSteamworks();
   if (!client) return { ok: false, reason: 'steam_not_running' };
   try {
+    // Pump the Steam callback queue so stats/achievements are fresh from the server
+    const steamworks = require('steamworks.js');
+    steamworks.runCallbacks();
+
     const achList = ['JUSTICE_SERVED', 'MAKE_A_WISH', 'EYES_EVERYWHERE', 'DINNER_TIME', 'UNEXPECTED_VISITOR'];
     const achievements = achList.map((apiName) => {
       let achieved = false;
@@ -886,6 +907,7 @@ ipcMain.handle('launch-game', async (_, args = []) => {
       child.removeListener('error', onError);
       child.removeListener('exit', onExit);
       activeGameChild = child;
+      _sessionStartMs = Date.now(); // start tracking session time
 
       // Activate Immersion Suite with current settings
       try {
@@ -903,7 +925,7 @@ ipcMain.handle('launch-game', async (_, args = []) => {
           clearInterval(gameCheckInterval);
           activeGameChild = null;
           immersionEngine.onGameExit(activeLauncherSettings);
-          mainWindow?.webContents.send('game:exit', { success: true });
+          recordAndSendGameExit({ success: true });
         }
       }, 1500);
 
@@ -911,13 +933,14 @@ ipcMain.handle('launch-game', async (_, args = []) => {
         clearInterval(gameCheckInterval);
         activeGameChild = null;
         immersionEngine.onGameExit(activeLauncherSettings);
-        mainWindow?.webContents.send('game:exit', { success: true });
+        recordAndSendGameExit({ success: true });
       });
 
       child.on('error', () => {
         clearInterval(gameCheckInterval);
         activeGameChild = null;
         immersionEngine.onGameExit(activeLauncherSettings);
+        recordAndSendGameExit({ success: false });
       });
 
       child.unref();
@@ -1199,7 +1222,7 @@ function buildTrayContextMenu() {
       label: 'Check for Updates…',
       click: () => {
         showLauncherWindow();
-        autoUpdater.checkForUpdates().catch(() => {});
+        autoUpdater?.checkForUpdates().catch(() => {});
       },
     },
     {
@@ -1305,9 +1328,13 @@ function createWindow() {
   });
 
   mainWindow.once('ready-to-show', () => {
+    // Remove the boot-time listener so the full-featured one below is the only one.
+    ipcMain.removeAllListeners('settings-changed');
+
     // Apply remaining settings whenever renderer signals a change
     ipcMain.on('settings-changed', (_e, s) => {
       if (s && typeof s === 'object') {
+        activeLauncherSettings = { ...activeLauncherSettings, ...s };
         writeSettings(s);
       }
       overlayWin?.webContents.send('settings-sync', s);
@@ -1321,7 +1348,7 @@ function createWindow() {
 
       // autoUpdate — kick off a check when user enables it
       if (s.autoUpdate) {
-        autoUpdater.checkForUpdates().catch(() => {});
+        autoUpdater?.checkForUpdates().catch(() => {});
       }
 
       // launchOnStartup stays in sync live too (not just on boot)
@@ -1555,20 +1582,10 @@ ipcMain.handle('screenshots:getAll', async (_e, gameId) => {
       .sort((a, b) => b.mtime - a.mtime);
 
     return files.map(({ f, full, mtime, size }) => {
-      let src = toFileUrl(full);
-      try {
-        const ext = path.extname(f).toLowerCase().replace('.', '') || 'png';
-        const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
-        const buf = fs.readFileSync(full);
-        src = `data:${mime};base64,${buf.toString('base64')}`;
-      } catch (err) {
-        console.warn('[screenshots:getAll] fallback to url for:', f, err.message);
-      }
-
       return {
         name: path.basename(f, path.extname(f)),
         fileName: f,
-        src,
+        src: toFileUrl(full),
         path: full,
         mtime,
         size,
@@ -1678,24 +1695,31 @@ ipcMain.handle('fs:search', async (_e, query) => {
   const results = [];
   const q = query.toLowerCase();
 
-  for (const dir of searchDirs) {
+  const walk = (current, depth) => {
+    if (results.length >= 10 || depth > 4) return;
+    let entries;
     try {
-      const walk = (current) => {
-        const entries = fs.readdirSync(current, { withFileTypes: true });
-        for (const entry of entries) {
-          const full = path.join(current, entry.name);
-          if (entry.name.toLowerCase().includes(q)) {
-            results.push(full);
-            if (results.length >= 10) return;
-          }
-          if (entry.isDirectory()) {
-            try { walk(full); } catch {}
-          }
-        }
-      };
-      walk(dir);
-    } catch {}
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (results.length >= 10) return;
+      if (entry.name.toLowerCase().includes(q)) {
+        results.push(path.join(current, entry.name));
+      }
+      if (entry.isDirectory()) {
+        walk(path.join(current, entry.name), depth + 1);
+      }
+    }
+  };
+
+  // Run walks in parallel via setImmediate batches to avoid blocking the event loop
+  await new Promise((resolve) => setImmediate(resolve));
+  for (const dir of searchDirs) {
     if (results.length >= 10) break;
+    walk(dir, 0);
+    await new Promise((resolve) => setImmediate(resolve));
   }
 
   return results;
@@ -2017,27 +2041,16 @@ RESPONSE RULES:
       return { ok: false, error: 'Model returned empty response' };
     }
 
-    // Mood detection
+    // Mood detection via keyword heuristic — no second Ollama call
+    const lc = content.toLowerCase();
     let finalMood = 'neutral';
-    try {
-      const moodRes = await fetch('http://localhost:11434/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          messages: [{
-            role: 'user',
-            content: `Given this reply: "${content}" — what is Faye's mood in one word: neutral, happy, thinking, or sad? Reply with ONLY the single word.`
-          }],
-          stream: false,
-        }),
-      });
-
-      const moodData = await moodRes.json();
-      const mood = moodData.message?.content?.trim().toLowerCase().split(/\s/)[0] ?? 'neutral';
-      const validMoods = ['neutral', 'happy', 'thinking', 'sad'];
-      if (validMoods.includes(mood)) finalMood = mood;
-    } catch {}
+    if (/\b(happy|great|awesome|love|excited|glad|yay|haha|lol|sure|perfect|nice|good|fun|enjoy|wonderful|amazing)\b/.test(lc)) {
+      finalMood = 'happy';
+    } else if (/\b(think|hmm|let me|consider|wonder|maybe|perhaps|analyze|figure|check|look|depends|interesting|complex|could)\b/.test(lc)) {
+      finalMood = 'thinking';
+    } else if (/\b(sorry|sad|unfortunate|can't|cannot|hard|difficult|struggle|miss|hurt|wish|problem|issue|fail|error|bad|wrong)\b/.test(lc)) {
+      finalMood = 'sad';
+    }
 
     return { ok: true, content, mood: finalMood };
   } catch (err) {
@@ -2058,9 +2071,17 @@ ipcMain.handle('faye:loadContext', () => {
 
 
 
+// Cached Whisper pipeline — initialized once, reused on every voice command
+let _whisperPipeline = null;
+async function getWhisperPipeline() {
+  if (_whisperPipeline) return _whisperPipeline;
+  const { pipeline } = await import('@xenova/transformers');
+  _whisperPipeline = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
+  return _whisperPipeline;
+}
+
 ipcMain.handle('faye:transcribeAudio', async (_e, bufferArray) => {
   try {
-    const { pipeline } = await import('@xenova/transformers');
     const buffer = Buffer.from(bufferArray);
     const webmPath = path.join(app.getPath('temp'), 'faye-voice.webm');
     const wavPath  = path.join(app.getPath('temp'), 'faye-voice.wav');
@@ -2081,7 +2102,7 @@ ipcMain.handle('faye:transcribeAudio', async (_e, bufferArray) => {
     const float32 = new Float32Array(samples.length);
     for (let i = 0; i < samples.length; i++) float32[i] = samples[i] / 32768.0;
 
-    const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
+    const transcriber = await getWhisperPipeline();
     const result = await transcriber(float32);
     return result.text?.trim() ?? null;
   } catch (err) {
@@ -2089,6 +2110,90 @@ ipcMain.handle('faye:transcribeAudio', async (_e, bufferArray) => {
     return null;
   }
 });
+
+// ── Play Stats (local-first session tracking) ─────────────────────────────────
+const STATS_FILE = () => path.join(app.getPath('userData'), 'play-stats.json');
+
+function readStats() {
+  try {
+    const raw = fs.readFileSync(STATS_FILE(), 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return { totalMinutes: 0, sessions: [], longestMinutes: 0 };
+  }
+}
+
+function writeStats(s) {
+  fs.writeFileSync(STATS_FILE(), JSON.stringify(s), 'utf-8');
+}
+
+ipcMain.handle('stats:get', () => {
+  const s = readStats();
+  const today = new Date().toISOString().slice(0, 10);
+  const sessions = s.sessions || [];
+
+  // streak: count consecutive days backwards from today that have a session
+  const days = new Set(sessions.map(ss => ss.date));
+  let streak = 0;
+  let d = new Date();
+  while (days.has(d.toISOString().slice(0, 10))) {
+    streak++;
+    d.setDate(d.getDate() - 1);
+  }
+
+  const weekAgo = Date.now() - 7 * 86400000;
+  const weeklyMinutes = sessions
+    .filter(ss => new Date(ss.date).getTime() >= weekAgo)
+    .reduce((a, ss) => a + ss.minutes, 0);
+
+  return {
+    totalHours: +(s.totalMinutes / 60).toFixed(1),
+    streak,
+    weeklyHours: +(weeklyMinutes / 60).toFixed(1),
+    longestHours: +(s.longestMinutes / 60).toFixed(1),
+    lastPlayed: sessions.length ? sessions[sessions.length - 1].date : null,
+  };
+});
+
+ipcMain.handle('getPlaytime', () => {
+  const s = readStats();
+  return +(s.totalMinutes / 60).toFixed(1);
+});
+
+// ponytail: sessions array grows unbounded; prune to last 365 when it matters
+ipcMain.handle('stats:recordSession', (_e, minutes) => {
+  if (!minutes || minutes < 1) return;
+  const s = readStats();
+  const date = new Date().toISOString().slice(0, 10);
+  s.sessions = s.sessions || [];
+  s.sessions.push({ date, minutes: Math.round(minutes) });
+  s.totalMinutes = (s.totalMinutes || 0) + Math.round(minutes);
+  s.longestMinutes = Math.max(s.longestMinutes || 0, Math.round(minutes));
+  writeStats(s);
+});
+
+// ── Auto-record session on game exit ─────────────────────────────────────────
+let _sessionStartMs = 0;
+
+// Monkey-patch the game exit path to record the session duration
+const _origSend = (payload) => { mainWindow?.webContents.send('game:exit', payload); };
+// We intercept by wrapping the existing game exit sends above via a helper:
+function recordAndSendGameExit(payload) {
+  if (_sessionStartMs > 0) {
+    const mins = (Date.now() - _sessionStartMs) / 60000;
+    _sessionStartMs = 0;
+    if (mins >= 1) {
+      const s = readStats();
+      const date = new Date().toISOString().slice(0, 10);
+      s.sessions = s.sessions || [];
+      s.sessions.push({ date, minutes: Math.round(mins) });
+      s.totalMinutes = (s.totalMinutes || 0) + Math.round(mins);
+      s.longestMinutes = Math.max(s.longestMinutes || 0, Math.round(mins));
+      writeStats(s);
+    }
+  }
+  mainWindow?.webContents.send('game:exit', payload);
+}
 
 // Anywhere after app is ready:
 ipcMain.on('set-fullscreen', (event, flag) => {
@@ -2107,11 +2212,11 @@ ipcMain.handle('uninstall:execute', async (_event, options = {}) => {
 
   // 1. Remove screenshots if requested
   if (!keepScreenshots) {
-    const screenshotsDir = path.join(appData, 'ZyphorLauncher', 'screenshots');
+    const screenshotsPath = path.join(app.getPath('userData'), 'screenshots');
     try {
-      if (fs.existsSync(screenshotsDir)) {
-        fs.rmSync(screenshotsDir, { recursive: true, force: true });
-        console.log('[uninstall] Removed screenshots directory:', screenshotsDir);
+      if (fs.existsSync(screenshotsPath)) {
+        fs.rmSync(screenshotsPath, { recursive: true, force: true });
+        console.log('[uninstall] Removed screenshots directory:', screenshotsPath);
       }
     } catch (e) {
       console.warn('[uninstall] Failed to remove screenshots:', e);

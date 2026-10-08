@@ -34,6 +34,203 @@ const EXPRESSIONS: Record<string, string> = {
   sad: Sad,
 };
 
+// A sound effect pops up next to Faye whenever her expression changes
+const EXPRESSION_SFX: Record<string, string> = {
+  neutral: 'ドドド',
+  happy: 'キラッ!',
+  thinking: 'ムム…',
+  sad: 'しゅん…',
+};
+
+// Big faint kanji behind each window title
+const PANEL_KANJI: Record<string, string> = {
+  steam: 'スチーム',
+  achievements: '実績',
+  screenshots: '記録',
+  faye: 'フェイ',
+  telemetry: '状態',
+  media: '音楽',
+  notes: 'メモ',
+};
+
+const FAYE_THEME_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap');
+
+  .faye-manga {
+    font-family: 'Zen Kaku Gothic New', 'Hiragino Sans', sans-serif;
+  }
+  .faye-manga .font-heading,
+  .faye-manga .faye-display {
+    font-family: 'Dela Gothic One', 'Impact', sans-serif !important;
+    font-weight: 400 !important;
+    letter-spacing: .03em;
+    line-height: 1.25;
+  }
+  .faye-manga .font-mono {
+    font-family: 'Zen Kaku Gothic New', 'Hiragino Sans', sans-serif !important;
+    font-weight: 700;
+  }
+
+  /* ── ink look: square corners, black outlines ── */
+  .faye-manga [class*="rounded-"]:not([class*="rounded-full"]) { border-radius: 0 !important; }
+  .faye-manga [class*="border-white"] { border-color: #000 !important; }
+  .faye-manga .border { border-width: 2px; }
+  .faye-manga [class*="hover:border-white"]:hover,
+  .faye-manga [class*="focus-within:border-white"]:focus-within,
+  .faye-manga [class*="focus:border-white"]:focus { border-color: #ff6b9d !important; }
+
+  /* ── solid white becomes the pink accent ── */
+  .faye-manga .bg-white { background-color: #ff6b9d !important; color: #000; }
+  .faye-manga button.bg-white {
+    border: 2px solid #000;
+    box-shadow: 3px 3px 0 #000;
+    transition: transform .1s, box-shadow .1s, filter .15s;
+  }
+  .faye-manga button.bg-white:hover:not(:disabled) { filter: brightness(1.08); transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
+  .faye-manga div.bg-white:not(.h-full):not([class*="rounded-full"]) { border: 2px solid #000; box-shadow: 3px 3px 0 #000; }
+  .faye-manga [class*="hover:bg-white"]:hover:not([class*="hover:bg-white/"]) { background-color: #ff6b9d !important; color: #000 !important; }
+
+  /* cards and bordered buttons get a hard offset shadow */
+  .faye-manga button[class*="rounded-"][class*="border"] { box-shadow: 3px 3px 0 #000; transition: transform .1s, box-shadow .1s, background-color .15s; }
+  .faye-manga button[class*="rounded-"][class*="border"]:hover:not(:disabled) { transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
+  .faye-manga div[class*="rounded-["][class*="border"][class*="p-3"],
+  .faye-manga div[class*="rounded-["][class*="border"][class*="p-4"],
+  .faye-manga div[class*="rounded-["][class*="border"][class*="p-5"],
+  .faye-manga div[class*="rounded-["][class*="border"][class*="p-6"],
+  .faye-manga div[class*="rounded-["][class*="border"][class*="p-2.5"] { box-shadow: 4px 4px 0 #000; }
+
+  /* progress bars become striped ink bars */
+  .faye-manga [class*="h-1.5"][class*="rounded-full"][class*="overflow-hidden"],
+  .faye-manga [class*="h-2 "][class*="rounded-full"][class*="overflow-hidden"] { border-radius: 0 !important; border: 2px solid #000; height: 12px; }
+  .faye-manga [class*="h-full"][class*="rounded-full"] { border-radius: 0 !important; }
+  .faye-manga .h-full.bg-white {
+    background-image: repeating-linear-gradient(45deg, rgba(0,0,0,.2) 0 6px, transparent 6px 12px);
+  }
+
+  /* inputs */
+  .faye-manga input, .faye-manga select { font-family: inherit; font-weight: 700; }
+  .faye-manga ::-webkit-scrollbar { width: 9px; height: 9px; }
+  .faye-manga ::-webkit-scrollbar-track { background: #120d1a; }
+  .faye-manga ::-webkit-scrollbar-thumb { background: #ff6b9d; border: 2px solid #000; }
+
+  /* ── overlay furniture ── */
+  .faye-backdrop {
+    position: fixed;
+    background:
+      radial-gradient(ellipse at 28% 100%, rgba(255,107,157,.22), transparent 60%),
+      linear-gradient(rgba(18,13,26,.62), rgba(18,13,26,.8));
+  }
+  .faye-backdrop::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: repeating-conic-gradient(from 0deg at 28% 100%,
+      transparent 0deg, transparent 3deg, rgba(255,255,255,.07) 3.4deg, transparent 4deg);
+  }
+  .faye-backdrop::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255,107,157,.3) 1.2px, transparent 1.4px);
+    background-size: 8px 8px;
+    -webkit-mask-image: linear-gradient(to top right, #000, transparent 55%);
+    mask-image: linear-gradient(to top right, #000, transparent 55%);
+  }
+  .faye-burst {
+    background-image: repeating-conic-gradient(from 0deg at 50% 72%,
+      transparent 0deg, transparent 4deg, rgba(255,107,157,.28) 4deg, rgba(255,107,157,.28) 5deg);
+    -webkit-mask-image: radial-gradient(ellipse closest-side at 50% 72%, #000 35%, transparent 100%);
+    mask-image: radial-gradient(ellipse closest-side at 50% 72%, #000 35%, transparent 100%);
+  }
+  .faye-sticker {
+    filter: drop-shadow(0 0 16px rgba(255,107,157,.35)) drop-shadow(8px 8px 0 rgba(0,0,0,.5));
+  }
+  .faye-sfx {
+    color: #fff;
+    -webkit-text-stroke: 2px #000;
+    text-shadow: 4px 4px 0 #ff6b9d;
+  }
+  .faye-header {
+    border: 3px solid #000;
+    box-shadow: 6px 6px 0 #ff6b9d;
+    background-image: radial-gradient(rgba(255,107,157,.16) 1.2px, transparent 1.4px);
+    background-size: 7px 7px;
+  }
+  .faye-tape {
+    background: repeating-linear-gradient(45deg, rgba(255,107,157,.9), rgba(255,107,157,.9) 8px, rgba(255,255,255,.95) 8px, rgba(255,255,255,.95) 16px);
+    box-shadow: 1px 1px 4px rgba(0,0,0,.5);
+  }
+  .faye-tag {
+    display: inline-block;
+    background: #ff6b9d;
+    color: #000;
+    border: 2px solid #000;
+    padding: 0 .4rem;
+    font-size: 10px;
+    line-height: 1.5;
+    transform: rotate(-3deg);
+    white-space: nowrap;
+  }
+  .faye-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .55rem;
+    background: #1c1526;
+    color: #fff;
+    border: 2px solid #000;
+    box-shadow: 3px 3px 0 #000;
+    padding: .4rem .9rem;
+    font-size: 12px;
+    font-weight: 900;
+  }
+  .faye-pill svg { color: #ff6b9d; }
+  .faye-tab-label { display: none; }
+  @media (min-width: 1700px) { .faye-tab-label { display: inline; } }
+  .faye-tab {
+    background: #1c1526;
+    color: #e4e4e7;
+    border: 3px solid #000;
+    box-shadow: 3px 3px 0 #000;
+    transition: transform .12s, box-shadow .12s, background-color .2s, color .2s;
+  }
+  .faye-tab:hover { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #000; color: #fff; }
+  .faye-tab-on { background: #ff6b9d; color: #000; transform: rotate(-1.5deg) translateY(-2px); }
+  .faye-tab-on:hover { color: #000; transform: rotate(-1.5deg) translateY(-1px); }
+  .faye-btn {
+    background: #f4efe8;
+    color: #000;
+    border: 3px solid #000;
+    box-shadow: 3px 3px 0 #000;
+    transition: transform .12s, box-shadow .12s, background-color .2s;
+  }
+  .faye-btn:hover { background: #ff6b9d; transform: translate(2px, 2px); box-shadow: 1px 1px 0 #000; }
+  .faye-card {
+    background: #1c1526;
+    border: 3px solid #000;
+    border-top: 8px solid #ff6b9d;
+    box-shadow: 6px 6px 0 #000;
+  }
+  .faye-chip {
+    background: #000;
+    color: #ff6b9d;
+    border: 2px solid #ff6b9d;
+    padding: .15rem .55rem;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  .faye-panel-head {
+    background-color: #120d1a;
+    background-image: radial-gradient(rgba(255,107,157,.14) 1.2px, transparent 1.4px);
+    background-size: 7px 7px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .faye-tab, .faye-btn, .faye-manga button { transition: none !important; }
+  }
+`;
+
 const FAYE_MODELS = [
   { id: 'fast', label: 'Fast', model: 'phi3:mini', displayModel: 'Faye Spark', vram: '3.8 GB', latency: '18ms', desc: 'Instant local response, optimal in-game efficiency' },
   { id: 'balanced', label: 'Balanced', model: 'qwen2.5:14b', displayModel: 'Faye Core', vram: '8.5 GB', latency: '42ms', desc: 'Advanced reasoning, tactical game guidance' },
@@ -89,12 +286,12 @@ const STAY_ACHIEVEMENTS_META: Record<string, { displayName: string; description:
     iconLocked: 'https://shared.akamai.steamstatic.com/community_assets/images/apps/4956550/7fbfa3e44582686ee3aa52d2a0f77e2cd99e2015.jpg',
     rarity: '14.5%',
   },
-  UNEXPECTED_VISITOR: {
-    displayName: 'Unexpected Visitor',
-    description: 'An uninvited guest arrives when least expected.',
-    iconUnlocked: 'https://shared.akamai.steamstatic.com/community_assets/images/apps/4956550/90c750fa1ac002348e2e4019e34085d8134c2514.jpg',
-    iconLocked: 'https://shared.akamai.steamstatic.com/community_assets/images/apps/4956550/eb2cd4d59c5290afa1d15a0d2ec5f500d1c391d2.jpg',
-    rarity: '8.1%',
+  WORTH_IT: {
+    displayName: 'Worth It?',
+    description: 'Was it really worth it?',
+    iconUnlocked: 'https://shared.fastly.steamstatic.com/community_assets/images/apps/4956550/0afc1871aaa4d56528e7554068b1553799a6eeed.jpg',
+    iconLocked: 'https://shared.fastly.steamstatic.com/community_assets/images/apps/4956550/2f67c71cfd2bce0978c41f4fd5d0e95a379dc08d.jpg',
+    rarity: '4.5%',
   },
 };
 
@@ -105,10 +302,15 @@ interface PanelPos {
   y: number;
 }
 
-function clampPos(x: number, y: number, _panelW: number = 600, _panelH: number = 600): PanelPos {
+function clampPos(x: number, y: number, panelW: number = 600, panelH: number = 600): PanelPos {
+  const minX = 0;
+  const minY = 0;
+  const maxX = window.innerWidth - panelW;
+  const maxY = window.innerHeight - panelH;
+
   return {
-    x: isNaN(x) ? 400 : Math.round(x),
-    y: isNaN(y) ? 100 : Math.round(y),
+    x: isNaN(x) ? 400 : Math.max(minX, Math.min(Math.round(x), maxX)),
+    y: isNaN(y) ? 100 : Math.max(minY, Math.min(Math.round(y), maxY)),
   };
 }
 
@@ -345,6 +547,8 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
 
   // Music Stream State (Full-length Streaming Engine — NO AUTOPLAY ON STARTUP)
   const [mediaQuery, setMediaQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [mediaResults, setMediaResults] = useState<any[]>([]);
   const [currentTrack, setCurrentTrack] = useState<any>(null);
   const [currentVideoId, setCurrentVideoId] = useState<string>('');
@@ -445,7 +649,7 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
           size,
           transparent: true,
           opacity,
-          color: 0xffffff,
+          color: 0xff9ec3,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
           sizeAttenuation: true,
@@ -457,13 +661,21 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
     scene.add(dust);
 
     let animId: number, t = 0;
+    let running = true;
     function tick() {
+      if (!running) return;
       animId = requestAnimationFrame(tick);
       t += 0.01;
       dust.rotation.y = t * 0.003;
       renderer.render(scene, camera);
     }
     tick();
+
+    // Pause animation when overlay is hidden to avoid burning CPU/GPU in the background
+    const handleShow = () => { if (!running) { running = true; tick(); } };
+    const handleHide = () => { running = false; cancelAnimationFrame(animId); };
+    window.launcherAPI?.on?.('overlay:show', handleShow);
+    window.launcherAPI?.on?.('overlay:hide', handleHide);
 
     const onResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -472,8 +684,11 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
     };
     window.addEventListener('resize', onResize);
     return () => {
+      running = false;
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', onResize);
+      window.launcherAPI?.off?.('overlay:show', handleShow);
+      window.launcherAPI?.off?.('overlay:hide', handleHide);
       renderer.dispose();
     };
   }, []);
@@ -484,13 +699,6 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
       try {
         const st = await window.launcherAPI?.steam?.getStatus?.();
         if (st) setSteamStatus(st);
-
-        const ach = await window.launcherAPI?.steam?.getAchievements?.(STAY_APP_ID);
-        if (ach?.achievements && Array.isArray(ach.achievements)) {
-          setAchievementsData(ach.achievements);
-        } else if (Array.isArray(ach)) {
-          setAchievementsData(ach);
-        }
 
         const running = await window.launcherAPI?.isGameRunning?.();
         setIsGameRunning(Boolean(running));
@@ -507,6 +715,39 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
     return () => clearInterval(id);
   }, []);
 
+  // Fetch Steam Achievements (Backend API + local fallback)
+  useEffect(() => {
+    const fetchAchievements = async () => {
+      try {
+        // 1. Try Zyphor backend API
+        const st = await window.launcherAPI?.steam?.getStatus?.();
+        const effectiveSteamId = profile?.steamId ?? profile?.raw?.steamId ?? st?.steamId64 ?? null;
+        if (effectiveSteamId) {
+          const res = await fetch(`https://www.zyphorstudios.com/api/steam?steamId=${encodeURIComponent(effectiveSteamId)}`);
+          if (res.ok) {
+            const data = await res.json();
+            const rawAchievements = data?.gameStats?.achievements;
+            if (Array.isArray(rawAchievements) && rawAchievements.length > 0) {
+              setAchievementsData(rawAchievements);
+              return; // Success, skip fallback
+            }
+          }
+        }
+
+        // 2. Fallback to local Steam client IPC
+        const ach = await window.launcherAPI?.steam?.getAchievements?.(STAY_APP_ID);
+        if (ach?.achievements && Array.isArray(ach.achievements)) {
+          setAchievementsData(ach.achievements);
+        } else if (Array.isArray(ach)) {
+          setAchievementsData(ach);
+        }
+      } catch (err) {
+        console.warn('[FayePage] Achievements fetch error:', err);
+      }
+    };
+    fetchAchievements();
+  }, [profile?.steamId]);
+
   // Live Screenshots Fetching & Auto-Sync
   const loadScreenshots = useCallback(async () => {
     try {
@@ -522,12 +763,18 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
     const unsub = window.launcherAPI?.screenshots?.onUpdated?.(() => {
       loadScreenshots();
     });
-    const interval = setInterval(loadScreenshots, 2000);
+
+    // Only poll when the screenshot panel is actually open to save heavy IPC payloads
+    let interval: ReturnType<typeof setInterval>;
+    if (openPanels.includes('screenshots')) {
+      interval = setInterval(loadScreenshots, 2000);
+    }
+
     return () => {
       unsub?.();
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
-  }, [loadScreenshots]);
+  }, [loadScreenshots, openPanels]);
 
   const handleDeleteScreenshot = async (fileName: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -626,6 +873,30 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
       setMediaLoading(false);
     }
   };
+
+  // Debounced Search Suggestions Fetcher
+  useEffect(() => {
+    if (!mediaQuery.trim()) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await (window.launcherAPI as any)?.ytmSuggest?.(mediaQuery);
+        if (Array.isArray(res) && res.length > 0) {
+          setSuggestions(res.slice(0, 5));
+          setShowSuggestions(true);
+        } else {
+          setSuggestions([]);
+          setShowSuggestions(false);
+        }
+      } catch {
+        setSuggestions([]);
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [mediaQuery]);
 
   // Send command to audio stream iframe
   const sendIframeCommand = (func: string, args: any[] = []) => {
@@ -845,6 +1116,7 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
   };
 
   // Faye Voice Command Handler (Alt+Q Hotkey)
+  // Uses voiceDepsRef so it always reads current state without needing to re-register IPC listeners.
   const handleVoiceCommand = async (transcript: string) => {
     setVoiceState('processing');
     const intent = detectIntent(transcript);
@@ -852,6 +1124,7 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
       setVoiceState('idle');
       return;
     }
+    const currentPanels = voiceDepsRef.current.openPanels;
     switch (intent.type) {
       case 'screenshot':
         await handleTakeScreenshot();
@@ -859,7 +1132,7 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
         break;
       case 'play_music':
         setVoiceOnly(false);
-        if (!openPanels.includes('media')) {
+        if (!currentPanels.includes('media')) {
           setOpenPanels((prev) => [...prev, 'media']);
         }
         bringToFront('media');
@@ -873,7 +1146,7 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
         break;
       case 'open_music':
         setVoiceOnly(false);
-        if (!openPanels.includes('media')) setOpenPanels((prev) => [...prev, 'media']);
+        if (!currentPanels.includes('media')) setOpenPanels((prev) => [...prev, 'media']);
         bringToFront('media');
         playFayeAudio('music');
         break;
@@ -886,45 +1159,45 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
         playFayeAudio('music');
         break;
       case 'pause_music':
-        if (isPlaying) handleTogglePlay();
+        if (voiceDepsRef.current.isPlaying) handleTogglePlay();
         playFayeAudio('music');
         break;
       case 'open_notes':
         setVoiceOnly(false);
-        if (!openPanels.includes('notes')) setOpenPanels((prev) => [...prev, 'notes']);
+        if (!currentPanels.includes('notes')) setOpenPanels((prev) => [...prev, 'notes']);
         bringToFront('notes');
         playFayeAudio('note');
         break;
       case 'open_hardware':
         setVoiceOnly(false);
-        if (!openPanels.includes('telemetry')) setOpenPanels((prev) => [...prev, 'telemetry']);
+        if (!currentPanels.includes('telemetry')) setOpenPanels((prev) => [...prev, 'telemetry']);
         bringToFront('telemetry');
         break;
       case 'open_chat':
         setVoiceOnly(false);
-        if (!openPanels.includes('faye')) setOpenPanels((prev) => [...prev, 'faye']);
+        if (!currentPanels.includes('faye')) setOpenPanels((prev) => [...prev, 'faye']);
         bringToFront('faye');
         break;
       case 'open_steam':
         setVoiceOnly(false);
-        if (!openPanels.includes('steam')) setOpenPanels((prev) => [...prev, 'steam']);
+        if (!currentPanels.includes('steam')) setOpenPanels((prev) => [...prev, 'steam']);
         bringToFront('steam');
         break;
       case 'open_achievements':
         setVoiceOnly(false);
-        if (!openPanels.includes('achievements')) setOpenPanels((prev) => [...prev, 'achievements']);
+        if (!currentPanels.includes('achievements')) setOpenPanels((prev) => [...prev, 'achievements']);
         bringToFront('achievements');
         break;
       case 'open_screenshots':
         setVoiceOnly(false);
-        if (!openPanels.includes('screenshots')) setOpenPanels((prev) => [...prev, 'screenshots']);
+        if (!currentPanels.includes('screenshots')) setOpenPanels((prev) => [...prev, 'screenshots']);
         bringToFront('screenshots');
         break;
       case 'add_note': {
         setVoiceOnly(false);
         const text = intent.args?.text?.trim();
         if (text) {
-          const next = [{ id: Date.now(), text, ts: nowTime(), pinned: false }, ...notes];
+          const next = [{ id: Date.now(), text, ts: nowTime(), pinned: false }, ...voiceDepsRef.current.notes];
           setNotes(next);
           try { localStorage.setItem('faye_quick_notes_v1', JSON.stringify(next)); } catch {}
           playFayeAudio('note');
@@ -936,6 +1209,12 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
     }
     setVoiceState('idle');
   };
+
+  // Current state refs for voice handler safely
+  const voiceDepsRef = useRef({ openPanels, isPlaying, notes });
+  useEffect(() => {
+    voiceDepsRef.current = { openPanels, isPlaying, notes };
+  }, [openPanels, isPlaying, notes]);
 
   // Alt+Q Voice Command Listener & Audio Recorder
   useEffect(() => {
@@ -991,7 +1270,7 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
       unsubStart?.();
       unsubStop?.();
     };
-  }, [openPanels, isPlaying, notes]);
+  }, []); // Empty dependencies: set up listener ONCE
 
   // Initial song suggestions on mount (NO AUTOPLAY, NO FORCED TRACK)
   useEffect(() => {
@@ -1060,7 +1339,7 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
         next.filter((m) => m.role !== 'system'),
         profile?.displayName || 'Operative',
         null,
-        settings?.fayeModel || 'fast'
+        settings?.fayeModel ? (FAYE_MODELS.find(m => m.id === settings.fayeModel)?.model || 'phi3:mini') : 'phi3:mini'
       );
       if (res?.ok) {
         setExpression('happy');
@@ -1101,12 +1380,14 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
   const activeModelObj = FAYE_MODELS.find((m) => m.id === (settings?.fayeModel || 'fast')) || FAYE_MODELS[0];
 
   return (
-    <div className="fixed inset-0 select-none overflow-hidden bg-transparent text-white font-sans antialiased" style={{ pointerEvents: 'none' }}>
+    <div className="faye-manga fixed inset-0 select-none overflow-hidden bg-transparent text-white font-sans antialiased" style={{ pointerEvents: 'none' }}>
+      <style>{FAYE_THEME_CSS}</style>
+
       {/* Audio Streaming Engine (Direct Embedded Stream — persists across pause/play) */}
       {currentVideoId && (
         <iframe
           ref={iframeRef}
-          src={`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&enablejsapi=1`}
+          src={`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&enablejsapi=1&list=RD${currentVideoId}`}
           allow="autoplay"
           title="Zyphor Audio Stream"
           style={{ position: 'fixed', left: -9999, top: -9999, width: 240, height: 240, pointerEvents: 'none', opacity: 0 }}
@@ -1124,7 +1405,7 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
               loop
               playsInline
               autoPlay
-              className="pointer-events-none fixed inset-0 h-full w-full object-cover opacity-60 backdrop-blur-sm"
+              className="pointer-events-none fixed inset-0 h-full w-full object-cover opacity-90 backdrop-blur-sm"
               style={{ zIndex: 0 }}
             />
           )}
@@ -1133,7 +1414,7 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
 
           {/* Minimalist Backdrop Dismissal */}
           <div
-            className="fixed inset-0 z-[2] bg-black/40 backdrop-blur-sm pointer-events-auto"
+            className="faye-backdrop inset-0 z-[2] pointer-events-auto"
             onClick={() => {
               if (openPanels.length > 0) setOpenPanels([]);
               else window.launcherAPI?.hideOverlay?.();
@@ -1143,44 +1424,25 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
           {/* ═══════════════════════════════════════════════════════════════ */}
           {/* TESLA STEALTH HEADER: ZYPHOR STUDIOS COCKPIT                    */}
           {/* ═══════════════════════════════════════════════════════════════ */}
-          <header className="fixed top-5 left-8 right-8 z-[100] pointer-events-auto flex items-center justify-between px-6 py-3.5 rounded-[24px] bg-black/80 backdrop-blur-2xl border border-white/20">
-            {/* Left: Zyphor Studios & STAY Branding */}
-            <div className="flex items-center gap-5">
-              <div className="flex items-center gap-3.5">
-                <img src={ZyphorLogo} alt="Zyphor Studios" className="h-8 w-auto object-contain" />
-                <div>
-                  <h1 className="text-sm font-bold tracking-wider font-heading uppercase text-white flex items-center gap-2">
-                    ZYPHOR LAUNCHER
-                    <span className="text-[10px] font-mono text-white/70 font-normal">
-                      HUD v1.9
-                    </span>
-                  </h1>
-                  <p className="text-[11px] text-white/55 font-mono">
-                    {isGameRunning ? (steamStatus?.gameName || STAY_FULL_NAME) : 'NOT IN-GAME'} • {isGameRunning ? 'ACTIVE IN-SESSION' : 'STANDBY'}
-                  </p>
-                </div>
-              </div>
+          <header className="faye-header fixed top-5 left-6 right-6 z-[100] pointer-events-auto flex items-center justify-between gap-8 px-7 py-4 bg-[#120d1a]">
+            <div className="faye-tape absolute -top-3 left-10 w-24 h-5 rotate-[-6deg]" aria-hidden="true" />
 
-              <div className="h-5 w-px bg-white/15 hidden md:block" />
-
-              <div className="hidden lg:flex items-center gap-5 text-xs font-mono text-white/65">
-                <div className="flex items-center gap-2">
-                  <FontAwesomeIcon icon={faSteam} className="text-white text-sm" />
-                  <span>{steamStatus?.name || 'Steam Connected'}</span>
+            {/* Left: branding */}
+            <div className="flex items-center gap-4 shrink-0">
+              <img src={ZyphorLogo} alt="Zyphor Studios" className="h-10 w-auto object-contain" />
+              <div className="whitespace-nowrap">
+                <div className="flex items-center gap-3">
+                  <h1 className="text-[17px] font-heading uppercase text-white leading-none">Zyphor Launcher</h1>
+                  <span className="faye-tag font-heading">HUD v1.9</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <FontAwesomeIcon icon={fGaugeHigh} className="text-white text-sm" />
-                  <span>{hwStats.fps || 144} FPS</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <FontAwesomeIcon icon={fMicrochip} className="text-white text-sm" />
-                  <span>CPU {hwStats.cpu}%</span>
-                </div>
+                <p className="mt-2 text-[11px] text-white/60 font-bold max-w-[300px] truncate">
+                  {isGameRunning ? (steamStatus?.gameName || STAY_FULL_NAME) : 'NOT IN-GAME'} • {isGameRunning ? 'ACTIVE IN-SESSION' : 'STANDBY'}
+                </p>
               </div>
             </div>
 
-            {/* Center: Multi-Panel Toggles (No black dot on active tabs) */}
-            <div className="flex items-center gap-1.5 p-1.5 rounded-[18px] bg-white/[0.05] border border-white/10">
+            {/* Center: window toggles, open ones light up pink */}
+            <nav className="flex items-center gap-3" aria-label="Overlay windows">
               {[
                 { id: 'steam', label: 'Steam Hub', icon: faSteam },
                 { id: 'achievements', label: 'Achievements', icon: fTrophy },
@@ -1195,24 +1457,23 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
                   <button
                     key={tab.id}
                     onClick={() => togglePanel(tab.id as PanelId)}
-                    className={`relative px-4 py-2 rounded-xl text-[11.5px] font-heading font-bold tracking-wider uppercase flex items-center gap-2.5 transition-all ${
-                      isOpen
-                        ? 'bg-white text-black font-extrabold scale-105 shadow-md shadow-white/10'
-                        : 'text-white/70 hover:text-white hover:bg-white/[0.08]'
-                    }`}
+                    aria-pressed={isOpen}
+                    aria-label={tab.label}
+                    title={tab.label}
+                    className={`faye-tab font-heading shrink-0 whitespace-nowrap relative px-4 py-2.5 text-[12px] uppercase flex items-center gap-2.5 ${isOpen ? 'faye-tab-on' : ''}`}
                   >
-                    <FontAwesomeIcon icon={tab.icon} className="text-xs" />
-                    <span className="hidden xl:inline">{tab.label}</span>
+                    <FontAwesomeIcon icon={tab.icon} className="text-[13px]" />
+                    <span className="faye-tab-label">{tab.label}</span>
                   </button>
                 );
               })}
-            </div>
+            </nav>
 
-            {/* Right: Controls (F12 Screenshot & X Close Button) */}
-            <div className="flex items-center gap-2.5">
+            {/* Right: F12 screenshot & close */}
+            <div className="flex items-center gap-3 shrink-0">
               <button
                 onClick={handleTakeScreenshot}
-                className="px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/15 border border-white/10 text-white font-bold text-xs font-medium flex items-center gap-2 transition-colors"
+                className="faye-btn px-4 h-11 text-xs font-black flex items-center gap-2.5 whitespace-nowrap"
                 title="Take In-Game Snapshot (F12)"
               >
                 <FontAwesomeIcon icon={fCamera} />
@@ -1221,13 +1482,29 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
 
               <button
                 onClick={() => window.launcherAPI?.hideOverlay?.()}
-                className="w-9 h-9 rounded-xl bg-white/[0.08] hover:bg-white/20 text-white flex items-center justify-center transition-colors border border-white/10"
+                className="faye-btn w-11 h-11 flex items-center justify-center"
                 title="Close Overlay"
               >
                 <FontAwesomeIcon icon={fXmark} className="text-sm" />
               </button>
             </div>
           </header>
+
+          {/* Live stats strip, sits under the header on the right */}
+          <div className="fixed top-[116px] right-8 z-[5] pointer-events-none flex items-center gap-3 whitespace-nowrap">
+            <span className="faye-pill">
+              <FontAwesomeIcon icon={faSteam} />
+              {steamStatus?.name || 'Steam Connected'}
+            </span>
+            <span className="faye-pill">
+              <FontAwesomeIcon icon={fGaugeHigh} />
+              {hwStats.fps || 144} FPS
+            </span>
+            <span className="faye-pill">
+              <FontAwesomeIcon icon={fMicrochip} />
+              CPU {hwStats.cpu}%
+            </span>
+          </div>
 
           {/* Action Feedback Banner */}
           <AnimatePresence>
@@ -1236,9 +1513,9 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] px-5 py-2.5 rounded-full bg-black/90 border border-white/30 text-white text-xs font-heading font-medium tracking-wide flex items-center gap-2.5 backdrop-blur-xl"
+                className="fixed top-28 left-1/2 -translate-x-1/2 z-[110] px-5 py-2.5 bg-[#ff6b9d] border-[3px] border-black text-black text-xs font-heading tracking-wide flex items-center gap-2.5 shadow-[4px_4px_0_#000]"
               >
-                <FontAwesomeIcon icon={fCheck} className="text-white text-xs" />
+                <FontAwesomeIcon icon={fCheck} className="text-black text-xs" />
                 <span>{actionFeedback}</span>
               </motion.div>
             )}
@@ -1255,15 +1532,27 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
               initial={{ opacity: 0.85, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-              className="h-[92vh] w-auto max-w-[460px] xl:max-w-[500px] 2xl:max-w-[560px] object-contain object-bottom"
+              className="faye-sticker relative h-[92vh] w-auto max-w-[460px] xl:max-w-[500px] 2xl:max-w-[560px] object-contain object-bottom"
             />
 
-            {/* Status Card Under Faye */}
-            <div className="absolute bottom-6 left-2 right-6 pointer-events-auto p-5 rounded-[28px] bg-black/80 backdrop-blur-2xl border border-white/20">
-              <div className="flex items-center justify-between">
+            {/* sound effect pops up on every expression change */}
+            <motion.span
+              key={`sfx-${expression}`}
+              aria-hidden="true"
+              className="faye-display faye-sfx absolute top-[16%] right-0 text-5xl xl:text-6xl"
+              initial={{ opacity: 0, scale: 0.3, rotate: -18 }}
+              animate={{ opacity: [0, 1, 1, 0], scale: [0.3, 1.15, 1, 1], rotate: -8 }}
+              transition={{ duration: 1.7, times: [0, 0.15, 0.75, 1] }}
+            >
+              {EXPRESSION_SFX[expression] || EXPRESSION_SFX.neutral}
+            </motion.span>
+
+            {/* Status card under Faye */}
+            <div className="faye-card absolute bottom-6 left-2 right-6 pointer-events-auto px-6 py-5">
+              <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <span
-                    className={`w-3 h-3 rounded-full transition-all ${
+                    className={`w-3.5 h-3.5 shrink-0 rounded-full border-2 border-[#ff6b9d] transition-all ${
                       ready
                         ? 'bg-white'
                         : starting
@@ -1275,9 +1564,9 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
                         : 'bg-white/40'
                     }`}
                   />
-                  <span className="font-heading font-bold text-sm text-white">Faye AI Companion</span>
+                  <span className="font-heading text-base text-white">Faye AI Companion</span>
                 </div>
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-mono uppercase bg-white/10 text-white/80">
+                <span className="faye-chip">
                   {ready
                     ? thinking
                       ? 'Thinking…'
@@ -1294,10 +1583,10 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mt-3.5 pt-3.5 border-t border-white/10 text-xs font-mono text-white/65">
+              <div className="grid grid-cols-2 gap-6 mt-5 pt-5 border-t-[3px] border-black text-xs font-bold text-white/70">
                 <div>
-                  <span className="text-[10px] uppercase text-white/40 block">INTELLIGENCE</span>
-                  <span className="text-white font-medium">
+                  <span className="text-[10px] uppercase tracking-wider text-[#ff6b9d] block mb-1">INTELLIGENCE</span>
+                  <span className="text-white">
                     {checkingEngine
                       ? 'Detecting…'
                       : !ollamaInstalled
@@ -1310,8 +1599,8 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase text-white/40 block">SPECS</span>
-                  <span className="text-white font-medium">
+                  <span className="text-[10px] uppercase tracking-wider text-[#ff6b9d] block mb-1">SPECS</span>
+                  <span className="text-white">
                     {checkingEngine
                       ? 'Hardware Probe'
                       : !ollamaInstalled
@@ -1340,6 +1629,7 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
             const rawPos = panelPositions[panelId] || getDefaultPos(panelId, size.width, size.height);
             const pos = clampPos(rawPos.x, rawPos.y, size.width, size.height);
             const zIndex = activeZIndex[panelId] || 20;
+            const isFront = zIndex >= Math.max(...openPanels.map((p) => activeZIndex[p] || 0));
 
             return (
               <motion.div
@@ -1358,22 +1648,26 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
                   height: size.height,
                   minWidth: 360,
                   minHeight: 280,
+                  border: '3px solid #000',
+                  borderTop: '8px solid #ff6b9d',
+                  boxShadow: isFront ? '8px 8px 0 #ff6b9d' : '8px 8px 0 #000',
                 }}
-                className="pointer-events-auto flex flex-col rounded-[32px] bg-black/80 backdrop-blur-3xl border-2 border-white/50 overflow-hidden select-auto"
+                className="pointer-events-auto flex flex-col bg-[#1c1526] overflow-hidden select-auto"
               >
-                {/* ── DRAG HEADER WITH SLIMMER HIGH WHITE CAPSULE PILL ── */}
+                {/* ── DRAG HEADER ── */}
                 <div
                   onPointerDown={(e) => handleDragStart(panelId, e)}
-                  className="px-6 pt-3.5 pb-3 border-b border-white/10 flex items-center justify-between bg-white/[0.02] cursor-grab active:cursor-grabbing select-none shrink-0 relative"
+                  className="faye-panel-head px-6 py-4 border-b-[3px] border-black flex items-center justify-between cursor-grab active:cursor-grabbing select-none shrink-0 relative overflow-hidden"
                 >
-                  {/* Slimmer White Capsule Pill Positioned High */}
-                  <div className="absolute left-1/2 -translate-x-1/2 top-2.5">
-                    <div className="w-8 h-1 rounded-full bg-white/80 hover:bg-white transition-all cursor-grab active:cursor-grabbing" />
-                  </div>
+                  <span
+                    aria-hidden="true"
+                    className="faye-display absolute right-16 -top-1 text-6xl leading-none text-white/[0.07] pointer-events-none"
+                  >
+                    {PANEL_KANJI[panelId]}
+                  </span>
 
-                  {/* Left: Window Title */}
-                  <div className="pt-1.5">
-                    <h3 className="text-sm font-bold font-heading uppercase text-white tracking-wide">
+                  <div className="relative">
+                    <h3 className="text-lg font-heading uppercase text-white leading-tight">
                       {panelId === 'steam' && 'Steam Command Center'}
                       {panelId === 'achievements' && 'Steam Achievements'}
                       {panelId === 'screenshots' && 'Captures Gallery'}
@@ -1382,7 +1676,7 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
                       {panelId === 'media' && 'Official Music Engine'}
                       {panelId === 'notes' && 'Strategy Scratchpad'}
                     </h3>
-                    <p className="text-[10px] font-mono text-white/50">
+                    <p className="text-[11px] font-bold text-[#ff6b9d]">
                       {panelId === 'steam' && 'Steam Integration & Community'}
                       {panelId === 'achievements' && 'Trophy Tracking & Progression'}
                       {panelId === 'screenshots' && 'In-Game Capture Vault'}
@@ -1394,10 +1688,10 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
                   </div>
 
                   {/* Right: Window Controls */}
-                  <div className="flex items-center gap-2 pt-1.5">
+                  <div className="relative flex items-center gap-2">
                     <button
                       onClick={() => closePanel(panelId)}
-                      className="w-8 h-8 rounded-xl bg-white/[0.08] hover:bg-white/25 text-white/80 hover:text-white flex items-center justify-center transition-colors"
+                      className="faye-btn w-9 h-9 flex items-center justify-center"
                       title="Close Window"
                     >
                       <FontAwesomeIcon icon={fXmark} className="text-sm" />
@@ -1960,21 +2254,53 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
                     <div className="space-y-4">
                       {/* Search Bar + Shuffle */}
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 flex items-center gap-3 px-4 py-2.5 rounded-[20px] bg-white/[0.04] border border-white/10 focus-within:border-white/30 transition-colors">
-                          <FontAwesomeIcon icon={fSearch} className="text-white/40 text-xs" />
-                          <input
-                            value={mediaQuery}
-                            onChange={(e) => setMediaQuery(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSearchMedia(mediaQuery, true)}
-                            placeholder="Search official artist, track, or album…"
-                            className="flex-1 bg-transparent text-xs text-white placeholder:text-white/35 outline-none"
-                          />
-                          <button
-                            onClick={() => handleSearchMedia(mediaQuery, true)}
-                            className="px-3.5 py-1 rounded-xl bg-white text-black font-semibold text-xs transition-transform active:scale-95"
-                          >
-                            Search
-                          </button>
+                        <div className="relative flex-1">
+                          <div className="flex items-center gap-3 px-4 py-2.5 rounded-[20px] bg-white/[0.04] border border-white/10 focus-within:border-white/30 transition-colors">
+                            <FontAwesomeIcon icon={fSearch} className="text-white/40 text-xs" />
+                            <input
+                              value={mediaQuery}
+                              onChange={(e) => setMediaQuery(e.target.value)}
+                              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  setShowSuggestions(false);
+                                  handleSearchMedia(mediaQuery, true);
+                                }
+                              }}
+                              placeholder="Search artist, track, album, or lyrics…"
+                              className="flex-1 bg-transparent text-xs text-white placeholder:text-white/35 outline-none"
+                            />
+                            <button
+                              onClick={() => {
+                                setShowSuggestions(false);
+                                handleSearchMedia(mediaQuery, true);
+                              }}
+                              className="px-3.5 py-1 rounded-xl bg-white text-black font-semibold text-xs transition-transform active:scale-95"
+                            >
+                              Search
+                            </button>
+                          </div>
+
+                          {/* Autocomplete Dropdown */}
+                          {showSuggestions && suggestions.length > 0 && (
+                            <ul className="absolute left-0 right-0 top-full mt-2 z-50 bg-[#120d1a] border border-white/20 shadow-2xl rounded-2xl overflow-hidden py-1 backdrop-blur-md">
+                              {suggestions.map((item, i) => (
+                                <li
+                                  key={i}
+                                  onMouseDown={() => {
+                                    setMediaQuery(item);
+                                    setShowSuggestions(false);
+                                    handleSearchMedia(item, true);
+                                  }}
+                                  className="px-4 py-2 text-xs text-white/80 hover:bg-white/10 hover:text-white cursor-pointer font-medium transition-colors flex items-center gap-2.5"
+                                >
+                                  <FontAwesomeIcon icon={fSearch} className="text-[10px] text-white/40" />
+                                  <span>{item}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
 
                         <button
@@ -2212,13 +2538,13 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setSelectedScreenshot(null)}
-                className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-2xl flex items-center justify-center p-8 pointer-events-auto"
+                className="fixed inset-0 z-[200] bg-[#120d1a]/90 flex items-center justify-center p-8 pointer-events-auto"
               >
-                <div className="relative max-w-5xl max-h-[85vh] rounded-[24px] overflow-hidden border border-white/30 bg-black">
+                <div className="relative max-w-5xl max-h-[85vh] overflow-hidden border-[4px] border-black bg-black" style={{ boxShadow: '10px 10px 0 #ff6b9d' }} onClick={(e) => e.stopPropagation()}>
                   <img src={selectedScreenshot} alt="Capture Preview" className="max-w-full max-h-[80vh] object-contain" />
                   <button
                     onClick={() => setSelectedScreenshot(null)}
-                    className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/80 hover:bg-white text-white hover:text-black flex items-center justify-center text-sm transition-colors border border-white/20"
+                    className="faye-btn absolute top-4 right-4 w-10 h-10 flex items-center justify-center text-sm"
                   >
                     <FontAwesomeIcon icon={fXmark} />
                   </button>
@@ -2244,8 +2570,8 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
               pointerEvents: 'none',
               boxShadow:
                 voiceState === 'listening'
-                  ? 'inset 0 0 60px 8px rgba(255,255,255,0.35), inset 0 0 120px 20px rgba(255,255,255,0.15)'
-                  : 'inset 0 0 40px 4px rgba(255,255,255,0.1)',
+                  ? 'inset 0 0 60px 8px rgba(255,107,157,0.5), inset 0 0 120px 20px rgba(255,107,157,0.2)'
+                  : 'inset 0 0 40px 4px rgba(255,107,157,0.25)',
               transition: 'box-shadow 0.4s ease',
             }}
           />
@@ -2271,11 +2597,10 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
               alignItems: 'center',
               gap: 12,
               padding: '10px 22px',
-              borderRadius: 999,
-              background: 'rgba(10,10,16,0.95)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              backdropFilter: 'blur(24px)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.8), 0 0 20px rgba(255,255,255,0.15)',
+              borderRadius: 0,
+              background: '#120d1a',
+              border: '3px solid #000',
+              boxShadow: '6px 6px 0 #ff6b9d',
             }}
           >
             {voiceState === 'listening' ? (
@@ -2284,27 +2609,27 @@ export default function FayeOverlay({ profile }: { profile?: any }) {
                   {[0.6, 1, 0.7, 1, 0.5].map((h, i) => (
                     <motion.div
                       key={i}
-                      style={{ width: 3, borderRadius: 99, background: '#fff', height: 14 }}
+                      style={{ width: 4, borderRadius: 0, background: '#ff6b9d', height: 16 }}
                       animate={{ scaleY: [h, 1.4, h * 0.4, 1.4, h] }}
                       transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.1, ease: 'easeInOut' }}
                     />
                   ))}
                 </div>
-                <span style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>
+                <span style={{ color: '#fff', fontSize: 14, fontFamily: "'Dela Gothic One', 'Impact', sans-serif" }}>
                   Listening…
                 </span>
-                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>
                   Alt+Q to stop
                 </span>
               </>
             ) : (
               <>
                 <motion.div
-                  style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }}
+                  style={{ width: 10, height: 10, borderRadius: 0, background: '#ff6b9d', border: '2px solid #000' }}
                   animate={{ opacity: [1, 0.3, 1], scale: [1, 1.3, 1] }}
                   transition={{ duration: 0.7, repeat: Infinity }}
                 />
-                <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 500 }}>
+                <span style={{ color: '#fff', fontSize: 14, fontFamily: "'Dela Gothic One', 'Impact', sans-serif" }}>
                   Processing…
                 </span>
                 {lastTranscript && (

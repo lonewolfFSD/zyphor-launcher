@@ -48,6 +48,9 @@ contextBridge.exposeInMainWorld('launcherAPI', {
     loadContext:    ()    => ipcRenderer.invoke('faye:loadContext'),
   },
 
+  ytmSearch: (query) => ipcRenderer.invoke('ytm-search', query),
+  ytmSuggest: (query) => ipcRenderer.invoke('ytm-suggest', query),
+
   steam: {
     getStatus:          () => ipcRenderer.invoke('steam:getStatus'),
     getAuthTicket:      () => ipcRenderer.invoke('steam:getAuthTicket'),
@@ -74,6 +77,8 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   launchGame: (args) => ipcRenderer.invoke('launch-game', args),
   isGameRunning: () => ipcRenderer.invoke('game:isRunning'),
   stopGame: () => ipcRenderer.invoke('game:stop'),
+  getPlaytime: () => ipcRenderer.invoke('getPlaytime'),
+  getPlayStats: () => ipcRenderer.invoke('stats:get'),
 
 readGameSettings: () => ipcRenderer.invoke('settings:readFromGame'),
 writeGameSettings: (settings) => ipcRenderer.invoke('settings:writeToGame', settings),

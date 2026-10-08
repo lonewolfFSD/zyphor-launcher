@@ -244,11 +244,13 @@ export function useSettings() {
       pending.current = next;
       notifyAll(next); // instantly updates every component using useSettings()
 
-      window.launcherAPI?.settingsChanged?.(next); // add this line
-
-      // Write synchronously so a hot-reload / page close never drops the update.
-      // The 250 ms debounce was swallowing writes on fast reloads.
+      // Debounce the IPC signal to avoid a synchronous disk write on every keystroke.
+      // In-memory state above is already updated instantly.
       clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        window.launcherAPI?.settingsChanged?.(next);
+      }, 300);
+
       clearTimeout(savedTimer.current);
       flush(next);
     },

@@ -14,6 +14,7 @@ import PlayButton from './images/play.png';
 import SquareButton from './images/square.png';
 import {
   faDiscord, faXTwitter, faYoutube, faRedditAlien, faTiktok, faInstagram,
+  faSteam,
 } from '@fortawesome/free-brands-svg-icons';
 import { useSettings, THEMES, ACCENTS } from '../hooks/useSettings.js';
 import { useTranslation } from '../i18n/index.jsx';
@@ -21,6 +22,9 @@ import { doc, getDoc, setDoc, collection, getDocs, query, orderBy, limit } from 
 import { db } from '../firebase';
 import Logo from '../../build-resources/logo.png';
 import GlassSurface from '../effects/GlassSurface.tsx';
+import FayePinkImg from './images/faye/faye-pink.png';
+import StayBanner from './images/stay_banner.jpg';
+import FayeNew from './images/faye-new.jpg';
 
 // ── Status check endpoints ─────────────────────────────────────────────────────
 const SERVER_STATUS_URL    = import.meta.env.VITE_SERVER_STATUS_URL    ?? null;
@@ -56,6 +60,39 @@ function getGreeting(t, displayName, variant = 1) {
 let homeVisited = false;
 
 const placeholderNews = [];
+
+function GlassLayer({ borderRadius, distortionScale = -180, blur = 11 }) {
+  const { settings } = useSettings();
+  const theme = THEMES[settings?.theme] || THEMES.oled;
+  const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
+
+  if (isLiquidGlass) {
+    return (
+      <GlassSurface
+        width="100%"
+        height="100%"
+        borderRadius={borderRadius}
+        brightness={50}
+        opacity={0.93}
+        blur={blur}
+        distortionScale={distortionScale}
+        style={{ width: '100%', height: '100%' }}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="absolute inset-0"
+      style={{
+        borderRadius,
+        backdropFilter: 'blur(12px) saturate(1.4)',
+        WebkitBackdropFilter: 'blur(12px) saturate(1.4)',
+        background: `${theme.surface}55`,
+      }}
+    />
+  );
+}
 
 const HP_SHIMMER_CSS = `
 @keyframes hp-shimmer {
@@ -159,6 +196,7 @@ export default function HomePage({ profile }) {
   const [serverStatus, setServerStatus]     = useState('checking');
   const [updateStatus, setUpdateStatus]     = useState('checking');
   const [playtime, setPlaytime]             = useState(null);
+  const [playStats, setPlayStats]           = useState(null);
   const [updateInfo, setUpdateInfo]         = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -206,14 +244,75 @@ export default function HomePage({ profile }) {
     }
 
     try {
-      const q = query(collection(db, 'news'), orderBy('date', 'desc'), limit(5));
-      const snap = await getDocs(q);
-      setNews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch {
+      const parseItemDate = (data) => {
+        if (!data) return new Date(0);
+        const t = data.timestamp ?? data.createdAt ?? data.date;
+        if (!t) return new Date(0);
+        if (typeof t.toDate === 'function') return t.toDate();
+        if (typeof t === 'object' && t.seconds) return new Date(t.seconds * 1000);
+        const d = new Date(t);
+        return isNaN(d.getTime()) ? new Date(0) : d;
+      };
+
+      const formatItemDate = (dateObj) => {
+        if (!dateObj || isNaN(dateObj.getTime()) || dateObj.getTime() === 0) return '';
+        return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      };
+
+      const fetchColl = async (name) => {
+        try {
+          const snap = await getDocs(collection(db, name));
+          return snap.docs.map((d) => ({ id: d.id, _collection: name, ...d.data() }));
+        } catch (err) {
+          console.warn(`[HomePage] Failed to fetch collection ${name}:`, err);
+          return [];
+        }
+      };
+
+      const [devlogsDocs, fayeDocs, fayeHyphenDocs] = await Promise.all([
+        fetchColl('devlogs'),
+        fetchColl('faye_updates'),
+        fetchColl('faye-updates'),
+      ]);
+
+      const seen = new Set();
+      const allRaw = [...devlogsDocs, ...fayeDocs, ...fayeHyphenDocs].filter((item) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+
+      const normalized = allRaw.map((item) => {
+        const dObj = parseItemDate(item);
+        const link = item.externalLink || item.url || item.link || null;
+        const isFaye = item._collection.includes('faye');
+
+        // Exclusively use dedicated local image assets: stay_banner.jpg for STAY and faye-pink.png for Faye
+        const assignedImage = isFaye ? FayeNew : StayBanner;
+
+        return {
+          id: item.id,
+          title: item.title || item.heading || 'Untitled Update',
+          content: item.content || item.description || item.body || '',
+          image: assignedImage,
+          url: link,
+          externalLink: link,
+          date: formatItemDate(dObj),
+          rawDate: dObj.getTime(),
+          category: isFaye ? 'Faye Update' : 'Devlog',
+          source: item._collection,
+        };
+      });
+
+      normalized.sort((a, b) => b.rawDate - a.rawDate);
+      setNews(normalized.slice(0, 10));
+    } catch (err) {
+      console.warn('[HomePage] Failed to load news/devlogs:', err);
       setNews([]);
     }
 
     window.launcherAPI?.getPlaytime?.().then((p) => setPlaytime(p ?? null)).catch(() => {});
+    window.launcherAPI?.getPlayStats?.().then((s) => setPlayStats(s ?? null)).catch(() => {});
 
     try {
       const snap = await getDoc(doc(db, 'meta', 'status'));
@@ -265,7 +364,7 @@ export default function HomePage({ profile }) {
       setUpdateDlState('downloading');
     });
     window.launcherAPI?.onUpdateDownloaded?.(() => setUpdateDlState('downloaded'));
-  }, []); // eslint-disable-line
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 
 
@@ -277,44 +376,20 @@ export default function HomePage({ profile }) {
   }, [banners.length, motionOn]);
   const banner = banners[bannerIndex];
 
-  function GlassLayer({ borderRadius, distortionScale = -180, blur = 11 }) {
-  const { settings } = useSettings();
-  const theme = THEMES[settings?.theme] || THEMES.oled;
-  const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
-
-  if (isLiquidGlass) {
-    return (
-      <GlassSurface
-        width="100%"
-        height="100%"
-        borderRadius={borderRadius}
-        brightness={50}
-        opacity={0.93}
-        blur={blur}
-        distortionScale={distortionScale}
-        style={{ width: '100%', height: '100%' }}
-      />
-    );
-  }
-
-  return (
-    <div
-      className="absolute inset-0"
-      style={{
-        borderRadius,
-        backdropFilter: 'blur(12px) saturate(1.4)',
-        WebkitBackdropFilter: 'blur(12px) saturate(1.4)',
-        background: `${theme.surface}55`,
-      }}
-    />
-  );
-}
-
   function handlePurchase() {
     if (window.launcherAPI?.openExternal) {
       window.launcherAPI.openExternal(STAY_STEAM_STORE_URL);
     } else {
       window.open(STAY_STEAM_STORE_URL, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  function handleOpenExternalLink(url) {
+    if (!url || url === '#') return;
+    if (window.launcherAPI?.openExternal) {
+      window.launcherAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
   }
 
@@ -386,10 +461,6 @@ export default function HomePage({ profile }) {
         `--zyphor-uid=${profile.uid ?? ''}`,
         `--zyphor-name=${profile.displayName ?? ''}`,
         `--zyphor-vip=${profile.isVip ? '1' : '0'}`,
-        `--zyphor-avatar=${profile.photoURL ?? ''}`,
-        `--zyphor-location=${profile.location ?? ''}`,
-        `--zyphor-timezone=${profile.timezone ?? ''}`,
-        `--zyphor-gender=${profile.gender ?? ''}`,
       ];
 
       const result = await window.launcherAPI?.launchGame?.(launchArgs);
@@ -533,7 +604,24 @@ export default function HomePage({ profile }) {
             label={serverStatus === 'online' ? t('home.serverStatus', {}, 'Servers online') : serverStatus === 'checking' ? t('home.checkingServers', {}, 'Checking servers…') : t('home.serversOffline', {}, 'Servers offline')}
             tone={serverStatus === 'offline' ? '#c1633a' : accent.hex}
           />
-          {playtime != null && (
+          {playStats != null && (
+            <>
+              <Divider theme={theme} />
+              <div className="flex flex-col gap-1 px-1 py-0.5">
+                <StatusChip icon={faClock} label={`${playStats.totalHours} hrs total`} />
+                {playStats.streak > 0 && (
+                  <StatusChip icon={faCircleCheck} label={`${playStats.streak}-day streak 🔥`} tone={accent.hex} />
+                )}
+                {playStats.weeklyHours > 0 && (
+                  <StatusChip icon={faChevronRight} label={`${playStats.weeklyHours} hrs this week`} />
+                )}
+                {playStats.longestHours > 0 && (
+                  <StatusChip icon={faNewspaper} label={`Best: ${playStats.longestHours} hrs`} />
+                )}
+              </div>
+            </>
+          )}
+          {playStats == null && playtime != null && (
             <>
               <Divider theme={theme} />
               <StatusChip icon={faClock} label={`${playtime} ${t('home.hours', {}, 'hrs')} ${t('home.playTime', {}, 'played')}`} />
@@ -545,7 +633,10 @@ export default function HomePage({ profile }) {
         <motion.div
           {...fadeUp}
           transition={{ duration: 0.4, delay: 0.05 }}
-          className="hp-banner relative h-64 3xl:h-70 shrink-0 overflow-hidden rounded-[2.5em] border"
+          onClick={() => {
+            if (banner?.url) handleOpenExternalLink(banner.url);
+          }}
+          className={`hp-banner relative h-64 3xl:h-70 shrink-0 overflow-hidden rounded-[2.5em] border ${banner?.url ? 'cursor-pointer' : ''}`}
           style={{ borderColor: theme.border, backgroundColor: `${theme.surface}66`, }}
         >
           <AnimatePresence mode="wait">
@@ -559,26 +650,21 @@ export default function HomePage({ profile }) {
               className="absolute inset-0"
             >
               {banner?.video ? (
-                <BannerVideo src={banner.video} poster={banner.image} active={motionOn} fadeMask={fadeMask} />
-              ) : banner?.image ? (
-                <motion.img
-                  src={banner.image}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  style={fadeMask}
-                  animate={motionOn ? { scale: [1, 1.05] } : {}}
-                  transition={{ duration: 7, ease: 'linear' }}
-                />
+                <BannerVideo src={banner.video} poster={banner?.image || StayBanner} active={motionOn} fadeMask={fadeMask} />
               ) : (
                 <motion.img
-                  src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/4956550/76bc20881fac10578131cd62da809d70aef8ffa3/library_hero.jpg?t=1784562601"
+                  src={banner?.image || StayBanner}
                   alt=""
                   className="h-full w-full object-cover"
                   style={fadeMask}
                   animate={motionOn ? { scale: [1, 1.05] } : {}}
                   transition={{ duration: 7, ease: 'linear' }}
+                  onError={(e) => {
+                    if (e.currentTarget.src !== StayBanner) {
+                      e.currentTarget.src = StayBanner;
+                    }
+                  }}
                 />
-                
               )}
             </motion.div>
 
@@ -588,8 +674,20 @@ export default function HomePage({ profile }) {
             
           </AnimatePresence>
 
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 py-10 px-12">
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 py-10 px-12 pointer-events-none">
+            {/* {banner?.category && (
+              <span
+                className="inline-block rounded-md px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider mb-2 backdrop-blur-md"
+                style={{
+                  backgroundColor: banner.source?.includes('faye') ? '#ec489944' : `${accent.hex}33`,
+                  color: banner.source?.includes('faye') ? '#f472b6' : accent.hex,
+                  border: `1px solid ${banner.source?.includes('faye') ? '#ec489966' : accent.hex + '66'}`,
+                }}
+              >
+                {banner.category}
+              </span>
+            )} */}
             <h2 className="mt-1 text-[1.9em] font-medium text-bone">
               {banner?.title ?? greeting}
             </h2>
@@ -597,11 +695,14 @@ export default function HomePage({ profile }) {
           </div>
 
           {banners.length > 1 && (
-            <div className="absolute bottom-8 right-10 flex gap-2">
+            <div className="absolute bottom-8 right-10 flex gap-2 z-10">
               {banners.map((_, i) => (
                 <button
                   key={i}
-                  onClick={() => setBannerIndex(i)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setBannerIndex(i);
+                  }}
                   className="h-3 rounded-full transition-all"
                   style={{
                     width: i === bannerIndex ? 80 : 12,
@@ -710,46 +811,82 @@ export default function HomePage({ profile }) {
           <h2 className="text-[16px] font-semibold tracking-tight text-bone">
             {t('home.latestNews', {}, "What's New?")}
           </h2>
-          {/* <span
-            className="ml-auto rounded-lg px-2 py-1 text-[10px] font-bold"
-            style={{ backgroundColor: `${accent.hex}22`, color: `#${accent.hex}99`, border: `2px solid ${accent.hex}66` }}
+          <span
+            className="ml-auto rounded-lg px-2 py-0.5 text-[10px] font-bold"
+            style={{ backgroundColor: `${accent.hex}11`, color: `#${accent.hex}99`, border: `2px solid ${accent.hex}66` }}
           >
             {banners.length}
-          </span> */}
+          </span>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           <div className="flex flex-col font-[Manrope]">
-            {banners.map((item, i) => (
-              <a
-                key={item.id ?? i}
-                href={item.url ?? '#'}
-                className="group flex flex-col items-center gap-3 border-b px-4 py-3.5 transition-colors hover:bg-white/[0.05]"
-                style={{ borderColor: theme.border }}
-              >
-                <div className="h-32 w-full shrink-0 overflow-hidden rounded-xl bg-white/5">
-                  {item.image ? (
-                    <img src={item.image} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                  ) : (
+            {banners.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center text-ash/40">
+                <FontAwesomeIcon icon={faNewspaper} className="text-2xl mb-2 opacity-30" />
+                <p className="text-xs">No updates at this time.</p>
+              </div>
+            ) : (
+              banners.map((item, i) => (
+                <a
+                  key={item.id ?? i}
+                  href={item.url ?? '#'}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleOpenExternalLink(item.url);
+                  }}
+                  className="group flex flex-col items-center gap-3 border-b px-4 py-3.5 transition-colors hover:bg-white/[0.05]"
+                  style={{ borderColor: theme.border }}
+                >
+                  <div className="relative h-20 w-full shrink-0 overflow-hidden rounded-xl bg-white/5">
+                    {item.image ? (
+                      <img
+                        src={item.image}
+                        alt={item.title}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        onError={(e) => {
+                          const fallback = item.fallbackImage || (item.source?.includes('faye') ? FayePinkImg : StayBanner);
+                          if (e.currentTarget.src !== fallback) {
+                            e.currentTarget.src = fallback;
+                          } else {
+                            e.currentTarget.style.display = 'none';
+                            const fallbackEl = e.currentTarget.parentElement?.querySelector('.news-fallback-placeholder');
+                            if (fallbackEl) fallbackEl.style.display = 'flex';
+                          }
+                        }}
+                      />
+                    ) : null}
                     <div
-                      className="flex h-full w-full items-center justify-center"
+                      className={`news-fallback-placeholder h-full w-full items-center justify-center ${item.image ? 'hidden' : 'flex'}`}
                       style={{ background: `linear-gradient(135deg, ${theme.surface}, ${theme.bg})` }}
                     >
                       <FontAwesomeIcon icon={faNewspaper} className="text-[16px] text-ash/20" />
                     </div>
-                  )}
-                </div>
-                <div className="flex w-full items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-bone/80 transition-colors group-hover:text-bone">
-                      {item.title}{' '}
-                      <FontAwesomeIcon icon={faChevronRight} className="shrink-0 text-[9px] text-ash/80 transition-all group-hover:text-ash/60 group-hover:translate-x-0.5" />
-                    </p>
-                    <p className="mt-1.5 text-[11px] font-medium text-ash/40">{item.date}</p>
+                    {item.category && (
+                      <span
+                        className="absolute px-3 py-0.5 top-2 left-2 rounded-md text-[7px] font-extrabold uppercase  backdrop-blur-sm"
+                        style={{
+                          backgroundColor: item.source?.includes('faye') ? '#ec489944' : `${accent.hex}33`,
+                          color: item.source?.includes('faye') ? '#f472b6' : accent.hex,
+                          border: `1px solid ${item.source?.includes('faye') ? '#ec489966' : accent.hex + '66'}`,
+                        }}
+                      >
+                        <span className="">{item.category}</span>
+                      </span>
+                    )}
                   </div>
-                </div>
-              </a>
-            ))}
+                  <div className="flex w-full items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-[12px] font-semibold leading-snug text-bone/80 transition-colors group-hover:text-bone">
+                        {item.title}{' '}
+                        <FontAwesomeIcon icon={faChevronRight} className="shrink-0 hidden text-[9px] text-ash/80 transition-all group-hover:text-ash/60 group-hover:translate-x-0.5" />
+                      </p>
+                      <p className="mt-[2px] text-[9px] font-medium text-ash/40">{item.date}</p>
+                    </div>
+                  </div>
+                </a>
+              ))
+            )}
           </div>
 
           <div className="p-3">
@@ -775,17 +912,23 @@ export default function HomePage({ profile }) {
 
         <div className="flex shrink-0 items-center justify-around border-t px-3 py-3" style={{ borderColor: theme.border }}>
           {[
-            { icon: faDiscord,     href: '#', color: '#5865F2', label: 'Discord'   },
+            { icon: faDiscord,     href: '#', color: '#587cf2', label: 'Discord'   },
             { icon: faXTwitter,    href: '#', color: '#e7e7e7', label: 'X'         },
             { icon: faYoutube,     href: '#', color: '#FF0000', label: 'YouTube'   },
-            { icon: faInstagram,   href: '#', color: '#FF4500', label: 'Instagram' },
-            { icon: faRedditAlien, href: '#', color: '#FF4500', label: 'Reddit'    },
+            { icon: faInstagram,   href: '#', color: '#f53db7', label: 'Instagram' },
+            { icon: faSteam, href: '#', color: '#ffffff', label: 'Steam'     },
             { image: Logo, href: 'https://zyphorstudios.com', label: 'Website', type: 'image' },
           ].map(({ icon, image, href, color, label, type }) => (
             <a
               key={label}
               href={href}
               title={label}
+              onClick={(e) => {
+                if (href && href !== '#') {
+                  e.preventDefault();
+                  handleOpenExternalLink(href);
+                }
+              }}
               className="group flex flex-col items-center gap-1"
               onMouseEnter={(e) => {
                 const svg  = e.currentTarget.querySelector('svg');
