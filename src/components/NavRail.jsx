@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
@@ -65,11 +65,11 @@ function NavItems({ items, activePage, onNavigate, accent, isLiquidGlass }) {
 
         return (
           <li key={item.id} className="nr-item relative">
-            {/* Active indicator pill */}
+            {/* Active indicator pill with Apple fluid spring */}
             {isActive && (
               <motion.span
                 layoutId="nav-active"
-                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ type: 'spring', stiffness: 420, damping: 30, mass: 0.7 }}
                 className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none"
               >
                 {isLiquidGlass ? (
@@ -99,9 +99,12 @@ function NavItems({ items, activePage, onNavigate, accent, isLiquidGlass }) {
               </motion.span>
             )}
 
-            <button
+            <motion.button
               type="button"
               onClick={() => onNavigate(item.id)}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.90 }}
+              transition={{ type: 'spring', stiffness: 460, damping: 26 }}
               aria-current={isActive ? 'page' : undefined}
               title={item.label}
               style={{
@@ -112,12 +115,12 @@ function NavItems({ items, activePage, onNavigate, accent, isLiquidGlass }) {
                   ? `drop-shadow(0 0 6px ${accent.hex}cc)`
                   : undefined,
               }}
-              className={`relative flex h-11 w-11 items-center justify-center rounded-xl transition-colors duration-150 ${
-                isActive ? '' : 'text-ash hover:bg-white/[0.05] hover:text-bone'
+              className={`relative flex h-11 w-11 items-center justify-center rounded-xl transition-colors duration-200 ${
+                isActive ? '' : 'text-ash hover:bg-white/[0.06] hover:text-bone'
               }`}
             >
               <FontAwesomeIcon icon={item.icon} style={{ fontSize: 20 }} />
-            </button>
+            </motion.button>
           </li>
         );
       })}
@@ -135,10 +138,10 @@ export default function NavRail({ activePage, onNavigate, onExit, profile, onLog
   const avatarBtnRef = useRef(null);
   const railRef = useRef(null);
 
-  const navItems = NAV_ITEMS_DEF.map((item) => ({
+  const navItems = useMemo(() => NAV_ITEMS_DEF.map((item) => ({
     ...item,
     label: t(item.key, {}, item.defaultLabel),
-  }));
+  })), [t]);
 
   const theme  = THEMES[settings?.theme]  || THEMES.oled;
   const accent = ACCENTS[settings?.accent] || ACCENTS.bulb;
@@ -154,7 +157,7 @@ const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
 
       // Start hidden
       gsap.set('.nr-section', { opacity: 0, y: 14 });
-      gsap.set('.nr-item', { opacity: 0, scale: 0.7 });
+      gsap.set('.nr-item', { opacity: 0, scale: 0.75 });
       gsap.set(railRef.current, { opacity: 0, x: -18 });
 
       tl.to(railRef.current, { opacity: 1, x: 0, duration: 0.45 }, 0)
@@ -162,30 +165,30 @@ const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
         .to('.nr-avatar', { opacity: 1, y: 0, duration: 0.4 }, 0.08)
         // Divider + quick launch
         .to('.nr-launch', { opacity: 1, y: 0, duration: 0.4 }, 0.16)
-        // Nav items — staggered
+        // Nav items — staggered with Apple fluid ease
         .to('.nr-item', {
           opacity: 1,
           scale: 1,
-          duration: 0.38,
-          stagger: 0.055,
-          ease: 'back.out(1.6)',
-        }, 0.24)
+          duration: 0.42,
+          stagger: 0.045,
+          ease: 'power3.out',
+        }, 0.22)
         // Footer (settings + exit)
-        .to('.nr-footer', { opacity: 1, y: 0, duration: 0.4 }, 0.42);
+        .to('.nr-footer', { opacity: 1, y: 0, duration: 0.4 }, 0.38);
     }, railRef);
 
     return () => ctx.revert();
   }, [motionOn]);
 
-  // Soft pulse on active page change
+  // Soft pulse on active page change with Apple fluid settling
   useGSAP(() => {
     if (!railRef.current || !motionOn) return;
     const activeBtn = railRef.current.querySelector('[aria-current="page"]');
     if (!activeBtn) return;
     gsap.fromTo(
       activeBtn,
-      { scale: 0.88 },
-      { scale: 1, duration: 0.35, ease: 'back.out(2)' }
+      { scale: 0.94 },
+      { scale: 1, duration: 0.35, ease: 'power2.out' }
     );
   }, [activePage, motionOn]);
 
@@ -444,12 +447,15 @@ const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
 </div>
         {/* Avatar */}
         <div className="nr-section nr-avatar flex flex-col items-center">
-          <button
+          <motion.button
             ref={avatarBtnRef}
             type="button"
             onClick={toggleAccount}
+            whileHover={{ scale: 1.07 }}
+            whileTap={{ scale: 0.92 }}
+            transition={{ type: 'spring', stiffness: 450, damping: 25 }}
             title={p?.displayName ?? 'Account'}
-            className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl border transition-all hover:scale-105 active:scale-95"
+            className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl border transition-colors"
             style={{
               borderColor: accountOpen
                 ? accentColor
@@ -475,28 +481,31 @@ const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
                 style={{ boxShadow: `inset 0 0 0 1.5px ${vipGold}66` }}
               />
             )}
-          </button>
+          </motion.button>
         </div>
 
         <div className="nr-section nr-launch my-3 h-px w-8" style={{ backgroundColor: theme.border }} />
 
         {/* Quick launch */}
         <div className="nr-section nr-launch">
-          <button
+          <motion.button
             type="button"
             onClick={handleQuickLaunch}
             disabled={launchState === 'launching'}
+            whileHover={{ scale: 1.07 }}
+            whileTap={{ scale: 0.92 }}
+            transition={{ type: 'spring', stiffness: 460, damping: 24 }}
             title={t('home.quickLaunch', {}, 'Quick Launch')}
             style={{
               backgroundColor: launchState === 'error' ? undefined : accent.hex,
               color: accent.on,
             }}
-            className={`nr-launch-btn flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-transform duration-150 ${
+            className={`nr-launch-btn flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-lg ${
               launchState === 'launching'
                 ? 'cursor-wait opacity-70'
                 : launchState === 'error'
                   ? 'bg-rust text-bone'
-                  : 'hover:scale-[1.05] active:scale-95'
+                  : ''
             }`}
           >
             {launchState === 'launching' ? (
@@ -508,7 +517,7 @@ const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
             ) : (
               <FontAwesomeIcon icon={faPlay} style={{ fontSize: 20 }} />
             )}
-          </button>
+          </motion.button>
         </div>
 
         <div className="nr-section nr-launch my-3 h-px w-8" style={{ backgroundColor: theme.border }} />
@@ -526,24 +535,30 @@ const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
 
         {/* Settings + exit */}
         <div className="nr-section nr-footer mt-2 flex flex-col items-center gap-3">
-          <button
+          <motion.button
             type="button"
             onClick={() => handleNav('settings')}
+            whileHover={{ scale: 1.10 }}
+            whileTap={{ scale: 0.88 }}
+            transition={{ type: 'spring', stiffness: 480, damping: 25 }}
             title={t('settings.title', {}, 'Settings')}
             aria-current={activePage === 'settings' ? 'page' : undefined}
             style={{ color: activePage === 'settings' ? accent.hex : undefined }}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-ash/70 transition-colors hover:bg-white/[0.05] hover:text-bone"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-ash/70 transition-colors hover:bg-white/[0.06] hover:text-bone"
           >
             <FontAwesomeIcon icon={faGear} style={{ fontSize: 20 }} />
-          </button>
-          <button
+          </motion.button>
+          <motion.button
             type="button"
             onClick={onExit}
+            whileHover={{ scale: 1.10 }}
+            whileTap={{ scale: 0.88 }}
+            transition={{ type: 'spring', stiffness: 480, damping: 25 }}
             title={t('common.close', {}, 'Exit')}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-ash/50 transition-colors hover:bg-rust/10 hover:text-rust"
           >
             <FontAwesomeIcon icon={faRightFromBracket} style={{ fontSize: 20 }} />
-          </button>
+          </motion.button>
         </div>
       </nav>
     </>

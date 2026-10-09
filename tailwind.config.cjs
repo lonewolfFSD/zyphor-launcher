@@ -39,6 +39,11 @@ module.exports = {
       backdropBlur: {
         glass: '20px',
       },
+      transitionTimingFunction: {
+        'apple-ease': 'cubic-bezier(0.16, 1, 0.3, 1)',
+        'apple-spring': 'cubic-bezier(0.25, 1, 0.5, 1)',
+        'apple-snappy': 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+      },
       keyframes: {
         rise: {
           '0%': { opacity: '0', transform: 'translateY(12px)' },
@@ -52,11 +57,21 @@ module.exports = {
           '0%': { opacity: '0', transform: 'scale(0.96)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
         },
+        appleSlideUp: {
+          '0%': { opacity: '0', transform: 'translateY(12px) scale(0.985)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        applePop: {
+          '0%': { opacity: '0', transform: 'scale(0.94)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
+        },
       },
       animation: {
         rise: 'rise 0.55s cubic-bezier(0.16,1,0.3,1) both',
         'fade-in': 'fadeIn 0.4s ease both',
         'scale-in': 'scaleIn 0.45s cubic-bezier(0.16,1,0.3,1) both',
+        'apple-slide-up': 'appleSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'apple-pop': 'applePop 0.35s cubic-bezier(0.16, 1, 0.3, 1) both',
       },
     },
   },

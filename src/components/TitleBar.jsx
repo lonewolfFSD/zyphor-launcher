@@ -265,12 +265,12 @@ export default function TitleBar({ profile }) {
             <>
               <div className="fixed inset-0 z-40" style={{ WebkitAppRegion: 'no-drag' }} onClick={() => setMenuOpen(false)} />
               <motion.div
-                initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                initial={{ opacity: 0, y: -8, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -4, scale: 0.97 }}
-                transition={{ duration: 0.12, ease: 'easeOut' }}
-                className="absolute left-3 top-full z-50 mt-1 min-w-[260px] overflow-hidden rounded-xl border shadow-2xl"
-                style={{ backgroundColor: `${theme.surface}f8`, borderColor: theme.border, backdropFilter: 'blur(12px)', WebkitAppRegion: 'no-drag' }}
+                exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                transition={{ type: 'spring', stiffness: 450, damping: 28 }}
+                className="absolute left-3 top-full z-50 mt-1 min-w-[260px] overflow-hidden rounded-2xl border shadow-2xl"
+                style={{ backgroundColor: `${theme.surface}f8`, borderColor: theme.border, backdropFilter: 'blur(16px)', WebkitAppRegion: 'no-drag' }}
               >
                 <div className="px-3 py-2.5 border-b" style={{ borderColor: theme.border }}>
                   <p className="font-mono text-[9px] uppercase tracking-widest" style={{ color: `${theme.text}44` }}>v{APP_VERSION}</p>
@@ -284,7 +284,7 @@ export default function TitleBar({ profile }) {
                       <button
                         key={i}
                         type="button"
-                        className="flex w-full items-center gap-3 px-3 py-2 transition-colors duration-100 text-left"
+                        className="flex w-full items-center gap-3 px-3 py-2 transition-all duration-150 active:scale-[0.98] text-left"
                         onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = `${accentColor}12`; }}
                         onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                         onClick={() => { item.action(); setMenuOpen(false); }}
@@ -396,11 +396,13 @@ export default function TitleBar({ profile }) {
 
 function TitleBarButton({ children, label, onClick, danger = false, accentColor, theme }) {
   return (
-    <button
+    <motion.button
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex h-7 w-8 items-center justify-center rounded transition-all duration-150"
+      whileTap={{ scale: 0.88 }}
+      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+      className="flex h-7 w-8 items-center justify-center rounded transition-colors duration-150"
       style={{ color: `${theme.text}55` }}
       onMouseEnter={(e) => {
         e.currentTarget.style.backgroundColor = danger ? 'rgba(185,50,50,0.55)' : `${accentColor}18`;
@@ -412,6 +414,6 @@ function TitleBarButton({ children, label, onClick, danger = false, accentColor,
       }}
     >
       {children}
-    </button>
+    </motion.button>
   );
 }

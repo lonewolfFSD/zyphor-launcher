@@ -608,21 +608,31 @@ export default function WorkshopWallpapersModal({
     }
   }
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-sans text-white">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.98, y: 8 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.98, y: 8 }}
-        transition={{ duration: 0.16 }}
-        className="relative flex flex-col w-full max-w-5xl h-[86vh] rounded-xl border shadow-2xl overflow-hidden"
-        style={{
-          backgroundColor: bgColor,
-          borderColor: borderColor,
-        }}
-      >
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="workshop-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 font-sans text-white"
+          onClick={onClose}
+        >
+          <motion.div
+            key="workshop-dialog"
+            initial={{ opacity: 0, scale: 0.94, y: 14 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 10 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 28, mass: 0.8 }}
+            onClick={(e) => e.stopPropagation()}
+            className="relative flex flex-col w-full max-w-5xl h-[86vh] rounded-2xl border shadow-2xl overflow-hidden"
+            style={{
+              backgroundColor: bgColor,
+              borderColor: borderColor,
+            }}
+          >
         {/* Header Bar */}
         <div
           className="flex items-center justify-between border-b px-6 py-5"
@@ -1566,6 +1576,8 @@ export default function WorkshopWallpapersModal({
           )}
         </div>
       </motion.div>
-    </div>
+    </motion.div>
+    )}
+  </AnimatePresence>
   );
 }

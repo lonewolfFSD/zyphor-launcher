@@ -174,11 +174,11 @@ export default function FriendsPage({ profile }) {
 
   const friendIds = useMemo(() => new Set(friendsList.map(f => f.id)), [friendsList]);
 
-  const displayFriends = friendsList.filter(f =>
+  const displayFriends = useMemo(() => friendsList.filter(f =>
     friendFilter === 'all' ? true : f.status === friendFilter
-  );
-  const onlineCount  = friendsList.filter(f => f.status === 'online' || f.status === 'ingame').length;
-  const displaySearch = searchQuery.trim().length >= 2 ? searchResults : defaultUsers;
+  ), [friendsList, friendFilter]);
+  const onlineCount = useMemo(() => friendsList.filter(f => f.status === 'online' || f.status === 'ingame').length, [friendsList]);
+  const displaySearch = useMemo(() => searchQuery.trim().length >= 2 ? searchResults : defaultUsers, [defaultUsers, searchQuery, searchResults]);
 
   const handleSendRequest = async (targetId) => {
     if (!uid || sentTo.has(targetId) || friendIds.has(targetId)) return;
@@ -236,27 +236,33 @@ export default function FriendsPage({ profile }) {
       {/* Tabs */}
       <div className="flex shrink-0 rounded-xl overflow-hidden border" style={{ borderColor: theme.border }}>
         {TABS.map(t => (
-          <button
+          <motion.button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className="relative flex-1 flex items-center justify-center gap-2 py-3 text-xs font-display font-semibold uppercase tracking-wider transition-all"
+            whileTap={{ scale: 0.96 }}
+            transition={{ type: 'spring', stiffness: 460, damping: 26 }}
+            className="relative flex-1 flex items-center justify-center gap-2 py-3 text-xs font-display font-semibold uppercase tracking-wider"
             style={{
               backgroundColor: tab === t.id ? accentColor : 'transparent',
               color: tab === t.id ? (profile?.isVip ? '#000' : accent.on) : undefined,
               opacity: tab === t.id ? 1 : 0.45,
+              transition: 'background-color 0.26s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, color 0.2s ease',
             }}
           >
             <FontAwesomeIcon icon={t.icon} style={{ fontSize: 12 }} />
             {t.label}
             {t.badge > 0 && (
-              <span
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 22 }}
                 className="absolute top-1 right-2 h-4 w-4 rounded-full flex items-center justify-center text-[10px] font-mono font-bold"
                 style={{ backgroundColor: '#ef4444', color: '#fff' }}
               >
                 {t.badge}
-              </span>
+              </motion.span>
             )}
-          </button>
+          </motion.button>
         ))}
       </div>
 

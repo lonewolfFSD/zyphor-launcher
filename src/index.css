@@ -59,6 +59,39 @@
   .stay-slider::-webkit-slider-thumb {
     @apply appearance-none h-3.5 w-3.5 rounded-full bg-bulb;
   }
+
+  /* Apple-inspired fluid transition & interaction utilities */
+  .apple-transition {
+    transition: all 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .apple-transition-fast {
+    transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .apple-press {
+    transition: transform 0.16s cubic-bezier(0.25, 1, 0.5, 1), filter 0.16s ease;
+  }
+  .apple-press:active {
+    transform: scale(0.96);
+  }
+
+  .apple-hover-lift {
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.28s ease;
+  }
+  .apple-hover-lift:hover {
+    transform: translateY(-2px);
+  }
+  .apple-hover-lift:active {
+    transform: translateY(0px) scale(0.985);
+  }
+
+  /* Smooth GPU compositing hints */
+  .apple-gpu {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    will-change: transform, opacity;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

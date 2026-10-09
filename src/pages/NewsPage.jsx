@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import { memo, useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
 gsap.registerPlugin(useGSAP);
@@ -271,6 +271,7 @@ export default function NewsPage() {
 
   const totalNewsCount = useMemo(() => releases.filter((e) => e.type === 'devlog' || e.type === 'faye').length, [releases]);
   const totalPatchCount = useMemo(() => releases.filter((e) => e.type === 'release').length, [releases]);
+  const openEntry = useCallback((entry, isLatest) => setSelectedEntry({ ...entry, isLatest }), []);
 
   return (
     <div className="relative h-full overflow-y-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
@@ -469,7 +470,7 @@ export default function NewsPage() {
                             isLatest={i === 0}
                             theme={theme}
                             accent={accent}
-                            onOpen={() => setSelectedEntry({ ...entry, isLatest: i === 0 })}
+                            onOpen={openEntry}
                           />
                         ))}
                       </div>
@@ -518,7 +519,7 @@ export default function NewsPage() {
                             isLatest={i === 0}
                             theme={theme}
                             accent={accent}
-                            onOpen={() => setSelectedEntry({ ...entry, isLatest: i === 0 })}
+                            onOpen={openEntry}
                           />
                         ))}
                       </div>
@@ -547,8 +548,9 @@ export default function NewsPage() {
 
 // ── Release card ───────────────────────────────────────────────────────────────
 
-function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
+const ReleaseCard = memo(function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
   const { t } = useTranslation();
+  const handleOpen = useCallback(() => onOpen(entry, isLatest), [entry, isLatest, onOpen]);
 
   const isDevlog = entry.type === 'devlog';
   const isFaye = entry.type === 'faye';
@@ -594,9 +596,11 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.04 }}
+      initial={{ opacity: 0, y: 12, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.36, delay: index * 0.035, ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -3, scale: 1.012, transition: { type: 'spring', stiffness: 380, damping: 24 } }}
+      whileTap={{ scale: 0.985, y: 0, transition: { type: 'spring', stiffness: 480, damping: 30 } }}
     >
       <GlassLayer
         borderRadius={30}
@@ -727,7 +731,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
           <div className="-mt-1">
             <button
               type="button"
-              onClick={onOpen}
+              onClick={handleOpen}
               className="w-full rounded-xl border py-2.5 text-[11px] uppercase font-extrabold tracking-wide transition-colors hover:text-bone"
               style={{ borderColor: `${accent.hex}55`, color: accent.hex, backgroundColor: `${accent.hex}10`, fontFamily: 'Manrope, sans-serif' }}
             >
@@ -738,7 +742,7 @@ function ReleaseCard({ entry, index, isLatest, theme, accent, onOpen }) {
       </GlassLayer>
     </motion.div>
   );
-}
+});
 
 // ── Release modal ──────────────────────────────────────────────────────────────
 
@@ -751,20 +755,20 @@ function ReleaseModal({ entry, theme, accent, onClose }) {
     <motion.div
       key="modal-backdrop"
       className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{ backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}
+      style={{ backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(16px)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
       onClick={onClose}
     >
       <motion.div
         className="relative flex h-full max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border"
         style={{ borderColor: theme.border, backgroundColor: theme.surface }}
-        initial={{ opacity: 0, scale: 0.96, y: 16 }}
+        initial={{ opacity: 0, scale: 0.94, y: 14 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 16 }}
-        transition={{ duration: 0.22 }}
+        exit={{ opacity: 0, scale: 0.96, y: 10 }}
+        transition={{ type: 'spring', stiffness: 340, damping: 28, mass: 0.8 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b px-6 py-4" style={{ borderColor: theme.border }}>

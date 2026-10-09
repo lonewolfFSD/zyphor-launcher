@@ -683,31 +683,7 @@ export default function ScreenshotsPage() {
     });
   }, [sorted, tileSize]);
 
-  // ScreenshotsPage.jsx — add this useEffect
-useEffect(() => {
-  function onSelectAll() {
-    setSelectMode(true);
-    setSelected(new Set(sorted.map((s) => s.fileName)));
-  }
-  function onDeselectAll() {
-    setSelected(new Set());
-  }
-  function onDeleteSelected() {
-    if (selected.size > 0) deleteShots([...selected]);
-  }
-
-  document.addEventListener('zyphor:selectAll',      onSelectAll);
-  document.addEventListener('zyphor:deselectAll',    onDeselectAll);
-  document.addEventListener('zyphor:deleteSelected', onDeleteSelected);
-
-  return () => {
-    document.removeEventListener('zyphor:selectAll',      onSelectAll);
-    document.removeEventListener('zyphor:deselectAll',    onDeselectAll);
-    document.removeEventListener('zyphor:deleteSelected', onDeleteSelected);
-  };
-}, [sorted, selected, deleteShots]); // sorted + selected needed so closures are fresh
-
-  async function deleteShots(fileNames) {
+  const deleteShots = useCallback(async (fileNames) => {
     const list = Array.isArray(fileNames) ? fileNames : [fileNames];
     if (!list.length) return;
     const ok = window.confirm(
@@ -726,7 +702,31 @@ useEffect(() => {
       });
       setLightboxIndex(null);
     }
-  }
+  }, [game.folderKey, t]);
+
+  // ScreenshotsPage.jsx — add this useEffect
+  useEffect(() => {
+    function onSelectAll() {
+      setSelectMode(true);
+      setSelected(new Set(sorted.map((s) => s.fileName)));
+    }
+    function onDeselectAll() {
+      setSelected(new Set());
+    }
+    function onDeleteSelected() {
+      if (selected.size > 0) deleteShots([...selected]);
+    }
+
+    document.addEventListener('zyphor:selectAll',      onSelectAll);
+    document.addEventListener('zyphor:deselectAll',    onDeselectAll);
+    document.addEventListener('zyphor:deleteSelected', onDeleteSelected);
+
+    return () => {
+      document.removeEventListener('zyphor:selectAll',      onSelectAll);
+      document.removeEventListener('zyphor:deselectAll',    onDeselectAll);
+      document.removeEventListener('zyphor:deleteSelected', onDeleteSelected);
+    };
+  }, [sorted, selected, deleteShots]); // sorted + selected needed so closures are fresh
 
   function bulkDownload() {
     sorted.filter((s) => selected.has(s.fileName)).forEach((s, i) => {
@@ -743,39 +743,42 @@ useEffect(() => {
     window.launcherAPI?.screenshots?.openFolder?.(game.folderKey);
   }
 
-  const ctxActions = ctxMenu ? [
-    { icon: Maximize2, label: t('screenshots.open', {}, 'Open'), action: () => {
-      const i = sorted.findIndex((s) => s.fileName === ctxMenu.shot.fileName);
-      if (i >= 0) setLightboxIndex(i);
-    }},
-    { icon: Copy, label: t('screenshots.copy', {}, 'Copy image'), action: async () => {
-      try {
-        const res = await fetch(ctxMenu.shot.src);
-        const blob = await res.blob();
-        await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })]);
-      } catch { /* ignore */ }
-    }},
-    { icon: Download, label: t('screenshots.save', {}, 'Save'), action: () => {
-      const a = document.createElement('a');
-      a.href = ctxMenu.shot.src;
-      a.download = ctxMenu.shot.fileName;
-      a.click();
-    }},
-    { icon: Share2, label: t('screenshots.share', {}, 'Share'), action: async () => {
-      try {
-        if (navigator.share) {
+  const ctxActions = useMemo(() => {
+    if (!ctxMenu) return [];
+    return [
+      { icon: Maximize2, label: t('screenshots.open', {}, 'Open'), action: () => {
+        const i = sorted.findIndex((s) => s.fileName === ctxMenu.shot.fileName);
+        if (i >= 0) setLightboxIndex(i);
+      }},
+      { icon: Copy, label: t('screenshots.copy', {}, 'Copy image'), action: async () => {
+        try {
           const res = await fetch(ctxMenu.shot.src);
           const blob = await res.blob();
-          await navigator.share({
-            files: [new File([blob], ctxMenu.shot.fileName, { type: blob.type })],
-            title: ctxMenu.shot.name,
-          });
-        }
-      } catch { /* ignore */ }
-    }},
-    { divider: true },
-    { icon: Trash2, label: t('screenshots.delete', {}, 'Delete'), danger: true, action: () => deleteShots([ctxMenu.shot.fileName]) },
-  ] : [];
+          await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })]);
+        } catch { /* ignore */ }
+      }},
+      { icon: Download, label: t('screenshots.save', {}, 'Save'), action: () => {
+        const a = document.createElement('a');
+        a.href = ctxMenu.shot.src;
+        a.download = ctxMenu.shot.fileName;
+        a.click();
+      }},
+      { icon: Share2, label: t('screenshots.share', {}, 'Share'), action: async () => {
+        try {
+          if (navigator.share) {
+            const res = await fetch(ctxMenu.shot.src);
+            const blob = await res.blob();
+            await navigator.share({
+              files: [new File([blob], ctxMenu.shot.fileName, { type: blob.type })],
+              title: ctxMenu.shot.name,
+            });
+          }
+        } catch { /* ignore */ }
+      }},
+      { divider: true },
+      { icon: Trash2, label: t('screenshots.delete', {}, 'Delete'), danger: true, action: () => deleteShots([ctxMenu.shot.fileName]) },
+    ];
+  }, [ctxMenu, sorted, t, deleteShots]);
 
   return (
     <div className="relative h-full overflow-y-auto" style={{ fontFamily: 'Inter, sans-serif' }}>

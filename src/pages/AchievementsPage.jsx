@@ -353,7 +353,7 @@ export default function AchievementsPage({ profile }) {
 
   // Selected game
   const [selectedGameId, setSelectedGameId] = useState(GAMES[0].id);
-  const game = GAMES.find(g => g.id === selectedGameId) ?? GAMES[0];
+  const game = useMemo(() => GAMES.find(g => g.id === selectedGameId) ?? GAMES[0], [selectedGameId]);
 
   // Steam state
   const [steamData,  setSteamData]  = useState(null);
@@ -685,17 +685,21 @@ export default function AchievementsPage({ profile }) {
                   { id: 'achieved', label: `${t('achievements.unlocked', {}, 'UNLOCKED')} (${unlocked})` },
                   { id: 'locked',   label: `${t('achievements.locked', {}, 'LOCKED')} (${total - unlocked})` },
                 ].map(opt => (
-                  <button
+                  <motion.button
                     key={opt.id}
                     onClick={() => setFilter(opt.id)}
-                    className="px-5 py-1.5 rounded-xl text-[11px] font-bold tracking-wider transition-all"
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: 'spring', stiffness: 460, damping: 26 }}
+                    className="px-5 py-1.5 rounded-xl text-[11px] font-bold tracking-wider"
                     style={{
                       backgroundColor: filter === opt.id ? accent.hex  : 'transparent',
                       color:           filter === opt.id ? accent.on   : 'rgba(255,255,255,0.4)',
+                      transition: 'background-color 0.22s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s ease',
                     }}
                   >
                     {opt.label}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             )}

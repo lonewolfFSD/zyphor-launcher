@@ -118,14 +118,33 @@ function persistToDisk(settings) {
 const listeners = new Set();
 let globalSettings = loadFromDisk();
 
+const diskListeners = new Set();
+let diskState = {
+  diskItems: null,
+  diskTotalMB: null,
+  diskFreeMB: null,
+  diskStatus: 'idle', // 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
+};
+let diskRequest = null;
+
 function notifyAll(next) {
   globalSettings = next;
   listeners.forEach((fn) => fn(next));
 }
 
+function notifyDisk(next) {
+  diskState = { ...diskState, ...next };
+  diskListeners.forEach((fn) => fn(diskState));
+}
+
 function subscribeToStore(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);
+}
+
+function subscribeToDisk(fn) {
+  diskListeners.add(fn);
+  return () => diskListeners.delete(fn);
 }
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -146,10 +165,7 @@ export function useSettings() {
   const [settings, setSettings] = useState(globalSettings);
   const [status, setStatus] = useState('idle');
 
-  const [diskItems, setDiskItems] = useState(null);
-  const [diskTotalMB, setDiskTotalMB] = useState(null);
-  const [diskFreeMB, setDiskFreeMB] = useState(null);
-  const [diskStatus, setDiskStatus] = useState('loading'); // 'loading' | 'ready' | 'unavailable' | 'error'
+  const [disk, setDisk] = useState(diskState);
 
   const saveTimer = useRef(null);
   const savedTimer = useRef(null);
@@ -162,41 +178,53 @@ export function useSettings() {
     return subscribeToStore(setSettings);
   }, []);
 
+  useEffect(() => {
+    setDisk(diskState);
+    return subscribeToDisk(setDisk);
+  }, []);
+
   const refreshDiskUsage = useCallback(async () => {
     if (!window.launcherAPI?.getDiskItems || !window.launcherAPI?.getDiskSpace) {
-      setDiskStatus('unavailable');
-      setDiskItems([]);
-      setDiskTotalMB(null);
-      setDiskFreeMB(null);
+      notifyDisk({ diskStatus: 'unavailable', diskItems: [], diskTotalMB: null, diskFreeMB: null });
       return;
     }
-    setDiskStatus('loading');
-    try {
-      const [items, space] = await Promise.all([
-        window.launcherAPI.getDiskItems(),
-        window.launcherAPI.getDiskSpace(),
-      ]);
-      setDiskItems((Array.isArray(items) ? items : []).map((i) => ({ ...i, selected: false })));
-      setDiskTotalMB(space?.totalMB ?? null);
-      setDiskFreeMB(space?.freeMB ?? null);
-      setDiskStatus('ready');
-    } catch {
-      setDiskStatus('error');
-      setDiskItems([]);
-    }
+    if (diskRequest) return diskRequest;
+
+    notifyDisk({ diskStatus: 'loading' });
+    diskRequest = Promise.all([
+      window.launcherAPI.getDiskItems(),
+      window.launcherAPI.getDiskSpace(),
+    ])
+      .then(([items, space]) => {
+        notifyDisk({
+          diskItems: (Array.isArray(items) ? items : []).map((i) => ({ ...i, selected: false })),
+          diskTotalMB: space?.totalMB ?? null,
+          diskFreeMB: space?.freeMB ?? null,
+          diskStatus: 'ready',
+        });
+      })
+      .catch(() => {
+        notifyDisk({ diskStatus: 'error', diskItems: [] });
+      })
+      .finally(() => {
+        diskRequest = null;
+      });
+
+    return diskRequest;
   }, []);
 
   useEffect(() => {
-    refreshDiskUsage();
+    if (diskState.diskStatus === 'idle') refreshDiskUsage();
   }, [refreshDiskUsage]);
 
   const toggleItemSelected = useCallback((id) => {
-    setDiskItems((prev) => (prev ? prev.map((i) => (i.id === id && !i.required ? { ...i, selected: !i.selected } : i)) : prev));
+    const prev = diskState.diskItems;
+    if (!prev) return;
+    notifyDisk({ diskItems: prev.map((i) => (i.id === id && !i.required ? { ...i, selected: !i.selected } : i)) });
   }, []);
 
   const uninstallSelected = useCallback(async () => {
-    if (!diskItems) return;
-    const targets = diskItems.filter((i) => i.selected);
+    const targets = (diskState.diskItems || []).filter((i) => i.selected);
     if (!targets.length) return;
     if (window.launcherAPI?.deleteItems) {
       try {
@@ -206,7 +234,7 @@ export function useSettings() {
       }
     }
     await refreshDiskUsage();
-  }, [diskItems, refreshDiskUsage]);
+  }, [refreshDiskUsage]);
 
   const pickInstallLocation = useCallback(async () => {
     if (window.launcherAPI?.pickFolder) {
@@ -277,10 +305,10 @@ export function useSettings() {
     status,
     resetAll,
 
-    diskItems,
-    diskTotalMB,
-    diskFreeMB,
-    diskStatus,
+    diskItems: disk.diskItems,
+    diskTotalMB: disk.diskTotalMB,
+    diskFreeMB: disk.diskFreeMB,
+    diskStatus: disk.diskStatus,
     refreshDiskUsage,
     toggleItemSelected,
     uninstallSelected,

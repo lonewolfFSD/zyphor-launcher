@@ -583,10 +583,13 @@ async function handleCheckUpdate() {
             const active = activeSection === s.id;
             const label = s.key ? t(s.key, {}, s.label) : s.label;
             return (
-              <button
+              <motion.button
                 key={s.id}
                 type="button"
                 onClick={() => setActiveSection(s.id)}
+                whileHover={{ x: active ? 0 : 2, scale: 1.01 }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 440, damping: 28 }}
                 style={active ? { backgroundColor: accent.hex, color: accent.on } : undefined}
                 className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium transition-colors ${
                   active ? 'font-extrabold' : 'text-ash hover:bg-white/[0.04] hover:text-bone'
@@ -597,7 +600,7 @@ async function handleCheckUpdate() {
                   style={{ color: active ? accent.on : undefined }}
                 />
                 {label}
-              </button>
+              </motion.button>
             );
           })}
         </nav>
@@ -612,10 +615,10 @@ async function handleCheckUpdate() {
         <AnimatePresence mode="wait">
           <motion.div
             key={activeSection}
-            initial={motionOn ? { opacity: 0, y: 8 } : false}
-            animate={{ opacity: 1, y: 0 }}
-            exit={motionOn ? { opacity: 0, y: -8 } : {}}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
+            initial={motionOn ? { opacity: 0, y: 10, scale: 0.995 } : false}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={motionOn ? { opacity: 0, y: -8, scale: 0.996 } : {}}
+            transition={{ type: 'spring', stiffness: 380, damping: 32, mass: 0.7 }}
           >
         {activeSection === 'language' && (
           <Section

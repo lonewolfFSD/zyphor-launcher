@@ -96,7 +96,10 @@ export default function SplashScreen() {
     // ── tick ───────────────────────────────────────────────────────────────
     let animId, t = 0;
 
+    let isDestroyed = false;
+
     function tick() {
+      if (isDestroyed) return;
       animId = requestAnimationFrame(tick);
       t += 0.01;
 
@@ -126,6 +129,7 @@ export default function SplashScreen() {
     window.addEventListener('resize', onResize);
 
     return () => {
+      isDestroyed = true;
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', onResize);
       renderer.dispose();
@@ -135,34 +139,43 @@ export default function SplashScreen() {
   useEffect(() => { videoRef.current?.play().catch(() => {}); }, []);
 
   useEffect(() => {
-    const id = setInterval(() => {
+    let timeoutId;
+    const intervalId = setInterval(() => {
       setMsgVisible(false);
-      setTimeout(() => {
-        setMsgIndex(i => (i + 1) % SPLASH_MESSAGES.length);
+      timeoutId = setTimeout(() => {
+        setMsgIndex((i) => (i + 1) % SPLASH_MESSAGES.length);
         setMsgVisible(true);
       }, 220);
     }, 1800);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(intervalId);
+      clearTimeout(timeoutId);
+    };
   }, []);
 
-useEffect(() => {
-  const audio = new Audio(STARTUP_SOUND);
-  audio.volume = 0;
+  useEffect(() => {
+    let fade;
+    const audio = new Audio(STARTUP_SOUND);
+    audio.volume = 0;
 
-  const delay = setTimeout(() => {
-    audio.play().catch(() => {});
-    const fade = setInterval(() => {
-      if (audio.volume < 0.55) audio.volume = Math.min(0.55, audio.volume + 0.05);
-      else clearInterval(fade);
-    }, 80);
-  }, 1500); // ← delay in ms, change to whatever you want
+    const delay = setTimeout(() => {
+      audio.play().catch(() => {});
+      fade = setInterval(() => {
+        if (audio.volume < 0.55) {
+          audio.volume = Math.min(0.55, audio.volume + 0.05);
+        } else {
+          clearInterval(fade);
+        }
+      }, 80);
+    }, 1500);
 
-  return () => {
-    clearTimeout(delay);
-    audio.pause();
-    audio.currentTime = 0;
-  };
-}, []);
+    return () => {
+      clearTimeout(delay);
+      clearInterval(fade);
+      audio.pause();
+      audio.currentTime = 0;
+    };
+  }, []);
 
   return (
     <motion.div

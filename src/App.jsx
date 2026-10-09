@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase.js';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -203,12 +203,15 @@ export default function App() {
 const { shouldShow: shouldShowUpdate, markSeen } = useUpdateTourCheck();
 const [showUpdateTour, setShowUpdateTour] = useState(() => shouldShowUpdate());
 
-  function navigateTo(newPage) {
-    const dir = (PAGE_ORDER[newPage] ?? 0) > (PAGE_ORDER[activePage] ?? 0) ? 1 : -1;
-    directionRef.current = dir;
-    setPageDirection(dir);
-    setActivePage(newPage);
-  }
+  const navigateTo = useCallback((newPage) => {
+    setActivePage((currentPage) => {
+      if (newPage === currentPage) return currentPage;
+      const dir = (PAGE_ORDER[newPage] ?? 0) > (PAGE_ORDER[currentPage] ?? 0) ? 1 : -1;
+      directionRef.current = dir;
+      setPageDirection(dir);
+      return newPage;
+    });
+  }, []);
 
   useEffect(() => {
     const unsub = window.launcherAPI?.onNavigate?.((page) => {
@@ -217,7 +220,7 @@ const [showUpdateTour, setShowUpdateTour] = useState(() => shouldShowUpdate());
       }
     });
     return () => unsub?.();
-  }, [activePage]);
+  }, [navigateTo]);
 
   // ── Dev info overlay ──────────────────────────────────────────────────────
   const [showDevInfo, setShowDevInfo] = useState(false);
@@ -293,22 +296,25 @@ function handleCycleAccent() {
   const backgroundQuality   = settings?.backgroundQuality ?? 'hd';
   const backgroundPreviewUrl = settings?.backgroundPreviewUrl ?? null;
 
-  const backgroundVideoSrc =
-    backgroundVideoType === 'none'
-      ? null
-      : backgroundVideoType === 'workshop'
-      ? settings?.backgroundVideoPath
-        ? `media:///${encodeURI(settings.backgroundVideoPath.replace(/\\/g, '/').replace(/^\/+/, ''))}`
-        : DEFAULT_BACKGROUND_VIDEO
-      : backgroundVideoType === 'custom'
-      ? settings?.backgroundVideoPath
-        ? `media:///${encodeURI(settings.backgroundVideoPath.replace(/\\/g, '/').replace(/^\/+/, ''))}`
-        : null
-      : DEFAULT_BACKGROUND_VIDEO;
+  const backgroundVideoPath = settings?.backgroundVideoPath;
+  const backgroundVideoSrc = useMemo(() => {
+    if (backgroundVideoType === 'none') return null;
+    if (backgroundVideoType === 'workshop') {
+      return backgroundVideoPath
+        ? `media:///${encodeURI(backgroundVideoPath.replace(/\\/g, '/').replace(/^\/+/, ''))}`
+        : DEFAULT_BACKGROUND_VIDEO;
+    }
+    if (backgroundVideoType === 'custom') {
+      return backgroundVideoPath
+        ? `media:///${encodeURI(backgroundVideoPath.replace(/\\/g, '/').replace(/^\/+/, ''))}`
+        : null;
+    }
+    return DEFAULT_BACKGROUND_VIDEO;
+  }, [backgroundVideoType, backgroundVideoPath]);
 
-  const bgVideoStyle = backgroundQuality === 'sd'
+  const bgVideoStyle = useMemo(() => backgroundQuality === 'sd'
     ? { filter: 'blur(0px)', imageRendering: 'auto', transform: 'scale(1.05)', opacity: 1 }
-    : {};
+    : {}, [backgroundQuality]);
 
   // ── Timers & auth ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -434,7 +440,7 @@ useEffect(() => {
     }
 
     tryAutoLogin();
-  }, [settings]);
+  }, [settings?.rememberLogin]);
 
   const ActivePageComponent = PAGES[activePage];
 
@@ -473,7 +479,7 @@ useEffect(() => {
           <>
             {/* ── Global background — rendered once, persists across page transitions ── */}
             <BackgroundVideo
-              key={backgroundVideoSrc + (backgroundPreviewUrl || '')}
+              key={backgroundVideoSrc || backgroundPreviewUrl || 'no-bg'}
               src={backgroundVideoSrc}
               previewSrc={backgroundPreviewUrl}
               active={motionOn}
@@ -486,10 +492,10 @@ useEffect(() => {
             <AnimatePresence>
               {showDevInfo && (
                 <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.18 }}
+                  initial={{ opacity: 0, y: -10, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 28 }}
                   className="fixed top-10 left-1/2 z-[200] -translate-x-1/2 rounded-2xl border px-5 py-3 text-[11px] font-mono shadow-2xl"
                   style={{ backgroundColor: `${theme.surface}ee`, borderColor: theme.border, color: theme.text }}
                 >
@@ -499,14 +505,14 @@ useEffect(() => {
                     <span style={{ color: accent.hex }}>theme: {settings?.theme ?? 'oled'}</span>
                     <span style={{ color: accent.hex }}>glass: {settings?.navStyle ?? 'glass'}</span>
                     <span>page: {activePage}</span>
-                    <button onClick={() => setShowDevInfo(false)} className="opacity-40 hover:opacity-80 ml-2">✕</button>
+                    <button onClick={() => setShowDevInfo(false)} className="opacity-40 hover:opacity-80 ml-2 transition-transform active:scale-90">✕</button>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
             <TitleBar />
-            
+
 
             <div className="flex min-h-0 flex-1 gap-4 p-4">
               <NavRail
@@ -520,13 +526,31 @@ useEffect(() => {
                 }}
               />
               <main className="min-h-0 flex-1 overflow-hidden relative">
-                <AnimatePresence mode="wait">
+                <AnimatePresence mode="wait" custom={pageDirection}>
                   <motion.div
                     key={activePage}
-                    initial={{ opacity: 0, y: 20 * directionRef.current }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 * directionRef.current }}
-                    transition={{ duration: 0.2 }}
+                    custom={pageDirection}
+                    initial={motionOn ? { opacity: 0, y: 14 * pageDirection, scale: 0.992 } : false}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                      scale: 1,
+                      transition: motionOn ? {
+                        y: { type: 'spring', stiffness: 360, damping: 32, mass: 0.8 },
+                        scale: { type: 'spring', stiffness: 360, damping: 32, mass: 0.8 },
+                        opacity: { duration: 0.28, ease: [0.16, 1, 0.3, 1] },
+                      } : { duration: 0 },
+                    }}
+                    exit={motionOn ? (dir) => ({
+                      opacity: 0,
+                      y: -10 * (dir || pageDirection),
+                      scale: 0.995,
+                      transition: {
+                        duration: 0.18,
+                        ease: [0.32, 0, 0.67, 0],
+                        opacity: { duration: 0.15 },
+                      },
+                    }) : {}}
                     className="h-full w-full"
                   >
                     <ActivePageComponent profile={profile} />

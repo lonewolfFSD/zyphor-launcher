@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
@@ -60,6 +60,12 @@ function getGreeting(t, displayName, variant = 1) {
 let homeVisited = false;
 
 const placeholderNews = [];
+
+const FADE_MASK = {
+  WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 100%)',
+  maskImage: 'linear-gradient(to right, transparent 0%, black 100%)',
+  opacity: 1,
+};
 
 function GlassLayer({ borderRadius, distortionScale = -180, blur = 11 }) {
   const { settings } = useSettings();
@@ -193,6 +199,7 @@ export default function HomePage({ profile }) {
   const [showLaunchModal, setShowLaunchModal] = useState(false);
   const [news, setNews]                     = useState([]);
   const [bannerIndex, setBannerIndex]       = useState(0);
+  const [progressKey, setProgressKey]       = useState(0);
   const [serverStatus, setServerStatus]     = useState('checking');
   const [updateStatus, setUpdateStatus]     = useState('checking');
   const [playtime, setPlaytime]             = useState(null);
@@ -211,12 +218,6 @@ export default function HomePage({ profile }) {
 
   const pageRef  = useRef(null);
   const didIntro = useRef(homeVisited);
-
-  const fadeMask = {
-    WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 100%)',
-    maskImage: 'linear-gradient(to right, transparent 0%, black 100%)',
-    opacity: 1,
-  };
 
   useEffect(() => { (async () => {
     // 1. Direct Steam check from Steamworks
@@ -370,11 +371,11 @@ export default function HomePage({ profile }) {
 
   const banners = news.length ? news : placeholderNews;
   useEffect(() => {
-    if (banners.length < 2 || !motionOn) return;
+    if (banners.length < 2 || motionOn) return;
     const t = setInterval(() => setBannerIndex((i) => (i + 1) % banners.length), 7000);
     return () => clearInterval(t);
   }, [banners.length, motionOn]);
-  const banner = banners[bannerIndex];
+  const banner = banners[bannerIndex % (banners.length || 1)] || banners[0];
 
   function handlePurchase() {
     if (window.launcherAPI?.openExternal) {
@@ -650,13 +651,13 @@ export default function HomePage({ profile }) {
               className="absolute inset-0"
             >
               {banner?.video ? (
-                <BannerVideo src={banner.video} poster={banner?.image || StayBanner} active={motionOn} fadeMask={fadeMask} />
+                <BannerVideo src={banner.video} poster={banner?.image || StayBanner} active={motionOn} fadeMask={FADE_MASK} />
               ) : (
                 <motion.img
                   src={banner?.image || StayBanner}
                   alt=""
                   className="h-full w-full object-cover"
-                  style={fadeMask}
+                  style={FADE_MASK}
                   animate={motionOn ? { scale: [1, 1.05] } : {}}
                   transition={{ duration: 7, ease: 'linear' }}
                   onError={(e) => {
@@ -695,21 +696,51 @@ export default function HomePage({ profile }) {
           </div>
 
           {banners.length > 1 && (
-            <div className="absolute bottom-8 right-10 flex gap-2 z-10">
-              {banners.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setBannerIndex(i);
-                  }}
-                  className="h-3 rounded-full transition-all"
-                  style={{
-                    width: i === bannerIndex ? 80 : 12,
-                    backgroundColor: i === bannerIndex ? accent.hex : 'rgba(255,255,255,0.3)',
-                  }}
-                />
-              ))}
+            <div className="absolute bottom-8 right-10 flex items-center gap-2 z-10">
+              {banners.map((_, i) => {
+                const isActive = i === (bannerIndex % banners.length);
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBannerIndex(i);
+                      setProgressKey((k) => k + 1);
+                    }}
+                    className={`relative h-3 rounded-full overflow-hidden transition-all duration-300 ease-out focus:outline-none ${
+                      isActive
+                        ? 'w-28 bg-black/35 backdrop-blur-xl border border-white/20 shadow-lg'
+                        : 'w-3 bg-white/30 backdrop-blur-md border border-white/10 hover:bg-white/60 hover:scale-110'
+                    }`}
+                    aria-label={`Banner ${i + 1}`}
+                  >
+                    {isActive && (
+                      motionOn ? (
+                        <motion.span
+                          key={`progress-${bannerIndex}-${progressKey}`}
+                          initial={{ width: '0%' }}
+                          animate={{ width: '100%' }}
+                          transition={{ duration: 7, ease: 'linear' }}
+                          onAnimationComplete={() => {
+                            setBannerIndex((prev) => (prev + 1) % banners.length);
+                          }}
+                          className="absolute inset-y-0 left-0 rounded-full"
+                          style={{
+                            backgroundColor: accent.hex,
+                            boxShadow: `0 0 12px ${accent.hex}aa`,
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className="absolute inset-y-0 left-0 w-full rounded-full"
+                          style={{ backgroundColor: accent.hex }}
+                        />
+                      )
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </motion.div>
@@ -835,10 +866,10 @@ export default function HomePage({ profile }) {
                     e.preventDefault();
                     handleOpenExternalLink(item.url);
                   }}
-                  className="group flex flex-col items-center gap-3 border-b px-4 py-3.5 transition-colors hover:bg-white/[0.05]"
+                  className="group flex flex-col items-center gap-3 border-b px-4 py-4 transition-colors hover:bg-white/[0.05]"
                   style={{ borderColor: theme.border }}
                 >
-                  <div className="relative h-20 w-full shrink-0 overflow-hidden rounded-xl bg-white/5">
+                  {/* <div className="relative h-20 w-full shrink-0 overflow-hidden rounded-xl bg-white/5">
                     {item.image ? (
                       <img
                         src={item.image}
@@ -874,7 +905,7 @@ export default function HomePage({ profile }) {
                         <span className="">{item.category}</span>
                       </span>
                     )}
-                  </div>
+                  </div> */}
                   <div className="flex w-full items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="line-clamp-2 text-[12px] font-semibold leading-snug text-bone/80 transition-colors group-hover:text-bone">
