@@ -110,6 +110,10 @@ const GAMES = [
       WORTH_IT: {
         locked: 'https://shared.fastly.steamstatic.com/community_assets/images/apps/4956550/2f67c71cfd2bce0978c41f4fd5d0e95a379dc08d.jpg',
         unlocked: 'https://shared.fastly.steamstatic.com/community_assets/images/apps/4956550/0afc1871aaa4d56528e7554068b1553799a6eeed.jpg',
+      },
+      WELCOME_TO_WOODBERRY: {
+        locked: 'https://shared.akamai.steamstatic.com/community_assets/images/apps/4956550/e5362b589d744c7f77870910d7ca1df1e5ee481c.jpg',
+        unlocked: 'https://shared.akamai.steamstatic.com/community_assets/images/apps/4956550/a3b15a9921f23abf59c29528dc6e6365e25e1c90.jpg',
       }
     },
   },
@@ -157,9 +161,8 @@ function AchievementRow({ achievement, accent, theme, iconMap }) {
     <>
       {/* Icon */}
       <div
-        className="w-14 h-14 rounded-xl mr-2.5 shrink-0 overflow-hidden border flex items-center justify-center"
+        className="w-14 h-14 rounded-md mr-2.5 shrink-0 overflow-hidden border border-1 border-white flex items-center justify-center"
         style={{
-          borderColor:       achieved ? `${accent.hex}44` : theme.border,
           backgroundColor:   theme.bg,
           filter:            achieved ? 'none' : 'grayscale(100%) brightness(0.45)',
         }}

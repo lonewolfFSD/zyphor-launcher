@@ -323,7 +323,6 @@ export default function NewsPage() {
                   }
                   className="flex items-center gap-2 rounded-xl border px-4 py-2 text-xs font-semibold transition-all hover:border-white/30"
                 >
-                  {Icon && <Icon size={14} />}
                   <span>{tab.label}</span>
                   <span
                     className="rounded-full px-2 py-0.5 text-[10px] font-mono font-bold"
@@ -445,7 +444,7 @@ export default function NewsPage() {
                       <div className="flex items-center gap-3">
                         <div>
                           <h3 className="font-['Manrope'] text-xl uppercase font-bold tracking-tight text-bone">Studio News & Devlogs</h3>
-                          <p className="text-sm font-bold text-ash/60">STAY game production updates and Faye AI ecosystem announcements</p>
+                          <p className="text-sm font-bold text-ash/60">Game updates and Faye AI ecosystem announcements</p>
                         </div>
                       </div>
                       <span

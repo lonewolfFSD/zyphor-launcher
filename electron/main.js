@@ -14,10 +14,7 @@ if (!gotTheLock) {
   process.exit(0);
 }
 
-const { execFile } = require('child_process');
-const Registry = require('winreg');
-
-const { exec } = require('child_process');
+const { execFile, exec } = require('child_process');
 
 protocol.registerSchemesAsPrivileged([
   {

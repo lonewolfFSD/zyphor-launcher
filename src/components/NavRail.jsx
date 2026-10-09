@@ -57,81 +57,20 @@ function CopyUID({ uid }) {
   );
 }
 
-const ITEM_H = 44; // h-11
-const ITEM_GAP = 12; // gap-3
-
 function NavItems({ items, activePage, onNavigate, accent, isLiquidGlass }) {
-  const listRef    = useRef(null);
-  const dragState  = useRef({ dragging: false, startY: 0, holdTimer: null });
-  const [dragIndex, setDragIndex] = useState(null); // highlighted during drag
-
-  // index of the current active item
-  const activeIndex = items.findIndex(i => i.id === activePage);
-
-  function itemIndexAtY(clientY) {
-    const rect = listRef.current?.getBoundingClientRect();
-    if (!rect) return null;
-    const rel = clientY - rect.top;
-    const idx = Math.round(rel / (ITEM_H + ITEM_GAP));
-    return Math.max(0, Math.min(items.length - 1, idx));
-  }
-
-  function onPointerDown(e) {
-    // only main button / single touch
-    if (e.button !== undefined && e.button !== 0) return;
-    dragState.current.startY = e.clientY;
-    dragState.current.dragging = false;
-
-    dragState.current.holdTimer = setTimeout(() => {
-      dragState.current.dragging = true;
-      listRef.current?.setPointerCapture?.(e.pointerId);
-      setDragIndex(itemIndexAtY(e.clientY));
-    }, 150);
-  }
-
-  function onPointerMove(e) {
-    if (!dragState.current.dragging) return;
-    setDragIndex(itemIndexAtY(e.clientY));
-  }
-
-  function onPointerUp(e) {
-    clearTimeout(dragState.current.holdTimer);
-    if (dragState.current.dragging) {
-      const idx = itemIndexAtY(e.clientY);
-      if (idx !== null) onNavigate(items[idx].id);
-    }
-    dragState.current.dragging = false;
-    setDragIndex(null);
-  }
-
-  function onPointerCancel() {
-    clearTimeout(dragState.current.holdTimer);
-    dragState.current.dragging = false;
-    setDragIndex(null);
-  }
-
   return (
-    <ul
-      ref={listRef}
-      className="flex flex-1 flex-col items-center gap-3 touch-none select-none"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerCancel}
-    >
-      {items.map((item, i) => {
-        const isActive  = activePage === item.id;
-        const isDragHit = dragIndex === i;
-        const highlight = isActive || isDragHit;
+    <ul className="flex flex-1 flex-col items-center gap-3 select-none">
+      {items.map((item) => {
+        const isActive = activePage === item.id;
 
         return (
           <li key={item.id} className="nr-item relative">
-            {/* Active / drag-hover pill */}
-            {highlight && (
+            {/* Active indicator pill */}
+            {isActive && (
               <motion.span
                 layoutId="nav-active"
                 transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                className="absolute inset-0 rounded-2xl overflow-hidden"
+                className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none"
               >
                 {isLiquidGlass ? (
                   <span className="absolute inset-0 rounded-2xl overflow-hidden">
@@ -162,19 +101,19 @@ function NavItems({ items, activePage, onNavigate, accent, isLiquidGlass }) {
 
             <button
               type="button"
-              onClick={() => !dragState.current.dragging && onNavigate(item.id)}
+              onClick={() => onNavigate(item.id)}
               aria-current={isActive ? 'page' : undefined}
               title={item.label}
               style={{
-                color: highlight
+                color: isActive
                   ? isLiquidGlass ? accent.hex : accent.on
                   : undefined,
-                filter: highlight && isLiquidGlass
+                filter: isActive && isLiquidGlass
                   ? `drop-shadow(0 0 6px ${accent.hex}cc)`
                   : undefined,
               }}
               className={`relative flex h-11 w-11 items-center justify-center rounded-xl transition-colors duration-150 ${
-                highlight ? '' : 'text-ash hover:bg-white/[0.05] hover:text-bone'
+                isActive ? '' : 'text-ash hover:bg-white/[0.05] hover:text-bone'
               }`}
             >
               <FontAwesomeIcon icon={item.icon} style={{ fontSize: 20 }} />
@@ -479,7 +418,7 @@ const isLiquidGlass = (settings?.navStyle ?? 'glass') === 'liquid-glass';
       >
 
         {/* Glass background — purely visual */}
-<div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 z-0 pointer-events-none">
   {isLiquidGlass ? (
     <GlassSurface
       width={80}
